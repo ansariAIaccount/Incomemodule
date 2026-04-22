@@ -1,0 +1,1558 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>PE Income Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Roboto', 'ui-sans-serif', 'system-ui'],
+          mono: ['"Roboto Mono"', 'ui-monospace', 'monospace']
+        },
+        colors: {
+          brand: {
+            50:  '#eef3ff',
+            100: '#dbe4ff',
+            200: '#bfcdff',
+            300: '#93acff',
+            400: '#6481ff',
+            500: '#3e5bff',
+            600: '#2940f5',
+            700: '#1f30d4',
+            800: '#1c2aa8',
+            900: '#1a2885'
+          }
+        },
+        boxShadow: {
+          mat1: '0 1px 2px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.06)',
+          mat2: '0 2px 4px rgba(0,0,0,.07), 0 3px 8px rgba(0,0,0,.08)',
+          mat3: '0 6px 14px rgba(0,0,0,.08), 0 10px 24px rgba(0,0,0,.10)'
+        }
+      }
+    }
+  }
+</script>
+<style>
+  html, body { height: 100%; }
+  body { font-family: 'Roboto', system-ui, sans-serif; background: #f4f6fb; color: #1f2430; }
+  .mat-field {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .mat-field > label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: #5b6478;
+    margin-bottom: 4px;
+  }
+  .mat-input, .mat-select {
+    width: 100%;
+    border: 1px solid #d6d9e2;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+    transition: border-color .15s ease, box-shadow .15s ease;
+    color: #1f2430;
+  }
+  .mat-input:focus, .mat-select:focus {
+    outline: none;
+    border-color: #3e5bff;
+    box-shadow: 0 0 0 3px rgba(62,91,255,.18);
+  }
+  .mat-input[disabled], .mat-select[disabled] {
+    background: #f0f2f7;
+    color: #5b6478;
+  }
+  .mat-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 500;
+    background: #eef3ff; color: #1f30d4;
+    border: 1px solid #dbe4ff;
+  }
+  .mat-chip.green { background:#e6f7ee; color:#0f6b3a; border-color:#bfe7d1 }
+  .mat-chip.amber { background:#fff4e0; color:#8a5300; border-color:#ffdda6 }
+  .mat-chip.red   { background:#fde8e8; color:#a31414; border-color:#f9c0c0 }
+  .mat-chip.gray  { background:#eef0f5; color:#3d465c; border-color:#d6d9e2 }
+  .tab-btn {
+    position: relative;
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #5b6478;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tab-btn.active { color:#2940f5; border-bottom-color:#2940f5 }
+  .tab-btn:hover { background:#f0f2f7 }
+  .mat-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px;
+    font-size: 14px; font-weight: 500;
+    border-radius: 8px;
+    transition: background .12s ease, box-shadow .12s ease, transform .02s ease;
+    cursor: pointer;
+  }
+  .mat-btn:active { transform: translateY(1px) }
+  .mat-btn.primary { background:#2940f5; color:white; box-shadow: 0 1px 2px rgba(41,64,245,.4) }
+  .mat-btn.primary:hover { background:#1f30d4 }
+  .mat-btn.ghost { background:transparent; color:#2940f5 }
+  .mat-btn.ghost:hover { background:#eef3ff }
+  .mat-btn.outline { background:white; color:#2940f5; border:1px solid #bfcdff }
+  .mat-btn.outline:hover { background:#eef3ff }
+  .mat-btn.danger { background:#d03b3b; color:white }
+  .grid-scroll { max-height: 500px; overflow: auto; border-radius:8px; border:1px solid #e3e6ee; background:white }
+  .grid-scroll table { width: 100%; font-size: 12.5px; border-collapse: separate; border-spacing: 0; }
+  .grid-scroll thead th {
+    position: sticky; top: 0;
+    background: #f4f6fb;
+    color: #3d465c;
+    font-weight: 500;
+    text-align: right;
+    padding: 8px 10px;
+    border-bottom: 1px solid #d6d9e2;
+    white-space: nowrap;
+    z-index: 1;
+  }
+  .grid-scroll thead th.left { text-align:left }
+  .grid-scroll tbody td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #eef0f5;
+    text-align: right;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 12px;
+    color: #1f2430;
+    white-space: nowrap;
+  }
+  .grid-scroll tbody td.left { text-align:left; font-family: 'Roboto', sans-serif }
+  .grid-scroll tbody tr.event td { background:#fff9e8 }
+  .grid-scroll tbody tr.out-of-window td { color:#9099ad }
+  .grid-scroll tbody tr:hover td { background:#f4f6fb }
+  .grid-scroll tbody tr.period-end td { border-top: 2px solid #2940f5; font-weight:600 }
+  .kpi {
+    background: white;
+    border-radius: 12px;
+    padding: 16px 18px;
+    border: 1px solid #e3e6ee;
+    box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  }
+  .kpi .label { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: #5b6478; font-weight: 500 }
+  .kpi .value { font-size: 22px; font-weight: 500; color: #1a2885; margin-top: 4px; font-family:'Roboto Mono',monospace; }
+  .kpi .sub { font-size: 12px; color: #5b6478; margin-top: 2px; }
+  .section-card {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e3e6ee;
+    box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  }
+  .section-card header {
+    padding: 14px 18px;
+    border-bottom: 1px solid #eef0f5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-card header .material-icons-outlined { color:#2940f5 }
+  .section-card header h3 { font-size: 14px; font-weight: 600; letter-spacing: .01em }
+  .section-card .body { padding: 16px 18px }
+  details.adv summary {
+    cursor: pointer; user-select: none;
+    padding: 10px 14px; border-radius:8px;
+    background:#eef3ff; color:#1f30d4; font-weight:500; font-size: 13px;
+    display:flex; align-items:center; gap:8px;
+  }
+  details.adv[open] summary { border-bottom-left-radius:0; border-bottom-right-radius:0 }
+  details.adv .panel { border:1px solid #dbe4ff; border-top:none; border-radius: 0 0 8px 8px; padding: 14px }
+  .toggle { display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; font-size: 13px }
+  .toggle input { display:none }
+  .toggle .track { width: 34px; height: 20px; background:#d6d9e2; border-radius: 20px; position:relative; transition: background .15s ease }
+  .toggle .track::after {
+    content:''; position:absolute; top:2px; left:2px;
+    width:16px; height:16px; background:white; border-radius:50%;
+    transition: transform .15s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,.3);
+  }
+  .toggle input:checked + .track { background:#2940f5 }
+  .toggle input:checked + .track::after { transform: translateX(14px) }
+  .nav-pill {
+    display:flex; align-items:center; gap:10px;
+    padding: 9px 12px; border-radius: 8px; cursor:pointer;
+    color:#3d465c; font-size: 13.5px; font-weight: 500;
+  }
+  .nav-pill:hover { background:#eef3ff }
+  .nav-pill.active { background:#dbe4ff; color:#1a2885 }
+  .nav-pill .material-icons-outlined { font-size: 20px }
+  .badge-pill { display:inline-flex; align-items:center; gap:4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; background: #eef0f5; color: #3d465c }
+  .method-card {
+    border: 1px solid #e3e6ee;
+    border-radius: 10px;
+    padding: 12px 14px;
+    cursor: pointer;
+    background: #fafbff;
+    transition: all .15s ease;
+  }
+  .method-card:hover { border-color:#93acff }
+  .method-card.selected { border-color:#2940f5; background:#eef3ff; box-shadow: 0 1px 2px rgba(41,64,245,.2) }
+  .method-card .t { font-weight: 600; color:#1a2885; font-size: 14px }
+  .method-card .d { font-size: 12px; color: #5b6478; margin-top:4px; line-height:1.4 }
+  .dot { width: 8px; height: 8px; border-radius:50%; display:inline-block; margin-right:6px }
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background:#1f2430; color:white; padding:10px 16px; border-radius:8px;
+    font-size: 13.5px; font-weight: 500; box-shadow: 0 6px 14px rgba(0,0,0,.2);
+    opacity: 0; pointer-events: none; transition: opacity .2s ease;
+    z-index: 50;
+  }
+  #toast.show { opacity: 1 }
+  /* Print-friendly */
+  @media print {
+    aside, .no-print { display:none !important }
+    main { padding:0 !important }
+    .grid-scroll { max-height: none !important; overflow: visible !important }
+  }
+</style>
+</head>
+<body>
+<div id="app" class="min-h-screen flex flex-col">
+
+  <!-- ===== Top App Bar ===== -->
+  <header class="bg-white border-b border-gray-200 shadow-mat1 no-print">
+    <div class="h-14 px-4 flex items-center gap-3">
+      <span class="material-icons-outlined text-brand-600 text-3xl">calculate</span>
+      <div class="leading-tight">
+        <div class="text-[15px] font-semibold">PE Income Calculator</div>
+        <div class="text-[11px] text-gray-500">Back office · Private Equity & Hybrid Funds</div>
+      </div>
+      <nav class="ml-8 flex items-center gap-1">
+        <button class="tab-btn active" data-tab="setup"><span class="material-icons-outlined text-[18px] align-middle mr-1">tune</span>Setup</button>
+        <button class="tab-btn" data-tab="schedule"><span class="material-icons-outlined text-[18px] align-middle mr-1">calendar_view_day</span>Schedule</button>
+        <button class="tab-btn" data-tab="summary"><span class="material-icons-outlined text-[18px] align-middle mr-1">insights</span>Summary</button>
+        <button class="tab-btn" data-tab="diu"><span class="material-icons-outlined text-[18px] align-middle mr-1">upload_file</span>DIU Export</button>
+      </nav>
+      <div class="ml-auto flex items-center gap-2">
+        <span id="calc-status" class="mat-chip green"><span class="dot" style="background:#0f6b3a"></span>Calculations in sync</span>
+        <button id="btn-recalc" class="mat-btn primary"><span class="material-icons-outlined text-[18px]">refresh</span>Recalculate</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== Main Layout ===== -->
+  <div class="flex-1 flex">
+    <!-- Left rail: Instrument picker -->
+    <aside class="w-[300px] shrink-0 bg-white border-r border-gray-200 p-4 flex flex-col gap-4 no-print">
+      <div>
+        <div class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2 flex items-center gap-1">
+          <span class="material-icons-outlined text-[16px]">account_tree</span>Instrument
+        </div>
+        <div class="space-y-3">
+          <div class="mat-field"><label>Legal Entity</label><select id="sel-le" class="mat-select"></select></div>
+          <div class="mat-field"><label>Deal</label><select id="sel-deal" class="mat-select"></select></div>
+          <div class="mat-field"><label>Position</label><select id="sel-position" class="mat-select"></select></div>
+          <div class="mat-field"><label>Income Security</label><select id="sel-security" class="mat-select"></select></div>
+        </div>
+      </div>
+      <div class="border-t border-gray-200 pt-4">
+        <div class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2 flex items-center gap-1">
+          <span class="material-icons-outlined text-[16px]">date_range</span>Accrual Window
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="mat-field"><label>Begin Date</label><input id="in-begin" type="date" class="mat-input"/></div>
+          <div class="mat-field"><label>End Date</label><input id="in-end" type="date" class="mat-input"/></div>
+        </div>
+        <div class="mat-field mt-3"><label>Last Accrual End Date</label><input id="in-last" type="date" class="mat-input"/></div>
+        <div class="mt-3 flex items-center justify-between">
+          <span class="text-[11px] text-gray-500">Date format</span>
+          <div class="flex items-center gap-1">
+            <button class="mat-btn outline !py-1 !px-2 text-xs" data-date-fmt="us">US</button>
+            <button class="mat-btn outline !py-1 !px-2 text-xs" data-date-fmt="eu">EU</button>
+          </div>
+        </div>
+      </div>
+      <div class="border-t border-gray-200 pt-4">
+        <div class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2 flex items-center gap-1">
+          <span class="material-icons-outlined text-[16px]">bookmarks</span>Presets
+        </div>
+        <div id="presets" class="flex flex-col gap-1"></div>
+      </div>
+      <div class="mt-auto pt-4 border-t border-gray-200 text-[11px] text-gray-500 leading-relaxed">
+        Prototype of the Loan Calculator redesign. Implements N-1…N-9 plus the 21-item options list: day-count conventions, PIK, caps/floors, amortization methods, non-use fees.
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 p-5 space-y-5">
+      <!-- Breadcrumb / identity strip -->
+      <div class="flex items-center gap-2 text-sm text-gray-600">
+        <span id="bc-le" class="font-medium text-gray-900"></span>
+        <span class="material-icons-outlined text-[16px] text-gray-400">chevron_right</span>
+        <span id="bc-deal"></span>
+        <span class="material-icons-outlined text-[16px] text-gray-400">chevron_right</span>
+        <span id="bc-position"></span>
+        <span class="material-icons-outlined text-[16px] text-gray-400">chevron_right</span>
+        <span id="bc-security" class="font-medium text-brand-800"></span>
+        <span class="ml-auto flex items-center gap-2">
+          <span id="bc-method-chip" class="mat-chip"></span>
+          <span id="bc-pik-chip" class="mat-chip gray">PIK —</span>
+          <span id="bc-amort-chip" class="mat-chip gray">Amort —</span>
+        </span>
+      </div>
+
+      <!-- ============ TAB: SETUP ============ -->
+      <section class="tab-panel" data-tab="setup">
+        <div class="grid grid-cols-12 gap-5">
+          <!-- Loan Information -->
+          <div class="section-card col-span-12 lg:col-span-6">
+            <header>
+              <span class="material-icons-outlined">description</span>
+              <h3>Loan Information (N-4)</h3>
+              <span class="ml-auto text-[11px] text-gray-500">Populated from Income Security</span>
+            </header>
+            <div class="body grid grid-cols-2 gap-3">
+              <div class="mat-field"><label>Face Value</label><input id="f-face" type="number" step="0.01" class="mat-input"/></div>
+              <div class="mat-field"><label>Purchase Price</label><input id="f-price" type="number" step="0.01" class="mat-input"/></div>
+              <div class="mat-field"><label>Commitment (Revolver)</label><input id="f-commit" type="number" step="0.01" class="mat-input"/></div>
+              <div class="mat-field"><label>Settlement Date</label><input id="f-settle" type="date" class="mat-input"/></div>
+              <div class="mat-field"><label>Maturity Date</label><input id="f-maturity" type="date" class="mat-input"/></div>
+              <div class="mat-field"><label>Principal Repayment</label>
+                <select id="f-repay" class="mat-select">
+                  <option value="AtMaturity">At Maturity</option>
+                  <option value="Scheduled">Scheduled</option>
+                </select>
+              </div>
+              <label class="toggle"><input id="f-accExclusive" type="checkbox"><span class="track"></span>Accrual Day Count Exclusive</label>
+              <label class="toggle"><input id="f-payInclusive" type="checkbox"><span class="track"></span>Paydate Day Count Inclusive</label>
+              <label class="toggle"><input id="f-prevDay" type="checkbox"><span class="track"></span>Interest Previous Day</label>
+            </div>
+          </div>
+
+          <!-- Current Interest Terms -->
+          <div class="section-card col-span-12 lg:col-span-6">
+            <header>
+              <span class="material-icons-outlined">percent</span>
+              <h3>Current Interest Terms (N-5)</h3>
+            </header>
+            <div class="body grid grid-cols-2 gap-3">
+              <div class="mat-field"><label>Coupon Type</label>
+                <select id="f-couponType" class="mat-select">
+                  <option value="Fixed">Fixed</option>
+                  <option value="Floating">Floating</option>
+                </select>
+              </div>
+              <div class="mat-field"><label>Coupon Rate</label><input id="f-coupon" type="number" step="0.0001" class="mat-input" placeholder="e.g. 0.12 = 12%"/></div>
+              <div class="mat-field"><label>Floating Rate (index)</label><input id="f-float" type="number" step="0.0001" class="mat-input"/></div>
+              <div class="mat-field"><label>Spread over Index</label><input id="f-spread" type="number" step="0.0001" class="mat-input"/></div>
+              <div class="mat-field"><label>Day Basis</label>
+                <select id="f-basis" class="mat-select">
+                  <option value="ACT/360">ACT/360</option>
+                  <option value="ACT/365">ACT/365</option>
+                  <option value="ACT/ACT">ACT/ACT</option>
+                  <option value="30/360">30/360 (Bond)</option>
+                </select>
+              </div>
+              <div class="mat-field"><label>Accrual Frequency</label>
+                <select id="f-accrualFreq" class="mat-select">
+                  <option value="daily">Daily</option>
+                  <option value="biMonthly">Bi-monthly (15th / EOM)</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+              <label class="toggle"><input id="f-pikEnabled" type="checkbox"><span class="track"></span>PIK Enabled</label>
+              <div class="mat-field"><label>PIK Rate</label><input id="f-pikRate" type="number" step="0.0001" class="mat-input"/></div>
+              <div class="mat-field"><label>Capitalization Frequency</label>
+                <select id="f-capFreq" class="mat-select">
+                  <option value="Monthly">Monthly</option>
+                  <option value="Quarterly">Quarterly</option>
+                  <option value="Yearly">Yearly</option>
+                </select>
+              </div>
+              <div class="mat-field col-span-2">
+                <details class="adv">
+                  <summary><span class="material-icons-outlined text-[18px]">swap_vert</span>Floating Rate Caps / Floors · Non-use Fee</summary>
+                  <div class="panel grid grid-cols-2 gap-3">
+                    <div class="mat-field"><label>Rate Floor</label><input id="f-floor" type="number" step="0.0001" class="mat-input"/></div>
+                    <div class="mat-field"><label>Rate Cap</label><input id="f-cap" type="number" step="0.0001" class="mat-input"/></div>
+                    <label class="toggle col-span-2"><input id="f-nonUseEnabled" type="checkbox"><span class="track"></span>Non-use Fee on undrawn commitment</label>
+                    <div class="mat-field"><label>Non-use Fee Rate</label><input id="f-nonUseRate" type="number" step="0.0001" class="mat-input"/></div>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+
+          <!-- Calculation Method -->
+          <div class="section-card col-span-12">
+            <header>
+              <span class="material-icons-outlined">functions</span>
+              <h3>Income &amp; Amortization Method</h3>
+              <span class="ml-auto text-[11px] text-gray-500">Select how income is recognized &mdash; all methods can overlay PIK</span>
+            </header>
+            <div class="body">
+              <div id="method-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3"></div>
+              <div id="method-extra" class="mt-4"></div>
+            </div>
+          </div>
+
+          <!-- Principal Schedule (draws / paydowns) -->
+          <div class="section-card col-span-12">
+            <header>
+              <span class="material-icons-outlined">account_balance</span>
+              <h3>Principal Schedule · Draws &amp; Paydowns (Req 10, 12, 20)</h3>
+              <button id="btn-add-event" class="mat-btn ghost ml-auto"><span class="material-icons-outlined text-[18px]">add</span>Add event</button>
+            </header>
+            <div class="body">
+              <div id="events-table"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ TAB: SCHEDULE ============ -->
+      <section class="tab-panel hidden" data-tab="schedule">
+        <div class="flex items-center gap-3 mb-3">
+          <h3 class="text-base font-semibold flex items-center gap-2"><span class="material-icons-outlined text-brand-600">calendar_view_day</span>Loan Calculator Income Schedule (N-7)</h3>
+          <span id="grid-count" class="mat-chip gray"></span>
+          <div class="ml-auto flex items-center gap-2">
+            <label class="toggle"><input id="opt-in-window" type="checkbox" checked><span class="track"></span>Dim out-of-window</label>
+            <label class="toggle"><input id="opt-highlight-events" type="checkbox" checked><span class="track"></span>Highlight events</label>
+            <button id="btn-schedule-csv" class="mat-btn outline"><span class="material-icons-outlined text-[18px]">download</span>CSV</button>
+          </div>
+        </div>
+        <div id="schedule-grid" class="grid-scroll"></div>
+      </section>
+
+      <!-- ============ TAB: SUMMARY ============ -->
+      <section class="tab-panel hidden" data-tab="summary">
+        <h3 class="text-base font-semibold flex items-center gap-2 mb-4"><span class="material-icons-outlined text-brand-600">insights</span>Accrual Period Amounts (N-8)</h3>
+        <div id="kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+        <div class="grid grid-cols-12 gap-5 mt-5">
+          <div class="section-card col-span-12 lg:col-span-6">
+            <header><span class="material-icons-outlined">stacked_bar_chart</span><h3>Daily Accrual — Cash vs PIK</h3></header>
+            <div class="body"><canvas id="chart-accrual" height="220"></canvas></div>
+          </div>
+          <div class="section-card col-span-12 lg:col-span-6">
+            <header><span class="material-icons-outlined">show_chart</span><h3>Loan Balance &amp; Carrying Value</h3></header>
+            <div class="body"><canvas id="chart-balance" height="220"></canvas></div>
+          </div>
+          <div class="section-card col-span-12">
+            <header><span class="material-icons-outlined">fact_check</span><h3>Per-Period Roll-up</h3></header>
+            <div class="body" id="rollup-table"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ TAB: DIU ============ -->
+      <section class="tab-panel hidden" data-tab="diu">
+        <div class="flex items-center gap-3 mb-3">
+          <h3 class="text-base font-semibold flex items-center gap-2"><span class="material-icons-outlined text-brand-600">upload_file</span>DIU Template Output (N-9)</h3>
+          <span class="mat-chip gray">Relational Trans Types (N-6)</span>
+          <div class="ml-auto flex items-center gap-2">
+            <button id="btn-diu-csv" class="mat-btn primary"><span class="material-icons-outlined text-[18px]">file_download</span>Download DIU CSV</button>
+          </div>
+        </div>
+        <div id="diu-grid" class="grid-scroll"></div>
+        <div class="mt-4 text-[12px] text-gray-500 leading-relaxed">
+          Entries group Accrued Interest, PIK capitalization, and per-day adjustments into balanced debit/credit pairs against the client-configured transaction type hierarchy.
+          In production this panel maps fields from the Investran driver reports — here it's driven from the in-app mock data so you can see the shape end-to-end.
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<!-- Chart.js via CDN for summary graphs -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!--
+ =========================================================================
+   CALC ENGINE
+   ----------
+   Pure functions — no DOM touches — so the same engine can drop into an
+   Angular service class (IncomeCalculatorService) when the project is
+   scaffolded. Each calc method is a standalone function that takes an
+   instrument + context and returns a daily schedule array.
+ =========================================================================
+-->
+<script>
+/* ---------- Date helpers ---------- */
+const ONE_DAY = 86400000;
+function toISO(d){ const z=new Date(d); z.setHours(12,0,0,0); return z.toISOString().slice(0,10); }
+function parseISO(s){ if(!s) return null; const [y,m,d]=s.split('-').map(Number); return new Date(y, m-1, d, 12); }
+function addDays(d,n){ return new Date(d.getTime()+n*ONE_DAY); }
+function addMonths(d,n){ const x=new Date(d); x.setMonth(x.getMonth()+n); return x; }
+function eachDay(from,to){ const out=[]; for(let d=new Date(from); d<=to; d=addDays(d,1)) out.push(new Date(d)); return out; }
+function isLeap(y){ return (y%4===0 && y%100!==0) || y%400===0; }
+function daysInYear(d){ return isLeap(d.getFullYear())?366:365; }
+function sameDate(a,b){ return a && b && a.getTime()===b.getTime(); }
+
+/* ---------- Day-count per-day accrual factor ---------- */
+function dayCountFactor(basis, date){
+  // Returns the fraction of year attributed to ONE calendar day.
+  switch(basis){
+    case 'ACT/360': return 1/360;
+    case 'ACT/365': return 1/365;
+    case 'ACT/ACT': return 1/daysInYear(date);
+    case '30/360':  return 1/360; // simplified — for daily granularity 30/360 treats each day = 1/360
+    default: return 1/360;
+  }
+}
+
+/* ---------- Event lookup ---------- */
+function eventsOn(date, events){
+  const iso = toISO(date);
+  return (events||[]).filter(e => e.date === iso);
+}
+
+/* ---------- Capitalization gate ---------- */
+function isCapitalizationDay(date, anchor, freq){
+  // Capitalization happens on the day-of-month of the anchor at the given frequency.
+  if(!anchor) return false;
+  if(date.getDate() !== anchor.getDate()) return false;
+  const months = (date.getFullYear()-anchor.getFullYear())*12 + (date.getMonth()-anchor.getMonth());
+  if(months <= 0) return false;
+  if(freq==='Monthly')   return months % 1 === 0;
+  if(freq==='Quarterly') return months % 3 === 0;
+  if(freq==='Yearly')    return months % 12 === 0;
+  return false;
+}
+
+/* ---------- IRR / yield solve (bisection, robust) ---------- */
+function npv(rate, cashflows){
+  // cashflows: [{t: yearsFromT0, amount}]
+  let v=0; for(const cf of cashflows) v += cf.amount/Math.pow(1+rate, cf.t); return v;
+}
+function solveYield(targetNPV, cashflows){
+  let lo=-0.99, hi=5.0;
+  const f = r => npv(r, cashflows) - targetNPV;
+  let fl=f(lo), fh=f(hi);
+  if(fl*fh > 0) return null; // no sign change
+  for(let i=0;i<200;i++){
+    const mid=(lo+hi)/2, fm=f(mid);
+    if(Math.abs(fm)<1e-9) return mid;
+    if(fl*fm<0){ hi=mid; fh=fm; } else { lo=mid; fl=fm; }
+  }
+  return (lo+hi)/2;
+}
+
+/* ---------- Core schedule builder ----------
+   Walks the day grid from settlement → maturity and maintains:
+     balance              (principal outstanding, includes PIK capitalizations)
+     drawnBalance         (for revolvers: actually drawn portion)
+     carryingValue        (used by effective-interest / straight-line methods)
+     cumInterest, cumPIK  (tracker for capitalization)
+-------------------------------------------------- */
+function buildSchedule(instr){
+  if(!instr) return [];
+  const settle   = parseISO(instr.settlementDate);
+  const maturity = parseISO(instr.maturityDate);
+  if(!settle || !maturity || maturity < settle) return [];
+
+  const basis = instr.dayBasis || 'ACT/360';
+  const events = (instr.principalSchedule||[]).slice().sort((a,b)=> a.date.localeCompare(b.date));
+
+  // For revolvers / loans the "balance" starts at initial draw (first event w/ type=draw at settle) or faceValue
+  const initialDraw = events.find(e => e.date===toISO(settle) && (e.type==='draw' || e.type==='initial'));
+  let balance       = initialDraw ? initialDraw.amount : (instr.faceValue||0);
+  let drawnBalance  = balance;
+  const commitment  = instr.commitment ?? instr.faceValue;
+
+  // Carrying value start = purchase price if given, else face
+  let carryingValue = (instr.purchasePrice ?? instr.faceValue) || 0;
+
+  // Precompute total life (years) and a rough cashflow set for IRR methods
+  const totalDays = Math.round((maturity-settle)/ONE_DAY);
+  const couponRateNominal = instr.coupon?.fixedRate ?? 0;
+
+  // Effective interest yield (y):
+  //   method effectiveInterestPrice  -> solve from PP
+  //   method effectiveInterestFormula-> yield = coupon + spread (user-supplied)
+  //   method effectiveInterestIRR    -> explicit yield input
+  //   method straightLine            -> no y — amortize linearly
+  let effectiveYield = null;
+  const amort = instr.amortization || { method:'none' };
+  // Days-per-year aligned with the day-count basis (keeps IRR-solve consistent with daily accrual).
+  const daysPerYear = (basis==='ACT/365' || basis==='ACT/ACT') ? 365 : 360;
+  if(amort.method === 'effectiveInterestPrice' && instr.purchasePrice && instr.faceValue && couponRateNominal){
+    // Build cashflows aligned to the scheduler's day-count: coupon annually + face at maturity.
+    const yearsToMat = totalDays / daysPerYear;
+    const cfs = [];
+    const coupon = instr.faceValue * couponRateNominal;
+    const fullYears = Math.floor(yearsToMat);
+    for(let y=1; y<=fullYears; y++) cfs.push({t:y, amount: coupon});
+    const stub = yearsToMat - fullYears;
+    cfs.push({t: yearsToMat, amount: instr.faceValue + (stub>0 ? coupon*stub : 0)});
+    const seed = solveYield(instr.purchasePrice, cfs) ?? couponRateNominal;
+    // Refinement pass: pick the yield that makes the daily-simple-interest schedule
+    // close to face at maturity. Two-point secant is plenty.
+    const runCarrying = (y) => {
+      let cv = instr.purchasePrice || 0;
+      for(let k=0; k<totalDays+1; k++){
+        cv += cv * y * (1/daysPerYear) - instr.faceValue * couponRateNominal * (1/daysPerYear);
+      }
+      return cv;
+    };
+    let y0 = seed, y1 = seed * 1.001;
+    let f0 = runCarrying(y0) - instr.faceValue;
+    let f1 = runCarrying(y1) - instr.faceValue;
+    for(let i=0; i<6 && Math.abs(f1) > 1e-3; i++){
+      const y2 = y1 - f1 * (y1-y0) / (f1-f0);
+      y0 = y1; f0 = f1; y1 = y2; f1 = runCarrying(y1) - instr.faceValue;
+    }
+    effectiveYield = y1;
+  } else if(amort.method === 'effectiveInterestFormula'){
+    effectiveYield = (couponRateNominal) + (amort.spread ?? 0);
+  } else if(amort.method === 'effectiveInterestIRR'){
+    effectiveYield = amort.yieldOverride ?? couponRateNominal;
+  }
+
+  // Discount/premium for straight-line
+  const straightLineDaily = (amort.method==='straightLine' && instr.purchasePrice && instr.faceValue && totalDays>0)
+    ? (instr.faceValue - instr.purchasePrice) / totalDays
+    : 0;
+
+  // PIK tracking (capitalize at anchor dates)
+  const pikEnabled = !!instr.pik?.enabled;
+  const pikRateNominal = instr.pik?.rate ?? 0;
+  const capAnchor = settle;
+  const capFreq = instr.pik?.capitalizationFrequency || 'Monthly';
+
+  let cumCashAccrued = 0, cumPikAccrued = 0;
+  let cumInterestEarned = 0, cumPikEarned = 0;
+  let cumAmort = 0;
+  let cumNonUseFee = 0;
+
+  const rows = [];
+  const days = eachDay(settle, maturity);
+  for(let i=0; i<days.length; i++){
+    const d = days[i];
+
+    // ----- Apply events first (draws, paydowns) -----
+    const evs = eventsOn(d, events);
+    let draw=0, paydown=0, initial=0;
+    for(const e of evs){
+      if(e.type==='initial'){ initial += e.amount; /* already counted into starting balance */ }
+      else if(e.type==='draw'){ draw += e.amount; balance += e.amount; drawnBalance += e.amount; carryingValue += e.amount; }
+      else if(e.type==='paydown'){ paydown += e.amount; balance -= e.amount; drawnBalance -= e.amount; carryingValue -= e.amount; }
+    }
+
+    // ----- Determine effective coupon rate for today -----
+    let couponRate = instr.coupon?.fixedRate ?? 0;
+    let floatingRate = instr.coupon?.floatingRate ?? 0;
+    if(instr.coupon?.type === 'Floating'){
+      // Apply spread + cap/floor
+      let r = floatingRate + (instr.coupon.spread ?? 0);
+      if(instr.coupon.floor != null) r = Math.max(r, instr.coupon.floor);
+      if(instr.coupon.cap   != null) r = Math.min(r, instr.coupon.cap);
+      couponRate = r;
+    }
+
+    // ----- Day count factor -----
+    const dcf = dayCountFactor(basis, d);
+
+    // ----- Daily cash accrual -----
+    const dailyCash = balance * couponRate * dcf;
+    cumCashAccrued += dailyCash;
+    cumInterestEarned += dailyCash;
+
+    // ----- Daily PIK accrual -----
+    let dailyPik = 0;
+    if(pikEnabled){
+      dailyPik = balance * pikRateNominal * dcf;
+      cumPikAccrued += dailyPik;
+      cumPikEarned  += dailyPik;
+    }
+
+    // ----- Non-use fee (on undrawn commitment) -----
+    let dailyNonUse = 0;
+    if(instr.nonUseFee?.enabled && commitment > drawnBalance){
+      dailyNonUse = (commitment - drawnBalance) * (instr.nonUseFee.rate ?? 0) * dcf;
+      cumNonUseFee += dailyNonUse;
+    }
+
+    // ----- Capitalization (PIK) -----
+    let capitalized = 0;
+    if(pikEnabled && isCapitalizationDay(d, capAnchor, capFreq) && cumPikAccrued > 0){
+      capitalized = cumPikAccrued;
+      balance += capitalized;
+      carryingValue += capitalized;
+      cumPikAccrued = 0; // reset accrued pool
+    }
+
+    // ----- Amortization of discount/premium -----
+    let dailyAmort = 0;
+    if(amort.method === 'straightLine'){
+      dailyAmort = straightLineDaily;
+      carryingValue += dailyAmort;
+      cumAmort += dailyAmort;
+    } else if(effectiveYield != null){
+      // effective interest: daily yield accrual on carrying value
+      const dyield = effectiveYield * dcf;
+      const effectiveIncome = carryingValue * dyield;
+      dailyAmort = effectiveIncome - dailyCash; // portion that amortizes discount/premium
+      carryingValue += dailyAmort;
+      cumAmort += dailyAmort;
+    }
+
+    rows.push({
+      date: toISO(d),
+      jsDate: d,
+      dayOfWeek: d.getDay(),
+      balance,
+      drawnBalance,
+      carryingValue,
+      initialPurchase: initial || 0,
+      draw,
+      paydown,
+      couponRate,
+      floatingRate,
+      currentRate: couponRate,
+      dailyCash,
+      cumInterestAccrued: cumCashAccrued,
+      cumInterestEarned,
+      capitalized,
+      interestAdjustments: 0,
+      cashInterestPayment: 0,
+      pikRate: pikEnabled ? pikRateNominal : 0,
+      dailyPik,
+      cumPikAccrued,
+      cumPikEarned,
+      pikInterestAdjustments: 0,
+      pikPaydown: 0,
+      amortDaily: dailyAmort,
+      cumAmort,
+      nonUseFee: dailyNonUse,
+      cumNonUseFee,
+      hasEvent: evs.length > 0 || capitalized > 0
+    });
+  }
+  return rows;
+}
+
+/* ---------- Window summariser ---------- */
+function summarize(rows, beginISO, endISO){
+  const win = rows.filter(r => r.date >= beginISO && r.date <= endISO);
+  const sum = (arr, k) => arr.reduce((a,r)=> a + (r[k]||0), 0);
+  return {
+    rows: win,
+    totalCashAccrual: sum(win,'dailyCash'),
+    totalPikAccrual:  sum(win,'dailyPik'),
+    totalCapitalized: sum(win,'capitalized'),
+    totalAmort:       sum(win,'amortDaily'),
+    totalNonUseFee:   sum(win,'nonUseFee'),
+    daysCount:        win.length,
+    openingBalance:   win[0]?.balance ?? 0,
+    closingBalance:   win[win.length-1]?.balance ?? 0,
+    closingCarrying:  win[win.length-1]?.carryingValue ?? 0,
+    periodStart:      win[0]?.date,
+    periodEnd:        win[win.length-1]?.date
+  };
+}
+
+/* ---------- DIU generator (N-6 / N-9) ---------- */
+function generateDIU(instr, summary){
+  if(!summary || !summary.rows.length) return [];
+  const ctx = { legal: instr.legalEntity, leid: instr.leid, deal: instr.deal, position: instr.position, sec: instr.incomeSecurity };
+  const entries = [];
+  let jeIndex = 1;
+  const add = (transType, amount, isDebit, account, effDate, comments) => {
+    entries.push({
+      legalEntity: ctx.legal, leid: ctx.leid, batchId: 1, jeIndex: jeIndex, txIndex: isDebit?2:1,
+      glDate: summary.periodEnd, effectiveDate: effDate,
+      deal: ctx.deal, position: ctx.position, incomeSecurity: ctx.sec,
+      transactionType: transType, account: account, allocationRule: isDebit?'Non-Dominant':'By Commitment and GL Date',
+      batchType: 'Loan Calculator',
+      batchComments: `Loan Calculator Entries from ${summary.periodStart} to ${summary.periodEnd}`,
+      transactionComments: comments,
+      originalAmount: isDebit ? amount : amount,
+      amountLE: Math.abs(amount),
+      fx: 1, amountLocal: Math.abs(amount),
+      isDebit, leDomain: 'Investran Global'
+    });
+  };
+  // Interest pair
+  if(summary.totalCashAccrual){
+    add('Interest Receivable',           summary.totalCashAccrual, false, '40100', summary.periodEnd, `Interest Adjustment for ${summary.periodEnd}`);
+    add('Income - Daily Accrued Interest', summary.totalCashAccrual, true,  '23000', summary.periodEnd, `Interest Adjustment for ${summary.periodEnd}`);
+    jeIndex++;
+  }
+  // PIK pair (capitalization)
+  if(summary.totalCapitalized){
+    add('PIK Investment', -summary.totalCapitalized, true,  '40100', summary.periodEnd, `PIK Capitalization for ${summary.periodEnd}`);
+    add('Interest Receivable', -summary.totalCapitalized, false, '23000', summary.periodEnd, `PIK Capitalization for ${summary.periodEnd}`);
+    jeIndex++;
+  }
+  // Amortization
+  if(Math.abs(summary.totalAmort) > 0.005){
+    const label = summary.totalAmort > 0 ? 'Discount Accretion' : 'Premium Amortization';
+    add(label, summary.totalAmort, false, '40150', summary.periodEnd, `${label} for ${summary.periodEnd}`);
+    add(label + ' Offset', summary.totalAmort, true, '23000', summary.periodEnd, `${label} for ${summary.periodEnd}`);
+    jeIndex++;
+  }
+  // Non-use fee
+  if(summary.totalNonUseFee > 0.005){
+    add('Non-Use Fee Income', summary.totalNonUseFee, false, '40200', summary.periodEnd, `Non-use fee for ${summary.periodEnd}`);
+    add('Non-Use Fee Receivable', summary.totalNonUseFee, true, '23100', summary.periodEnd, `Non-use fee for ${summary.periodEnd}`);
+    jeIndex++;
+  }
+  return entries;
+}
+</script>
+
+<!--
+ =========================================================================
+   MOCK DATASET
+   ============
+   Four instruments demonstrating the full surface of the calculator.
+-->
+<script>
+const INSTRUMENTS = [
+  {
+    id:'alliance',
+    legalEntity:'FIS Capital Partners I', leid: 7,
+    deal:'Alliance Manufacturing',
+    position:'Alliance Manufacturing (Convertible Note)',
+    incomeSecurity:'Alliance Manufacturing (Convertible Note)',
+    faceValue: 25000000,
+    purchasePrice: 25000000, // at par
+    commitment: 25000000,
+    settlementDate: '2019-01-15',
+    maturityDate:   '2020-03-05',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis: 'ACT/360',
+    coupon: { type:'Fixed', fixedRate: 0.12, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:true, rate: 0.14, capitalizationFrequency: 'Monthly' },
+    principalRepayment: 'AtMaturity',
+    principalSchedule: [
+      { date:'2019-01-15', type:'initial', amount: 25000000 }
+    ],
+    amortization: { method:'none' },
+    nonUseFee: { enabled:false, rate:0 },
+    preset:'Alliance Manufacturing · Interest + PIK @ par'
+  },
+  {
+    id:'discountBond',
+    legalEntity:'FIS Capital Partners I', leid: 7,
+    deal:'Copperleaf Capital',
+    position:'Copperleaf 8% 2030 Sr Notes',
+    incomeSecurity:'Copperleaf 8% 2030 Sr Notes',
+    faceValue: 10000000,
+    purchasePrice: 9_250_000,      // bought at discount
+    commitment: 10_000_000,
+    settlementDate: '2024-06-01',
+    maturityDate:   '2030-06-01',
+    dayBasis: '30/360',
+    coupon: { type:'Fixed', fixedRate: 0.08, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate: 0, capitalizationFrequency: 'Monthly' },
+    principalRepayment: 'AtMaturity',
+    principalSchedule: [
+      { date:'2024-06-01', type:'initial', amount: 10_000_000 }
+    ],
+    amortization: { method:'effectiveInterestPrice' },  // solve EIR from price
+    nonUseFee: { enabled:false, rate:0 },
+    preset:'Copperleaf 8% · Discount Bond (Effective Interest)'
+  },
+  {
+    id:'floatingLoan',
+    legalEntity:'FIS Capital Partners II', leid: 11,
+    deal:'Orion Industrial',
+    position:'Orion TL-B',
+    incomeSecurity:'Orion Term Loan B (SOFR + 575)',
+    faceValue: 40_000_000,
+    purchasePrice: 40_000_000,
+    commitment: 40_000_000,
+    settlementDate: '2024-09-15',
+    maturityDate:   '2031-09-15',
+    dayBasis: 'ACT/360',
+    coupon: { type:'Floating', fixedRate: 0, floatingRate: 0.051, spread: 0.0575, floor: 0.08, cap: 0.14 },
+    pik: { enabled:false, rate:0 },
+    principalRepayment: 'Scheduled',
+    principalSchedule: [
+      { date:'2024-09-15', type:'initial', amount: 40_000_000 },
+      { date:'2025-03-31', type:'paydown', amount:  1_000_000 },
+      { date:'2025-09-30', type:'paydown', amount:  1_000_000 },
+      { date:'2026-03-31', type:'paydown', amount:  1_000_000 },
+    ],
+    amortization: { method:'straightLine' },
+    nonUseFee: { enabled:false, rate:0 },
+    preset:'Orion TL-B · Floating + Caps/Floors'
+  },
+  {
+    id:'revolver',
+    legalEntity:'FIS Credit Opps III', leid: 22,
+    deal:'Northwind Ventures',
+    position:'Northwind RCF',
+    incomeSecurity:'Northwind Revolving Credit Facility',
+    faceValue: 15_000_000, // drawn at settle
+    purchasePrice: 15_000_000,
+    commitment: 50_000_000,
+    settlementDate: '2025-01-15',
+    maturityDate:   '2029-01-15',
+    dayBasis: 'ACT/365',
+    coupon: { type:'Fixed', fixedRate: 0.095 },
+    pik: { enabled:false, rate:0 },
+    principalRepayment: 'Scheduled',
+    principalSchedule: [
+      { date:'2025-01-15', type:'initial', amount: 15_000_000 },
+      { date:'2025-05-01', type:'draw',    amount: 10_000_000 },
+      { date:'2025-09-01', type:'paydown', amount:  5_000_000 },
+      { date:'2026-03-01', type:'draw',    amount:  7_500_000 },
+    ],
+    amortization: { method:'none' },
+    nonUseFee: { enabled:true, rate: 0.005 }, // 50 bps on undrawn
+    preset:'Northwind RCF · Revolver + Non-use Fee'
+  }
+];
+
+const METHOD_CATALOG = [
+  { id:'none',                         title:'Simple Daily Accrual',     desc:'Straight coupon × balance × day-count. Best for plain vanilla loans and the Alliance demo.' },
+  { id:'straightLine',                 title:'Straight-line Amortization', desc:'Amortize discount/premium evenly across remaining life. Works with fixed or variable coupon.' },
+  { id:'effectiveInterestPrice',       title:'Effective Interest · Price', desc:'Solve effective yield from purchase price and cash flows. Best for discount bonds.' },
+  { id:'effectiveInterestFormula',     title:'Effective Interest · Formula', desc:'User-supplied yield (coupon + spread or any formula). Useful for variable rate instruments.' },
+  { id:'effectiveInterestIRR',         title:'Effective Interest · IRR', desc:'Explicit IRR override. Apply when yield is known externally.' }
+];
+
+/* ---------- Income Security Type catalog ----------
+   A "type" is a starting template that pre-fills the form. Picking a type snaps
+   coupon style, amortization method, PIK, caps/floors, and fee toggles into
+   place — the client then fine-tunes. Types are named to match the 21-item
+   options list so clients recognize them.
+-------------------------------------------------- */
+const TYPE_CATALOG = [
+  { id:'simpleDaily',          group:'Basic',               label:'Simple Daily Accrual',
+    apply:(i)=>({ amort:'none',                  coupon:'Fixed',    pik:false, nonUse:false }) },
+
+  // #1, #2 Straight-line
+  { id:'straightLineFixed',    group:'Straight-line Amortization', label:'1 · Straight-line Amortization (Fixed Coupon)',
+    apply:(i)=>({ amort:'straightLine',          coupon:'Fixed',    pik:false, nonUse:false }) },
+  { id:'straightLineVar',      group:'Straight-line Amortization', label:'2 · Straight-line Amortization (Variable Coupon)',
+    apply:(i)=>({ amort:'straightLine',          coupon:'Floating', pik:false, nonUse:false }) },
+
+  // #3-#8 Effective interest
+  { id:'eirPriceFixed',        group:'Effective Interest',  label:'3 · Effective Interest + Price (Fixed Coupon)',
+    apply:(i)=>({ amort:'effectiveInterestPrice',   coupon:'Fixed',    pik:false, nonUse:false }) },
+  { id:'eirPriceVar',          group:'Effective Interest',  label:'4 · Effective Interest + Price (Variable Coupon)',
+    apply:(i)=>({ amort:'effectiveInterestPrice',   coupon:'Floating', pik:false, nonUse:false }) },
+  { id:'eirFormulaFixed',      group:'Effective Interest',  label:'5 · Effective Interest + Formula (Fixed Coupon)',
+    apply:(i)=>({ amort:'effectiveInterestFormula', coupon:'Fixed',    pik:false, nonUse:false }) },
+  { id:'eirFormulaVar',        group:'Effective Interest',  label:'6 · Effective Interest + Formula (Variable Coupon)',
+    apply:(i)=>({ amort:'effectiveInterestFormula', coupon:'Floating', pik:false, nonUse:false }) },
+  { id:'eirIRRFixed',          group:'Effective Interest',  label:'7 · Effective Interest + IRR (Fixed Coupon)',
+    apply:(i)=>({ amort:'effectiveInterestIRR',     coupon:'Fixed',    pik:false, nonUse:false }) },
+  { id:'eirIRRVar',            group:'Effective Interest',  label:'8 · Effective Interest + IRR (Variable Coupon)',
+    apply:(i)=>({ amort:'effectiveInterestIRR',     coupon:'Floating', pik:false, nonUse:false }) },
+
+  // #9 PIK
+  { id:'pikNoteFixed',         group:'PIK',                 label:'9 · PIK-Enabled Note (Fixed)',
+    apply:(i)=>({ amort:'none',                  coupon:'Fixed',    pik:true,  nonUse:false }) },
+  { id:'pikNoteVar',           group:'PIK',                 label:'9 · PIK-Enabled Note (Variable)',
+    apply:(i)=>({ amort:'none',                  coupon:'Floating', pik:true,  nonUse:false }) },
+
+  // #11-#12 Principal repayment variants
+  { id:'bulletAtMaturity',     group:'Principal Repayment', label:'11 · Principal Repayment at Maturity',
+    apply:(i)=>({ amort:'none', coupon:'Fixed', pik:false, nonUse:false, repay:'AtMaturity' }) },
+  { id:'scheduledPaydowns',    group:'Principal Repayment', label:'12 · Principal Repayment at Defined Dates',
+    apply:(i)=>({ amort:'none', coupon:'Fixed', pik:false, nonUse:false, repay:'Scheduled' }) },
+  { id:'drawsAddons',          group:'Principal Repayment', label:'20 · Draws & Add-ons (Revolver)',
+    apply:(i)=>({ amort:'none', coupon:'Fixed', pik:false, nonUse:false, repay:'Scheduled' }) },
+
+  // #13 yield override
+  { id:'yieldOverride',        group:'Advanced',            label:'13 · Effective Yield Override',
+    apply:(i)=>({ amort:'effectiveInterestIRR',  coupon:'Fixed',    pik:false, nonUse:false }) },
+
+  // #15 Non-use fee
+  { id:'nonUseFeeFacility',    group:'Credit Facility',     label:'15 · Non-use Fee Facility (Revolver)',
+    apply:(i)=>({ amort:'none',                  coupon:'Fixed',    pik:false, nonUse:true }) },
+
+  // #16-#17 discount / premium
+  { id:'discountAmort',        group:'Discount / Premium',  label:'16 · Discount Amortization (Bond below par)',
+    apply:(i)=>({ amort:'effectiveInterestPrice', coupon:'Fixed',   pik:false, nonUse:false, priceHint:'below' }) },
+  { id:'premiumAccretion',     group:'Discount / Premium',  label:'17 · Premium Accretion (Bond above par)',
+    apply:(i)=>({ amort:'effectiveInterestPrice', coupon:'Fixed',   pik:false, nonUse:false, priceHint:'above' }) },
+
+  // #19 bi-monthly accrual
+  { id:'biMonthly',            group:'Accrual Style',       label:'19 · Bi-monthly Accrual',
+    apply:(i)=>({ amort:'none', coupon:'Fixed', pik:false, nonUse:false, accrualFreq:'biMonthly' }) },
+
+  // #21 Floating + caps/floors
+  { id:'floatingCapsFloors',   group:'Floating-rate',       label:'21 · Floating Rate with Caps & Floors',
+    apply:(i)=>({ amort:'none', coupon:'Floating', pik:false, nonUse:false, capsFloors:true }) }
+];
+
+/* Apply a type template to an instrument — mutates in place. */
+function applyType(instrument, typeId){
+  const t = TYPE_CATALOG.find(x=>x.id===typeId);
+  if(!t) return;
+  const cfg = t.apply(instrument) || {};
+  instrument.type = typeId;
+  instrument.amortization = instrument.amortization || {};
+  instrument.amortization.method = cfg.amort;
+  instrument.coupon = instrument.coupon || {};
+  instrument.coupon.type = cfg.coupon;
+  instrument.pik = instrument.pik || {};
+  instrument.pik.enabled = !!cfg.pik;
+  instrument.nonUseFee = instrument.nonUseFee || { enabled:false, rate:0 };
+  instrument.nonUseFee.enabled = !!cfg.nonUse;
+  if(cfg.repay) instrument.principalRepayment = cfg.repay;
+  if(cfg.accrualFreq) instrument.accrualFreq = cfg.accrualFreq;
+  // Prime sensible defaults if not already set
+  if(cfg.capsFloors){
+    if(instrument.coupon.floor==null) instrument.coupon.floor = 0.03;
+    if(instrument.coupon.cap==null)   instrument.coupon.cap   = 0.15;
+  }
+  if(cfg.pik){
+    if(!instrument.pik.rate) instrument.pik.rate = instrument.pik.rate || 0.10;
+    if(!instrument.pik.capitalizationFrequency) instrument.pik.capitalizationFrequency = 'Monthly';
+  }
+  if(cfg.nonUse){
+    if(!instrument.nonUseFee.rate) instrument.nonUseFee.rate = 0.005;
+  }
+}
+</script>
+
+<!--
+ =========================================================================
+   UI STATE + RENDERER
+   ==================
+-->
+<script>
+/* ---------- State ---------- */
+const state = {
+  instrumentId: 'alliance',
+  begin:  '2020-01-01',
+  end:    '2020-03-05',
+  last:   '2019-12-31',
+  activeTab: 'setup',
+  dateFormat: 'us',
+  schedule: [],
+  summary: null,
+  diu: [],
+  charts: { accrual:null, balance:null }
+};
+
+function currentInstrument(){ return INSTRUMENTS.find(i=>i.id===state.instrumentId); }
+
+/* ---------- Formatters ---------- */
+const fmtMoney = (v)=> v==null||isNaN(v) ? '—' :
+  v.toLocaleString('en-US',{ style:'currency', currency:'USD', minimumFractionDigits:2, maximumFractionDigits:2 });
+const fmtNum = (v, p=2)=> v==null||isNaN(v) ? '—' : v.toLocaleString('en-US',{ minimumFractionDigits:p, maximumFractionDigits:p });
+const fmtPct = (v, p=4)=> v==null||isNaN(v) ? '—' : (v*100).toFixed(p)+'%';
+const fmtDate = (iso)=> {
+  if(!iso) return '—';
+  const [y,m,d]=iso.split('-');
+  return state.dateFormat==='us' ? `${m}/${d}/${y}` : `${d}/${m}/${y}`;
+};
+
+/* ---------- Tabs ---------- */
+function setTab(tab){
+  state.activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('hidden', p.dataset.tab!==tab));
+  if(tab==='summary') drawCharts();
+}
+
+/* ---------- Instrument picker wiring (cascading) ---------- */
+function populatePickers(){
+  const les = [...new Set(INSTRUMENTS.map(i=>i.legalEntity))];
+  const leSel = byId('sel-le');
+  leSel.innerHTML = les.map(l=>`<option>${l}</option>`).join('');
+  const instr = currentInstrument();
+  leSel.value = instr.legalEntity;
+  repopulateDown('le');
+}
+function repopulateDown(level){
+  const leSel  = byId('sel-le');
+  const dealSel= byId('sel-deal');
+  const posSel = byId('sel-position');
+  const secSel = byId('sel-security');
+  const deals = [...new Set(INSTRUMENTS.filter(i=>i.legalEntity===leSel.value).map(i=>i.deal))];
+  dealSel.innerHTML = deals.map(d=>`<option>${d}</option>`).join('');
+  if(!deals.includes(dealSel.value)) dealSel.value = deals[0];
+  const positions = [...new Set(INSTRUMENTS.filter(i=>i.legalEntity===leSel.value && i.deal===dealSel.value).map(i=>i.position))];
+  posSel.innerHTML = positions.map(d=>`<option>${d}</option>`).join('');
+  if(!positions.includes(posSel.value)) posSel.value = positions[0];
+  const secs = INSTRUMENTS.filter(i=>i.legalEntity===leSel.value && i.deal===dealSel.value && i.position===posSel.value);
+  secSel.innerHTML = secs.map(s=>`<option value="${s.id}">${s.incomeSecurity}</option>`).join('');
+  if(!secs.find(s=>s.id===state.instrumentId)) state.instrumentId = secs[0].id;
+  secSel.value = state.instrumentId;
+}
+function onPickerChange(){
+  state.instrumentId = byId('sel-security').value;
+  const instr = currentInstrument();
+  // Default the accrual window to instrument's last full calendar month if current window is outside its life.
+  const sISO = instr.settlementDate, mISO = instr.maturityDate;
+  if(state.begin < sISO || state.end > mISO){
+    state.begin = sISO;
+    // Pick end of first calendar year or maturity — whichever earlier
+    const wantEnd = parseISO(sISO);
+    wantEnd.setMonth(wantEnd.getMonth()+2); // ~2 month window
+    const endISO = toISO(wantEnd);
+    state.end = endISO > mISO ? mISO : endISO;
+    state.last = toISO(addDays(parseISO(state.begin),-1));
+  }
+  loadFormFromInstrument();
+  render();
+}
+
+/* ---------- Presets panel ---------- */
+function renderPresets(){
+  const wrap = byId('presets');
+  wrap.innerHTML = INSTRUMENTS.map(i =>
+    `<div class="nav-pill ${i.id===state.instrumentId?'active':''}" data-preset="${i.id}">
+       <span class="material-icons-outlined">${i.id==='revolver'?'sync':i.id==='floatingLoan'?'waves':i.id==='discountBond'?'toll':'account_balance'}</span>
+       <span class="flex-1 truncate">${i.preset}</span>
+     </div>`
+  ).join('');
+  wrap.querySelectorAll('[data-preset]').forEach(el => el.onclick = ()=>{
+    state.instrumentId = el.dataset.preset;
+    // sensible window
+    const inst = currentInstrument();
+    state.begin = inst.settlementDate;
+    const end = addDays(parseISO(inst.settlementDate), 90);
+    const endISO = toISO(end);
+    state.end = endISO > inst.maturityDate ? inst.maturityDate : endISO;
+    state.last = toISO(addDays(parseISO(state.begin),-1));
+    populatePickers();
+    byId('sel-security').value = inst.id;
+    loadFormFromInstrument();
+    render();
+  });
+}
+
+/* ---------- Form <-> Instrument binding ---------- */
+function loadFormFromInstrument(){
+  const i = currentInstrument();
+  setVal('f-face', i.faceValue);
+  setVal('f-price', i.purchasePrice);
+  setVal('f-commit', i.commitment);
+  setVal('f-settle', i.settlementDate);
+  setVal('f-maturity', i.maturityDate);
+  setVal('f-repay', i.principalRepayment);
+  byId('f-accExclusive').checked = !!i.accrualDayCountExclusive;
+  byId('f-payInclusive').checked = !!i.paydateDayCountInclusive;
+  byId('f-prevDay').checked = !!i.interestPreviousDay;
+  setVal('f-couponType', i.coupon?.type || 'Fixed');
+  setVal('f-coupon', i.coupon?.fixedRate ?? 0);
+  setVal('f-float',  i.coupon?.floatingRate ?? 0);
+  setVal('f-spread', i.coupon?.spread ?? 0);
+  setVal('f-basis',  i.dayBasis);
+  setVal('f-accrualFreq', i.accrualFreq || 'daily');
+  byId('f-pikEnabled').checked = !!i.pik?.enabled;
+  setVal('f-pikRate', i.pik?.rate ?? 0);
+  setVal('f-capFreq', i.pik?.capitalizationFrequency || 'Monthly');
+  setVal('f-floor', i.coupon?.floor ?? '');
+  setVal('f-cap',   i.coupon?.cap ?? '');
+  byId('f-nonUseEnabled').checked = !!i.nonUseFee?.enabled;
+  setVal('f-nonUseRate', i.nonUseFee?.rate ?? 0);
+  // dates
+  setVal('in-begin', state.begin);
+  setVal('in-end',   state.end);
+  setVal('in-last',  state.last);
+  renderMethodPicker();
+  renderEventsTable();
+}
+
+function writeFormToInstrument(){
+  const i = currentInstrument();
+  i.faceValue       = num('f-face');
+  i.purchasePrice   = num('f-price');
+  i.commitment      = num('f-commit');
+  i.settlementDate  = byId('f-settle').value;
+  i.maturityDate    = byId('f-maturity').value;
+  i.principalRepayment = byId('f-repay').value;
+  i.accrualDayCountExclusive = byId('f-accExclusive').checked;
+  i.paydateDayCountInclusive = byId('f-payInclusive').checked;
+  i.interestPreviousDay = byId('f-prevDay').checked;
+  i.dayBasis = byId('f-basis').value;
+  i.accrualFreq = byId('f-accrualFreq').value;
+  i.coupon = i.coupon || {};
+  i.coupon.type        = byId('f-couponType').value;
+  i.coupon.fixedRate   = num('f-coupon');
+  i.coupon.floatingRate= num('f-float');
+  i.coupon.spread      = num('f-spread');
+  i.coupon.floor       = byId('f-floor').value === '' ? null : num('f-floor');
+  i.coupon.cap         = byId('f-cap').value   === '' ? null : num('f-cap');
+  i.pik = i.pik || {};
+  i.pik.enabled = byId('f-pikEnabled').checked;
+  i.pik.rate    = num('f-pikRate');
+  i.pik.capitalizationFrequency = byId('f-capFreq').value;
+  i.nonUseFee = i.nonUseFee || {};
+  i.nonUseFee.enabled = byId('f-nonUseEnabled').checked;
+  i.nonUseFee.rate    = num('f-nonUseRate');
+  state.begin = byId('in-begin').value;
+  state.end   = byId('in-end').value;
+  state.last  = byId('in-last').value;
+}
+
+/* ---------- Method picker ---------- */
+function renderMethodPicker(){
+  const i = currentInstrument();
+  const grid = byId('method-grid');
+  grid.innerHTML = METHOD_CATALOG.map(m =>
+    `<div class="method-card ${i.amortization?.method===m.id?'selected':''}" data-method="${m.id}">
+      <div class="t">${m.title}</div>
+      <div class="d">${m.desc}</div>
+     </div>`).join('');
+  grid.querySelectorAll('[data-method]').forEach(el => el.onclick = ()=>{
+    i.amortization = i.amortization || {};
+    i.amortization.method = el.dataset.method;
+    renderMethodPicker();
+    render();
+  });
+  const extra = byId('method-extra');
+  extra.innerHTML = '';
+  if(i.amortization?.method === 'effectiveInterestFormula'){
+    extra.innerHTML = `<div class="mat-field max-w-sm"><label>Yield = coupon + spread (decimal)</label>
+      <input id="f-amortSpread" type="number" step="0.0001" class="mat-input" value="${i.amortization?.spread ?? 0}"/></div>`;
+    byId('f-amortSpread').oninput = (e)=>{ i.amortization.spread = parseFloat(e.target.value)||0; render(); };
+  } else if(i.amortization?.method === 'effectiveInterestIRR'){
+    extra.innerHTML = `<div class="mat-field max-w-sm"><label>Effective Yield Override (decimal)</label>
+      <input id="f-amortIRR" type="number" step="0.0001" class="mat-input" value="${i.amortization?.yieldOverride ?? i.coupon?.fixedRate ?? 0}"/></div>`;
+    byId('f-amortIRR').oninput = (e)=>{ i.amortization.yieldOverride = parseFloat(e.target.value)||0; render(); };
+  } else if(i.amortization?.method === 'effectiveInterestPrice'){
+    // Show computed EIR read-only
+    const s = state.schedule;
+    const r = s && s.length ? s[0] : null;
+    extra.innerHTML = `<div class="mat-chip gray">Effective yield will be solved from purchase price and maturity cashflows.</div>`;
+  } else if(i.amortization?.method === 'straightLine'){
+    extra.innerHTML = `<div class="mat-chip gray">Discount / premium of ${fmtMoney((i.faceValue||0)-(i.purchasePrice||0))} amortized linearly over remaining life.</div>`;
+  }
+}
+
+/* ---------- Events table ---------- */
+function renderEventsTable(){
+  const i = currentInstrument();
+  const evs = (i.principalSchedule||[]);
+  const rows = evs.map((e, idx) => `
+    <tr>
+      <td class="left"><input type="date" class="mat-input" data-ev="date" data-idx="${idx}" value="${e.date}"/></td>
+      <td><select class="mat-select" data-ev="type" data-idx="${idx}">
+        <option ${e.type==='initial'?'selected':''}>initial</option>
+        <option ${e.type==='draw'?'selected':''}>draw</option>
+        <option ${e.type==='paydown'?'selected':''}>paydown</option>
+      </select></td>
+      <td><input type="number" step="0.01" class="mat-input" data-ev="amount" data-idx="${idx}" value="${e.amount}"/></td>
+      <td><button class="mat-btn ghost !py-1 !px-2 text-xs" data-del="${idx}"><span class="material-icons-outlined text-[16px]">delete</span></button></td>
+    </tr>`).join('');
+  byId('events-table').innerHTML = `
+    <table class="w-full text-sm">
+      <thead><tr class="text-left text-gray-500 text-[11px] uppercase tracking-wider">
+        <th class="p-2 font-medium">Date</th>
+        <th class="p-2 font-medium">Type</th>
+        <th class="p-2 font-medium">Amount</th>
+        <th class="p-2"></th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="4" class="p-4 text-gray-500 italic text-sm">No events — the loan runs at face value for the full life.</td></tr>`}</tbody>
+    </table>`;
+  byId('events-table').querySelectorAll('[data-ev]').forEach(el => el.oninput = (e)=>{
+    const idx = +e.target.dataset.idx;
+    const key = e.target.dataset.ev;
+    let v = e.target.value;
+    if(key==='amount') v = parseFloat(v)||0;
+    i.principalSchedule[idx][key] = v;
+    render();
+  });
+  byId('events-table').querySelectorAll('[data-del]').forEach(el => el.onclick = (e)=>{
+    const idx = +e.target.closest('[data-del]').dataset.del;
+    i.principalSchedule.splice(idx, 1);
+    render();
+  });
+}
+
+/* ---------- Schedule grid ---------- */
+function renderScheduleGrid(){
+  const wrap = byId('schedule-grid');
+  const i = currentInstrument();
+  const dimOutOfWindow = byId('opt-in-window')?.checked ?? true;
+  const hl = byId('opt-highlight-events')?.checked ?? true;
+  const headers = [
+    'Date','Loan Balance','Initial','Draws','Paydowns','Coupon Rate','Floating','Current Rate',
+    'Daily Accrued Interest','Cum. Interest','Capitalized Int.','Cash Int. Pmt',
+    'PIK Rate','Daily PIK','Cum. PIK','PIK Paydown',
+    'Amort/day','Cum Amort','Carrying Value'
+  ];
+  const rows = state.schedule.map(r => {
+    const inWindow = r.date >= state.begin && r.date <= state.end;
+    const cls = (hl && r.hasEvent ? 'event ' : '') + (!inWindow && dimOutOfWindow ? 'out-of-window ' : '');
+    const endOfPeriod = r.date === state.end;
+    return `<tr class="${cls}${endOfPeriod?' period-end':''}">
+      <td class="left">${fmtDate(r.date)}</td>
+      <td>${fmtMoney(r.balance)}</td>
+      <td>${r.initialPurchase ? fmtMoney(r.initialPurchase) : '—'}</td>
+      <td>${r.draw ? fmtMoney(r.draw) : '—'}</td>
+      <td>${r.paydown ? fmtMoney(r.paydown) : '—'}</td>
+      <td>${fmtPct(r.couponRate,4)}</td>
+      <td>${fmtPct(r.floatingRate,4)}</td>
+      <td>${fmtPct(r.currentRate,4)}</td>
+      <td>${fmtMoney(r.dailyCash)}</td>
+      <td>${fmtMoney(r.cumInterestAccrued)}</td>
+      <td>${r.capitalized ? fmtMoney(r.capitalized) : '—'}</td>
+      <td>${r.cashInterestPayment ? fmtMoney(r.cashInterestPayment) : '—'}</td>
+      <td>${r.pikRate ? fmtPct(r.pikRate,4) : '—'}</td>
+      <td>${fmtMoney(r.dailyPik)}</td>
+      <td>${fmtMoney(r.cumPikAccrued)}</td>
+      <td>${r.pikPaydown ? fmtMoney(r.pikPaydown) : '—'}</td>
+      <td>${r.amortDaily ? fmtMoney(r.amortDaily) : '—'}</td>
+      <td>${r.cumAmort ? fmtMoney(r.cumAmort) : '—'}</td>
+      <td>${fmtMoney(r.carryingValue)}</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<table>
+    <thead><tr>${headers.map((h,idx)=>`<th class="${idx===0?'left':''}">${h}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+  byId('grid-count').textContent = `${state.schedule.length} rows`;
+}
+
+/* ---------- KPIs + per-period roll-up ---------- */
+function renderKPIs(){
+  const s = state.summary;
+  const kpis = [
+    { label:'Accrued Interest',  value: fmtMoney(s?.totalCashAccrual),  sub:`${s?.daysCount||0} days · ${fmtDate(s?.periodStart)} → ${fmtDate(s?.periodEnd)}` },
+    { label:'Accrued PIK',       value: fmtMoney(s?.totalPikAccrual),   sub:`Capitalized: ${fmtMoney(s?.totalCapitalized)}` },
+    { label:'Closing Balance',   value: fmtMoney(s?.closingBalance),    sub:`Opening: ${fmtMoney(s?.openingBalance)}` },
+    { label:'Carrying Value',    value: fmtMoney(s?.closingCarrying),   sub:`Amortization Δ: ${fmtMoney(s?.totalAmort)}` }
+  ];
+  byId('kpi-row').innerHTML = kpis.map(k =>
+    `<div class="kpi"><div class="label">${k.label}</div><div class="value">${k.value}</div><div class="sub">${k.sub}</div></div>`
+  ).join('');
+
+  // Per-month roll-up
+  const months = {};
+  state.schedule.filter(r => r.date >= state.begin && r.date <= state.end).forEach(r => {
+    const k = r.date.slice(0,7);
+    if(!months[k]) months[k] = { month:k, cash:0, pik:0, cap:0, amort:0, close:0, lastDate:r.date };
+    const m = months[k];
+    m.cash += r.dailyCash; m.pik += r.dailyPik; m.cap += r.capitalized;
+    m.amort += r.amortDaily; m.close = r.balance; m.lastDate = r.date;
+  });
+  const rollRows = Object.values(months).map(m => `<tr>
+    <td class="left">${m.month}</td>
+    <td>${fmtMoney(m.cash)}</td>
+    <td>${fmtMoney(m.pik)}</td>
+    <td>${fmtMoney(m.cap)}</td>
+    <td>${fmtMoney(m.amort)}</td>
+    <td>${fmtMoney(m.close)}</td>
+  </tr>`).join('');
+  byId('rollup-table').innerHTML = `
+    <div class="grid-scroll">
+      <table>
+        <thead><tr>
+          <th class="left">Month</th><th>Cash Accrual</th><th>PIK Accrual</th><th>Capitalized</th><th>Amortization</th><th>Closing Balance</th>
+        </tr></thead>
+        <tbody>${rollRows || `<tr><td colspan="6" class="p-4 italic text-gray-500">No data in window</td></tr>`}</tbody>
+      </table>
+    </div>`;
+}
+
+/* ---------- Charts ---------- */
+function drawCharts(){
+  const s = state.summary;
+  if(!s || !s.rows.length) return;
+  const labels = s.rows.map(r=> fmtDate(r.date));
+  const cash = s.rows.map(r=>r.dailyCash);
+  const pik  = s.rows.map(r=>r.dailyPik);
+  const bal  = s.rows.map(r=>r.balance);
+  const cv   = s.rows.map(r=>r.carryingValue);
+
+  const accrualCtx = document.getElementById('chart-accrual')?.getContext('2d');
+  if(accrualCtx){
+    state.charts.accrual?.destroy();
+    state.charts.accrual = new Chart(accrualCtx, {
+      type: 'bar',
+      data: { labels, datasets: [
+        { label:'Daily Cash Accrual', data: cash, backgroundColor:'rgba(41,64,245,.75)' },
+        { label:'Daily PIK Accrual',  data: pik,  backgroundColor:'rgba(255,165,0,.75)' }
+      ]},
+      options: { responsive:true, plugins:{ legend:{ position:'bottom' } }, scales:{ x:{ ticks:{ maxTicksLimit:10 } } } }
+    });
+  }
+  const balCtx = document.getElementById('chart-balance')?.getContext('2d');
+  if(balCtx){
+    state.charts.balance?.destroy();
+    state.charts.balance = new Chart(balCtx, {
+      type: 'line',
+      data: { labels, datasets: [
+        { label:'Loan Balance',   data: bal, borderColor:'#2940f5', backgroundColor:'rgba(41,64,245,.08)', tension:0.25, fill:true },
+        { label:'Carrying Value', data: cv,  borderColor:'#0f6b3a', backgroundColor:'rgba(15,107,58,.06)',  tension:0.25, fill:false, borderDash:[4,4] }
+      ]},
+      options: { responsive:true, plugins:{ legend:{ position:'bottom' } }, scales:{ x:{ ticks:{ maxTicksLimit:10 } } } }
+    });
+  }
+}
+
+/* ---------- DIU grid ---------- */
+function renderDIU(){
+  const entries = state.diu;
+  const headers = ['LE','LEID','Batch','JE','Tx','GL Date','Effective Date','Deal','Position','Security','Transaction Type','Account','Alloc Rule','Batch Type','Comments','Amount LE','FX','Amount Local','Is Debit'];
+  const rows = entries.map(e => `
+    <tr>
+      <td class="left">${e.legalEntity}</td>
+      <td>${e.leid}</td>
+      <td>${e.batchId}</td>
+      <td>${e.jeIndex}</td>
+      <td>${e.txIndex}</td>
+      <td class="left">${fmtDate(e.glDate)}</td>
+      <td class="left">${fmtDate(e.effectiveDate)}</td>
+      <td class="left">${e.deal}</td>
+      <td class="left">${e.position}</td>
+      <td class="left">${e.incomeSecurity}</td>
+      <td class="left">${e.transactionType}</td>
+      <td>${e.account}</td>
+      <td class="left">${e.allocationRule}</td>
+      <td class="left">${e.batchType}</td>
+      <td class="left">${e.transactionComments}</td>
+      <td>${fmtMoney(e.amountLE)}</td>
+      <td>${fmtNum(e.fx,2)}</td>
+      <td>${fmtMoney(e.amountLocal)}</td>
+      <td>${e.isDebit ? '<span class="mat-chip amber">DR</span>' : '<span class="mat-chip green">CR</span>'}</td>
+    </tr>`).join('');
+  byId('diu-grid').innerHTML = `<table><thead><tr>${headers.map((h,idx)=>`<th class="${idx<5?'':'left'}">${h}</th>`).join('')}</tr></thead><tbody>${rows || '<tr><td colspan="19" class="p-4 italic text-gray-500 left">No DIU entries for the current window.</td></tr>'}</tbody></table>`;
+}
+
+/* ---------- Chips / breadcrumb ---------- */
+function renderBreadcrumb(){
+  const i = currentInstrument();
+  byId('bc-le').textContent = i.legalEntity;
+  byId('bc-deal').textContent = i.deal;
+  byId('bc-position').textContent = i.position;
+  byId('bc-security').textContent = i.incomeSecurity;
+  const method = METHOD_CATALOG.find(m=>m.id===(i.amortization?.method||'none'));
+  const chip = byId('bc-method-chip');
+  chip.className = 'mat-chip ' + (i.amortization?.method && i.amortization.method!=='none' ? 'amber' : '');
+  chip.textContent = method?.title || 'Simple Daily Accrual';
+  const pikChip = byId('bc-pik-chip');
+  pikChip.className = 'mat-chip ' + (i.pik?.enabled ? 'green' : 'gray');
+  pikChip.textContent = i.pik?.enabled ? `PIK ${fmtPct(i.pik.rate,2)} · ${i.pik.capitalizationFrequency}` : 'PIK Disabled';
+  const amortChip = byId('bc-amort-chip');
+  if(i.nonUseFee?.enabled){
+    amortChip.className = 'mat-chip amber';
+    amortChip.textContent = `Non-use ${fmtPct(i.nonUseFee.rate,2)}`;
+  } else {
+    amortChip.className = 'mat-chip gray';
+    amortChip.textContent = `Basis ${i.dayBasis}`;
+  }
+}
+
+/* ---------- Master render ---------- */
+function render(){
+  writeFormToInstrument();
+  const i = currentInstrument();
+  state.schedule = buildSchedule(i);
+  state.summary  = summarize(state.schedule, state.begin, state.end);
+  state.diu      = generateDIU(i, state.summary);
+  renderBreadcrumb();
+  renderScheduleGrid();
+  renderKPIs();
+  if(state.activeTab==='summary') drawCharts();
+  renderDIU();
+  renderPresets();
+  flashStatus();
+}
+function flashStatus(){
+  const el = byId('calc-status');
+  el.className = 'mat-chip amber';
+  el.innerHTML = '<span class="dot" style="background:#8a5300"></span>Recalculating…';
+  requestAnimationFrame(()=>{
+    setTimeout(()=>{
+      el.className = 'mat-chip green';
+      el.innerHTML = '<span class="dot" style="background:#0f6b3a"></span>Calculations in sync';
+    }, 120);
+  });
+}
+
+/* ---------- CSV export ---------- */
+function toCSV(arr, headers){
+  const esc = v => {
+    if(v==null) return '';
+    const s = String(v).replace(/"/g,'""');
+    return /[",\n]/.test(s) ? `"${s}"` : s;
+  };
+  const rows = [headers.join(',')].concat(arr.map(r => headers.map(h=>esc(r[h])).join(',')));
+  return rows.join('\n');
+}
+function downloadCSV(filename, text){
+  const blob = new Blob([text], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ---------- Small utils ---------- */
+function byId(id){ return document.getElementById(id); }
+function num(id){ return parseFloat(byId(id).value) || 0; }
+function setVal(id, v){ const el=byId(id); if(el==null) return; el.value = v==null?'':v; }
+function toast(msg){
+  const t=byId('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+/* ---------- Wiring ---------- */
+function wire(){
+  // Tab buttons
+  document.querySelectorAll('.tab-btn').forEach(b => b.onclick = ()=> setTab(b.dataset.tab));
+  // Picker cascading
+  ['sel-le','sel-deal','sel-position'].forEach(id => byId(id).onchange = ()=>{ repopulateDown(id.slice(4)); onPickerChange(); });
+  byId('sel-security').onchange = onPickerChange;
+  // Date format
+  document.querySelectorAll('[data-date-fmt]').forEach(b => b.onclick = ()=>{ state.dateFormat = b.dataset.dateFmt; render(); });
+  // Form listeners (re-render on change)
+  ['f-face','f-price','f-commit','f-settle','f-maturity','f-repay','f-accExclusive','f-payInclusive','f-prevDay',
+   'f-couponType','f-coupon','f-float','f-spread','f-basis','f-accrualFreq',
+   'f-pikEnabled','f-pikRate','f-capFreq','f-floor','f-cap','f-nonUseEnabled','f-nonUseRate',
+   'in-begin','in-end','in-last']
+    .forEach(id => { const el = byId(id); if(!el) return;
+      const ev = (el.type==='checkbox' || el.tagName==='SELECT') ? 'change' : 'input';
+      el.addEventListener(ev, render);
+    });
+  // Recalc and exports
+  byId('btn-recalc').onclick = ()=> { render(); toast('Recalculated ✓'); };
+  byId('btn-add-event').onclick = ()=>{
+    const i = currentInstrument();
+    i.principalSchedule = i.principalSchedule || [];
+    i.principalSchedule.push({ date: state.begin, type:'draw', amount: 0 });
+    render();
+    toast('Event added');
+  };
+  byId('btn-schedule-csv').onclick = ()=>{
+    const hdrs = ['date','balance','draw','paydown','couponRate','floatingRate','currentRate','dailyCash','cumInterestAccrued','capitalized','pikRate','dailyPik','cumPikAccrued','amortDaily','cumAmort','carryingValue','nonUseFee'];
+    downloadCSV('income-schedule.csv', toCSV(state.schedule, hdrs));
+    toast('Schedule downloaded ✓');
+  };
+  byId('btn-diu-csv').onclick = ()=>{
+    const hdrs = ['legalEntity','leid','batchId','jeIndex','txIndex','glDate','effectiveDate','deal','position','incomeSecurity','transactionType','account','allocationRule','batchType','batchComments','transactionComments','originalAmount','amountLE','fx','amountLocal','isDebit','leDomain'];
+    downloadCSV('diu-export.csv', toCSV(state.diu, hdrs));
+    toast('DIU exported ✓');
+  };
+  byId('opt-in-window')?.addEventListener('change', renderScheduleGrid);
+  byId('opt-highlight-events')?.addEventListener('change', renderScheduleGrid);
+}
+
+/* ---------- Boot ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  populatePickers();
+  renderPresets();
+  loadFormFromInstrument();
+  wire();
+  render();
+});
+</script>
+</body>
+</html>
