@@ -245,6 +245,8 @@
       </nav>
       <div class="ml-auto flex items-center gap-2">
         <span id="calc-status" class="mat-chip green"><span class="dot" style="background:#0f6b3a"></span>Calculations in sync</span>
+        <button id="btn-import-json" class="mat-btn outline" title="Load an input payload from JSON"><span class="material-icons-outlined text-[18px]">upload</span>Import JSON</button>
+        <button id="btn-export-json" class="mat-btn outline" title="Download computed results as JSON"><span class="material-icons-outlined text-[18px]">download</span>Export JSON</button>
         <button id="btn-recalc" class="mat-btn primary"><span class="material-icons-outlined text-[18px]">refresh</span>Recalculate</button>
       </div>
     </div>
@@ -502,7 +504,47 @@
   </div>
 
   <div id="toast"></div>
+
+  <!-- ===== JSON Import Modal ===== -->
+  <div id="json-modal" class="json-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="json-modal-title">
+    <div class="json-modal-backdrop" data-close="1"></div>
+    <div class="json-modal-panel">
+      <div class="json-modal-header">
+        <div>
+          <div id="json-modal-title" class="font-semibold text-[15px]">Import JSON Payload</div>
+          <div class="text-[11px] text-gray-500">Paste an input payload ({period, instrument}) and click Apply to load it into the calculator.</div>
+        </div>
+        <button class="mat-btn outline !py-1 !px-2" data-close="1" aria-label="Close"><span class="material-icons-outlined text-[18px]">close</span></button>
+      </div>
+      <div class="json-modal-body">
+        <div class="flex items-center gap-2 mb-2">
+          <button id="btn-json-sample" class="mat-btn outline !py-1 !px-2 text-xs">Load sample</button>
+          <button id="btn-json-current" class="mat-btn outline !py-1 !px-2 text-xs">Fill from current instrument</button>
+          <span id="json-modal-status" class="mat-chip gray">empty</span>
+          <span class="ml-auto text-[11px] text-gray-500">Schema: <code class="text-gray-700">{ period, instrument }</code></span>
+        </div>
+        <textarea id="json-input" spellcheck="false" placeholder='{ "period": { ... }, "instrument": { ... } }'></textarea>
+        <div id="json-modal-errors" class="json-modal-errors" style="display:none;"></div>
+      </div>
+      <div class="json-modal-footer">
+        <button class="mat-btn outline" data-close="1">Cancel</button>
+        <button id="btn-json-apply" class="mat-btn primary"><span class="material-icons-outlined text-[18px]">check</span>Apply</button>
+      </div>
+    </div>
+  </div>
 </div>
+
+<style>
+  .json-modal { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; }
+  .json-modal-backdrop { position:absolute; inset:0; background:rgba(15,20,40,.38); }
+  .json-modal-panel { position:relative; width:min(840px, 95vw); max-height:86vh; background:#fff; border-radius:14px; box-shadow:0 20px 60px rgba(15,20,40,.28); display:flex; flex-direction:column; overflow:hidden; }
+  .json-modal-header { padding:16px 20px; border-bottom:1px solid #e1e4ec; display:flex; align-items:center; justify-content:space-between; }
+  .json-modal-body { padding:14px 20px; flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+  .json-modal-body textarea { flex:1; min-height:280px; width:100%; border:1px solid #d6d9e2; border-radius:8px; padding:12px; font-family:'Roboto Mono',ui-monospace,monospace; font-size:12px; line-height:1.55; resize:vertical; outline:none; }
+  .json-modal-body textarea:focus { border-color:#3e5bff; box-shadow:0 0 0 3px rgba(62,91,255,.18); }
+  .json-modal-errors { margin-top:10px; padding:8px 12px; background:#fde8e8; color:#a31414; border:1px solid #f9c0c0; border-radius:8px; font-family:'Roboto Mono',monospace; font-size:11px; max-height:120px; overflow:auto; white-space:pre-wrap; }
+  .json-modal-footer { padding:12px 20px; border-top:1px solid #e1e4ec; display:flex; gap:8px; justify-content:flex-end; background:#f7f9fc; }
+</style>
 
 <!-- Chart.js via CDN for summary graphs -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -1665,6 +1707,266 @@ function wire(){
   };
   byId('opt-in-window')?.addEventListener('change', renderScheduleGrid);
   byId('opt-highlight-events')?.addEventListener('change', renderScheduleGrid);
+
+  /* ---------- JSON Import / Export ---------- */
+  byId('btn-import-json').onclick = openJsonModal;
+  byId('btn-export-json').onclick = exportJson;
+  document.querySelectorAll('#json-modal [data-close="1"]').forEach(el => el.onclick = closeJsonModal);
+  byId('btn-json-sample').onclick = ()=> loadSampleIntoModal();
+  byId('btn-json-current').onclick = ()=> loadCurrentIntoModal();
+  byId('btn-json-apply').onclick = applyJsonFromModal;
+  byId('json-input').addEventListener('input', ()=>{
+    const t = byId('json-input').value.trim();
+    const st = byId('json-modal-status');
+    const er = byId('json-modal-errors');
+    if(!t){ st.className = 'mat-chip gray'; st.textContent = 'empty'; er.style.display='none'; return; }
+    try { JSON.parse(t); st.className='mat-chip green'; st.textContent='valid JSON'; er.style.display='none'; }
+    catch(e){ st.className='mat-chip red'; st.textContent='invalid JSON'; }
+  });
+  document.addEventListener('keydown', (e)=>{
+    if(e.key==='Escape' && byId('json-modal').style.display!=='none') closeJsonModal();
+  });
+}
+
+/* ---------- JSON Import Modal ---------- */
+function openJsonModal(){
+  const modal = byId('json-modal');
+  modal.style.display = 'flex';
+  // Pre-fill with the current instrument + period if empty
+  if(!byId('json-input').value.trim()) loadCurrentIntoModal();
+  setTimeout(()=> byId('json-input').focus(), 50);
+}
+function closeJsonModal(){
+  byId('json-modal').style.display = 'none';
+  byId('json-modal-errors').style.display = 'none';
+}
+function loadSampleIntoModal(){
+  const sample = {
+    period: { begin: '2020-01-01', end: '2020-03-05', last: '2019-12-31' },
+    instrument: {
+      id: 'alliance',
+      legalEntity: 'FIS Capital Partners I', leid: 7,
+      deal: 'Alliance Manufacturing',
+      position: 'Alliance Manufacturing (Convertible Note)',
+      incomeSecurity: 'Alliance Manufacturing (Convertible Note)',
+      faceValue: 25000000, purchasePrice: 25000000, commitment: 25000000,
+      settlementDate: '2019-01-15', maturityDate: '2020-03-05',
+      dayBasis: 'ACT/360', accrualFreq: 'daily',
+      accrualDayCountExclusive: false, paydateDayCountInclusive: true,
+      coupon: { type:'Fixed', fixedRate: 0.12, floatingRate: 0, spread: 0, floor: null, cap: null },
+      pik: { enabled: true, rate: 0.14, capitalizationFrequency: 'Monthly' },
+      nonUseFee: { enabled: false, rate: 0 },
+      principalRepayment: 'AtMaturity',
+      principalSchedule: [ { date:'2019-01-15', type:'initial', amount:25000000 } ],
+      amortization: { method: 'none', spread: 0, yieldOverride: null },
+      amortStart: null, amortEnd: null, holidayCalendar: 'none', skipHolidays: false,
+      type: 'pikNoteFixed'
+    }
+  };
+  byId('json-input').value = JSON.stringify(sample, null, 2);
+  byId('json-modal-status').className = 'mat-chip green';
+  byId('json-modal-status').textContent = 'sample loaded';
+  byId('json-modal-errors').style.display = 'none';
+}
+function loadCurrentIntoModal(){
+  writeFormToInstrument();
+  const i = currentInstrument();
+  const payload = {
+    period: { begin: state.begin, end: state.end, last: state.last },
+    instrument: {
+      id: i.id,
+      legalEntity: i.legalEntity, leid: i.leid,
+      deal: i.deal, position: i.position, incomeSecurity: i.incomeSecurity,
+      faceValue: i.faceValue, purchasePrice: i.purchasePrice, commitment: i.commitment,
+      settlementDate: i.settlementDate, maturityDate: i.maturityDate,
+      dayBasis: i.dayBasis, accrualFreq: i.accrualFreq || 'daily',
+      accrualDayCountExclusive: !!i.accrualDayCountExclusive,
+      paydateDayCountInclusive: !!i.paydateDayCountInclusive,
+      interestPreviousDay: !!i.interestPreviousDay,
+      coupon: i.coupon || { type:'Fixed', fixedRate:0, floatingRate:0, spread:0, floor:null, cap:null },
+      pik: i.pik || { enabled:false, rate:0, capitalizationFrequency:'Monthly' },
+      nonUseFee: i.nonUseFee || { enabled:false, rate:0 },
+      principalRepayment: i.principalRepayment || 'AtMaturity',
+      principalSchedule: i.principalSchedule || [],
+      amortization: i.amortization || { method:'none' },
+      amortStart: i.amortStart || null,
+      amortEnd:   i.amortEnd   || null,
+      holidayCalendar: i.holidayCalendar || 'none',
+      skipHolidays: !!i.skipHolidays,
+      type: i.type || 'simpleDaily',
+      preset: i.preset || null
+    }
+  };
+  byId('json-input').value = JSON.stringify(payload, null, 2);
+  byId('json-modal-status').className = 'mat-chip green';
+  byId('json-modal-status').textContent = 'current loaded';
+  byId('json-modal-errors').style.display = 'none';
+}
+
+function validatePayload(p){
+  const errs = [];
+  if(!p || typeof p!=='object') return ['Payload must be a JSON object'];
+  if(!p.period)       errs.push('Missing "period"');
+  else {
+    if(!p.period.begin) errs.push('Missing period.begin');
+    if(!p.period.end)   errs.push('Missing period.end');
+  }
+  if(!p.instrument)   errs.push('Missing "instrument"');
+  else {
+    const i = p.instrument;
+    ['id','settlementDate','maturityDate','dayBasis','faceValue','purchasePrice'].forEach(k=>{
+      if(i[k]==null) errs.push(`Missing instrument.${k}`);
+    });
+    if(!i.coupon)       errs.push('Missing instrument.coupon');
+    if(!i.amortization) errs.push('Missing instrument.amortization');
+    if(!Array.isArray(i.principalSchedule)) errs.push('instrument.principalSchedule must be an array');
+  }
+  return errs;
+}
+
+function applyJsonFromModal(){
+  const raw = byId('json-input').value.trim();
+  const errBox = byId('json-modal-errors');
+  let payload;
+  try { payload = JSON.parse(raw); }
+  catch(e){
+    errBox.style.display = 'block';
+    errBox.textContent = 'Parse error: ' + e.message;
+    return;
+  }
+  const errs = validatePayload(payload);
+  if(errs.length){
+    errBox.style.display = 'block';
+    errBox.textContent = errs.join('\n');
+    return;
+  }
+  // Build a fresh instrument (uniquify the id so we don't clobber the presets).
+  const base = payload.instrument;
+  let newId = base.id || 'imported';
+  if(INSTRUMENTS.some(x => x.id === newId)) newId = newId + '-' + Date.now().toString(36);
+  const fresh = Object.assign({}, base, { id: newId,
+    preset: base.preset || `${base.deal || 'Imported'} · ${base.incomeSecurity || base.id || 'Instrument'}`
+  });
+  // Ensure required nested objects exist
+  fresh.coupon       = fresh.coupon       || { type:'Fixed', fixedRate:0 };
+  fresh.pik          = fresh.pik          || { enabled:false, rate:0 };
+  fresh.nonUseFee    = fresh.nonUseFee    || { enabled:false, rate:0 };
+  fresh.amortization = fresh.amortization || { method:'none' };
+  fresh.principalSchedule = fresh.principalSchedule || [];
+
+  INSTRUMENTS.push(fresh);
+  state.instrumentId = newId;
+  state.begin = payload.period.begin;
+  state.end   = payload.period.end;
+  state.last  = payload.period.last || toISO(addDays(parseISO(payload.period.begin), -1));
+
+  populatePickers();
+  renderPresets();
+  loadFormFromInstrument();
+  render();
+  closeJsonModal();
+  toast('JSON payload applied ✓');
+}
+
+/* ---------- JSON Export ---------- */
+function roundFloat(v){
+  if(typeof v === 'number' && Number.isFinite(v)) return Math.round(v * 1e6) / 1e6;
+  return v;
+}
+function deepRound(obj){
+  if(Array.isArray(obj)) return obj.map(deepRound);
+  if(obj && typeof obj === 'object'){
+    const o = {};
+    for(const k of Object.keys(obj)) o[k] = deepRound(obj[k]);
+    return o;
+  }
+  return roundFloat(obj);
+}
+function buildOutputPayload(){
+  writeFormToInstrument();
+  render();                        // ensure state.schedule / state.summary / state.diu are fresh
+  const i = currentInstrument();
+  const sched = state.schedule || [];
+  const summary = state.summary || summarize(sched, state.begin, state.end);
+  const periodRows = sched.filter(r => r.date >= state.begin && r.date <= state.end);
+  const { rows, ...summaryOut } = summary;
+  return {
+    ok: true,
+    meta: {
+      generatedAt: new Date().toISOString(),
+      engineVersion: '1.0.0',
+      instrumentId: i.id,
+      instrumentType: i.type || null,
+      period: { begin: state.begin, end: state.end, last: state.last },
+      amortizationMethod: (i.amortization || {}).method || 'none',
+      dayBasis: i.dayBasis
+    },
+    input: {
+      period: { begin: state.begin, end: state.end, last: state.last },
+      instrument: {
+        id: i.id, legalEntity: i.legalEntity, leid: i.leid,
+        deal: i.deal, position: i.position, incomeSecurity: i.incomeSecurity,
+        faceValue: i.faceValue, purchasePrice: i.purchasePrice, commitment: i.commitment,
+        settlementDate: i.settlementDate, maturityDate: i.maturityDate,
+        dayBasis: i.dayBasis, accrualFreq: i.accrualFreq || 'daily',
+        accrualDayCountExclusive: !!i.accrualDayCountExclusive,
+        paydateDayCountInclusive: !!i.paydateDayCountInclusive,
+        coupon: i.coupon, pik: i.pik, nonUseFee: i.nonUseFee,
+        principalRepayment: i.principalRepayment,
+        principalSchedule: i.principalSchedule,
+        amortization: i.amortization,
+        amortStart: i.amortStart || null, amortEnd: i.amortEnd || null,
+        holidayCalendar: i.holidayCalendar || 'none',
+        skipHolidays: !!i.skipHolidays,
+        type: i.type || null
+      }
+    },
+    summary: {
+      periodStart:      summaryOut.periodStart      ?? periodRows[0]?.date ?? null,
+      periodEnd:        summaryOut.periodEnd        ?? periodRows[periodRows.length-1]?.date ?? null,
+      daysCount:        periodRows.length,
+      openingBalance:   periodRows[0]?.balance ?? 0,
+      closingBalance:   periodRows[periodRows.length-1]?.balance ?? 0,
+      closingCarrying:  periodRows[periodRows.length-1]?.carryingValue ?? 0,
+      totalCashAccrual: summaryOut.totalCashAccrual ?? 0,
+      totalPikAccrual:  summaryOut.totalPikAccrual  ?? 0,
+      totalCapitalized: summaryOut.totalCapitalized ?? 0,
+      totalAmort:       summaryOut.totalAmort       ?? 0,
+      totalNonUseFee:   summaryOut.totalNonUseFee   ?? 0
+    },
+    periodRows: periodRows.map(r => ({
+      date: r.date, balance: r.balance, drawnBalance: r.drawnBalance, carryingValue: r.carryingValue,
+      draw: r.draw, paydown: r.paydown, couponRate: r.couponRate, floatingRate: r.floatingRate,
+      dailyCash: r.dailyCash, cumInterestAccrued: r.cumInterestAccrued,
+      capitalized: r.capitalized, pikRate: r.pikRate, dailyPik: r.dailyPik, cumPikAccrued: r.cumPikAccrued,
+      amortDaily: r.amortDaily, cumAmort: r.cumAmort,
+      nonUseFee: r.nonUseFee, cumNonUseFee: r.cumNonUseFee,
+      hasEvent: r.hasEvent
+    })),
+    schedule: sched.map(r => ({
+      date: r.date, balance: r.balance, drawnBalance: r.drawnBalance, carryingValue: r.carryingValue,
+      draw: r.draw, paydown: r.paydown, couponRate: r.couponRate, floatingRate: r.floatingRate,
+      dailyCash: r.dailyCash, cumInterestAccrued: r.cumInterestAccrued,
+      capitalized: r.capitalized, pikRate: r.pikRate, dailyPik: r.dailyPik, cumPikAccrued: r.cumPikAccrued,
+      amortDaily: r.amortDaily, cumAmort: r.cumAmort,
+      nonUseFee: r.nonUseFee, cumNonUseFee: r.cumNonUseFee,
+      hasEvent: r.hasEvent
+    })),
+    journalEntries: state.diu || []
+  };
+}
+function exportJson(){
+  const out = deepRound(buildOutputPayload());
+  const text = JSON.stringify(out, null, 2);
+  const blob = new Blob([text], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = (new Date()).toISOString().slice(0,10);
+  a.href = url;
+  a.download = `income-calculator-output-${out.meta.instrumentId}-${stamp}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Output JSON downloaded ✓');
 }
 
 /* ---------- Boot ---------- */

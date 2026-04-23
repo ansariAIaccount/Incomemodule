@@ -56,7 +56,7 @@ The payload has two top-level objects: **`period`** (the accrual window to compu
 | `accrualDayCountExclusive`  | boolean | Yes      | If `true`, the accrual start day is *excluded* (t+1 convention). If `false`, start day is included. |
 | `paydateDayCountInclusive`  | boolean | Yes      | If `true`, the pay/end date is included in accrual. If `false`, it is excluded. |
 | `interestPreviousDay`       | boolean | No       | If `true`, applies rate resets one day prior (for some floating-rate conventions). Default `false`. |
-| `holidayCalendar`           | enum    | No       | `"none"`, `"US"`, `"UK"`, or `"TARGET"`. Identifies which weekday holidays to recognize. |
+| `holidayCalendar`           | enum    | No       | `"none"`, `"usFederal"`, `"ukBank"`, or `"target"`. Identifies which weekday holidays to recognize. |
 | `skipHolidays`              | boolean | No       | When `true` and `holidayCalendar` ≠ `"none"`, zero-accrual days are emitted for holidays. Default `false`. |
 
 ### 2.5 Coupon
