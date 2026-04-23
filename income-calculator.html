@@ -467,7 +467,7 @@
       <!-- ============ TAB: SUMMARY ============ -->
       <section class="tab-panel hidden" data-tab="summary">
         <h3 class="text-base font-semibold flex items-center gap-2 mb-4"><span class="material-icons-outlined text-brand-600">insights</span>Accrual Period Amounts (N-8)</h3>
-        <div id="kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+        <div id="kpi-row" class="grid grid-cols-2 md:grid-cols-5 gap-3"></div>
         <div class="grid grid-cols-12 gap-5 mt-5">
           <div class="section-card col-span-12 lg:col-span-6">
             <header><span class="material-icons-outlined">stacked_bar_chart</span><h3>Daily Accrual — Cash vs PIK</h3></header>
@@ -480,6 +480,10 @@
           <div class="section-card col-span-12">
             <header><span class="material-icons-outlined">fact_check</span><h3>Per-Period Roll-up</h3></header>
             <div class="body" id="rollup-table"></div>
+          </div>
+          <div class="section-card col-span-12">
+            <header><span class="material-icons-outlined">percent</span><h3>Effective Interest Rate &mdash; Yield Analytics</h3></header>
+            <div class="body" id="eir-panel"></div>
           </div>
         </div>
       </section>
@@ -648,6 +652,96 @@ function solveYield(targetNPV, cashflows){
     if(fl*fm<0){ hi=mid; fh=fm; } else { lo=mid; fl=fm; }
   }
   return (lo+hi)/2;
+}
+
+/* ---------- Effective Interest Rate (EIR) solver ----------
+   Returns a self-contained yield report for the instrument, computed
+   independently of the amortization method selected. Fields:
+     method          - the amort method actually driving book accretion
+     effectiveYield  - the y used by the effective-interest family (or null)
+     impliedYTM      - yield solved from (purchasePrice, projected coupon CFs,
+                       face at maturity) — always computed for Fixed coupons
+                       when PP≠Face; for Floating, uses current (index+spread).
+     cashYield       - annual coupon / purchasePrice (current yield).
+     totalReturn     - annualized (faceValue + totalCoupon - purchasePrice) / PP
+     source          - 'price' | 'formula' | 'override' | 'implied' | 'par'
+     note            - human-readable explanation.
+   All yields are decimals (0.12 = 12%).
+-------------------------------------------------------------- */
+function computeEIR(instr){
+  if(!instr) return null;
+  const settle   = parseISO(instr.settlementDate);
+  const maturity = parseISO(instr.maturityDate);
+  if(!settle || !maturity || maturity <= settle) return null;
+
+  const basis = instr.dayBasis || 'ACT/360';
+  const daysPerYear = (basis==='ACT/365' || basis==='ACT/ACT') ? 365 : 360;
+  const totalDays = Math.round((maturity-settle)/ONE_DAY);
+  const yearsToMat = totalDays / daysPerYear;
+
+  const face = instr.faceValue || 0;
+  const price = instr.purchasePrice || face;
+  const amort = instr.amortization || { method:'none' };
+
+  // Current coupon rate (Fixed or Floating w/ cap/floor)
+  const c = instr.coupon || { type:'Fixed', fixedRate:0 };
+  let couponRate = 0;
+  if(c.type === 'Fixed') couponRate = c.fixedRate || 0;
+  else {
+    let raw = (c.floatingRate || 0) + (c.spread || 0);
+    if(c.floor != null) raw = Math.max(raw, c.floor);
+    if(c.cap   != null) raw = Math.min(raw, c.cap);
+    couponRate = raw;
+  }
+  const annualCoupon = face * couponRate;
+
+  // --- Implied YTM: annual coupons + balloon at maturity ---
+  let impliedYTM = null;
+  if(price > 0 && face > 0 && yearsToMat > 0){
+    const cfs = [];
+    const fullYears = Math.floor(yearsToMat);
+    for(let y=1; y<=fullYears; y++) cfs.push({ t:y, amount: annualCoupon });
+    const stub = yearsToMat - fullYears;
+    cfs.push({ t: yearsToMat, amount: face + (stub>0 ? annualCoupon*stub : 0) });
+    impliedYTM = solveYield(price, cfs);
+  }
+
+  // --- Effective yield actually driving amortization ---
+  let effectiveYield = null, source = 'par', note = '';
+  if(amort.method === 'effectiveInterestPrice'){
+    effectiveYield = impliedYTM;
+    source = 'price';
+    note = 'Yield solved from purchase price vs. projected coupon cashflows.';
+  } else if(amort.method === 'effectiveInterestFormula'){
+    effectiveYield = couponRate + (amort.spread ?? 0);
+    source = 'formula';
+    note = `Yield = coupon (${(couponRate*100).toFixed(4)}%) + user spread (${((amort.spread||0)*100).toFixed(4)}%).`;
+  } else if(amort.method === 'effectiveInterestIRR'){
+    effectiveYield = amort.yieldOverride ?? couponRate;
+    source = 'override';
+    note = 'Yield override supplied by user.';
+  } else if(amort.method === 'straightLine'){
+    source = 'straightLine';
+    note = 'Straight-line amortization — no effective yield; showing implied YTM for reference.';
+  } else {
+    source = price === face ? 'par' : 'implied';
+    note = price === face
+      ? 'Bond purchased at par — no amortization; cash yield equals coupon.'
+      : 'No amortization method set — showing implied YTM for reference only.';
+  }
+
+  // --- Other useful yield metrics ---
+  const cashYield   = price > 0 ? (annualCoupon / price) : null;
+  const totalCoupon = annualCoupon * yearsToMat;
+  const totalReturn = (price > 0 && yearsToMat > 0)
+    ? ((face + totalCoupon - price) / price) / yearsToMat : null;
+
+  return {
+    method: amort.method || 'none',
+    couponRate, annualCoupon,
+    effectiveYield, impliedYTM, cashYield, totalReturn,
+    yearsToMat, dayBasis: basis, source, note
+  };
 }
 
 /* ---------- Core schedule builder ----------
@@ -852,6 +946,9 @@ function buildSchedule(instr){
       hasEvent: evs.length > 0 || capitalized > 0
     });
   }
+  // Stash the engine's applied yield so computeEIR can align its effectiveYield
+  // with the value the scheduler actually used.
+  rows.effectiveYield = effectiveYield;
   return rows;
 }
 
@@ -1159,6 +1256,7 @@ const state = {
   schedule: [],
   summary: null,
   diu: [],
+  eir: null,     // { method, effectiveYield, impliedYTM, cashYield, totalReturn, source, note }
   charts: { accrual:null, balance:null }
 };
 
@@ -1477,11 +1575,25 @@ function renderScheduleGrid(){
 /* ---------- KPIs + per-period roll-up ---------- */
 function renderKPIs(){
   const s = state.summary;
+  const e = state.eir || {};
+  const eirRate = e.effectiveYield ?? e.impliedYTM;
+  const eirLabel = ({
+    price:        'EIR · From Price',
+    formula:      'EIR · Coupon + Spread',
+    override:     'EIR · User Override',
+    straightLine: 'Implied YTM',
+    implied:      'Implied YTM',
+    par:          'Coupon (at par)'
+  })[e.source] || 'Effective Rate';
+  const eirSub = e.cashYield != null
+    ? `Cash yield ${fmtPct(e.cashYield,4)} · Coupon ${fmtPct(e.couponRate,4)}`
+    : (e.note || '—');
   const kpis = [
     { label:'Accrued Interest',  value: fmtMoney(s?.totalCashAccrual),  sub:`${s?.daysCount||0} days · ${fmtDate(s?.periodStart)} → ${fmtDate(s?.periodEnd)}` },
     { label:'Accrued PIK',       value: fmtMoney(s?.totalPikAccrual),   sub:`Capitalized: ${fmtMoney(s?.totalCapitalized)}` },
     { label:'Closing Balance',   value: fmtMoney(s?.closingBalance),    sub:`Opening: ${fmtMoney(s?.openingBalance)}` },
-    { label:'Carrying Value',    value: fmtMoney(s?.closingCarrying),   sub:`Amortization Δ: ${fmtMoney(s?.totalAmort)}` }
+    { label:'Carrying Value',    value: fmtMoney(s?.closingCarrying),   sub:`Amortization Δ: ${fmtMoney(s?.totalAmort)}` },
+    { label:eirLabel,            value: eirRate!=null ? fmtPct(eirRate,4) : '—', sub: eirSub }
   ];
   byId('kpi-row').innerHTML = kpis.map(k =>
     `<div class="kpi"><div class="label">${k.label}</div><div class="value">${k.value}</div><div class="sub">${k.sub}</div></div>`
@@ -1511,6 +1623,65 @@ function renderKPIs(){
           <th class="left">Month</th><th>Cash Accrual</th><th>PIK Accrual</th><th>Capitalized</th><th>Amortization</th><th>Closing Balance</th>
         </tr></thead>
         <tbody>${rollRows || `<tr><td colspan="6" class="p-4 italic text-gray-500">No data in window</td></tr>`}</tbody>
+      </table>
+    </div>`;
+  renderEIRPanel();
+}
+
+function renderEIRPanel(){
+  const host = byId('eir-panel');
+  if(!host) return;
+  const e = state.eir;
+  if(!e){ host.innerHTML = '<div class="italic text-gray-500 p-3">No instrument selected.</div>'; return; }
+  const methodLabel = ({
+    none:                      'None (par accrual)',
+    straightLine:              'Straight-line',
+    effectiveInterestPrice:    'Effective Interest · From Price',
+    effectiveInterestFormula:  'Effective Interest · Coupon + Spread',
+    effectiveInterestIRR:      'Effective Interest · IRR Override'
+  })[e.method] || e.method;
+  const sourceChip = ({
+    price:        ['amber','solved from price'],
+    formula:      ['amber','coupon + spread'],
+    override:     ['amber','user override'],
+    straightLine: ['gray','straight-line amort'],
+    implied:      ['gray','informational'],
+    par:          ['green','at par']
+  })[e.source] || ['gray', e.source];
+  const rows = [
+    { k:'Amortization method',   v: methodLabel,                                 hint: e.note },
+    { k:'Effective yield (driver)', v: e.effectiveYield!=null ? fmtPct(e.effectiveYield,6) : '—',
+      hint: 'The annual yield applied to carrying value for effective-interest amortization.' },
+    { k:'Implied YTM',           v: e.impliedYTM!=null ? fmtPct(e.impliedYTM,6) : '—',
+      hint: 'Yield solved from purchase price vs. projected coupon cashflows + face at maturity.' },
+    { k:'Cash (current) yield',  v: e.cashYield!=null ? fmtPct(e.cashYield,6) : '—',
+      hint: 'Annual coupon ÷ purchase price.' },
+    { k:'Coupon rate',           v: fmtPct(e.couponRate,6),
+      hint: (currentInstrument()?.coupon?.type === 'Floating')
+        ? 'Index + spread, clamped by cap/floor.' : 'Fixed coupon rate.' },
+    { k:'Annualized total return', v: e.totalReturn!=null ? fmtPct(e.totalReturn,6) : '—',
+      hint: '(Face + total coupons − price) ÷ price ÷ years to maturity.' },
+    { k:'Annual coupon $',       v: fmtMoney(e.annualCoupon),
+      hint: 'Face × coupon rate.' },
+    { k:'Years to maturity',     v: (e.yearsToMat||0).toFixed(4),
+      hint: `Day basis: ${e.dayBasis}` }
+  ];
+  host.innerHTML = `
+    <div class="flex items-center gap-2 mb-3">
+      <span class="mat-chip ${sourceChip[0]}">${sourceChip[1]}</span>
+      <span class="text-[12px] text-gray-500">${e.note || ''}</span>
+    </div>
+    <div class="grid-scroll">
+      <table>
+        <thead><tr><th class="left">Metric</th><th class="left">Value</th><th class="left">Notes</th></tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td class="left font-medium">${r.k}</td>
+              <td class="left" style="font-family:'Roboto Mono',monospace;">${r.v}</td>
+              <td class="left text-[12px] text-gray-500">${r.hint||''}</td>
+            </tr>`).join('')}
+        </tbody>
       </table>
     </div>`;
 }
@@ -1610,6 +1781,11 @@ function render(){
   const i = currentInstrument();
   state.schedule = buildSchedule(i);
   state.summary  = summarize(state.schedule, state.begin, state.end);
+  state.eir      = computeEIR(i);
+  // Align EIR's "effectiveYield" with the scheduler's refined value (price-solve pass).
+  if(state.eir && state.schedule.effectiveYield != null && state.eir.source === 'price'){
+    state.eir.effectiveYield = state.schedule.effectiveYield;
+  }
   state.diu      = generateDIU(i, state.summary);
   renderBreadcrumb();
   renderScheduleGrid();
@@ -1888,6 +2064,7 @@ function buildOutputPayload(){
   const i = currentInstrument();
   const sched = state.schedule || [];
   const summary = state.summary || summarize(sched, state.begin, state.end);
+  const eir = state.eir || computeEIR(i);
   const periodRows = sched.filter(r => r.date >= state.begin && r.date <= state.end);
   const { rows, ...summaryOut } = summary;
   return {
@@ -1899,8 +2076,22 @@ function buildOutputPayload(){
       instrumentType: i.type || null,
       period: { begin: state.begin, end: state.end, last: state.last },
       amortizationMethod: (i.amortization || {}).method || 'none',
-      dayBasis: i.dayBasis
+      dayBasis: i.dayBasis,
+      effectiveYield: eir ? eir.effectiveYield : null
     },
+    effectiveInterestRate: eir ? {
+      method: eir.method,
+      source: eir.source,
+      note: eir.note,
+      effectiveYield: eir.effectiveYield,
+      impliedYTM:     eir.impliedYTM,
+      cashYield:      eir.cashYield,
+      totalReturn:    eir.totalReturn,
+      couponRate:     eir.couponRate,
+      annualCoupon:   eir.annualCoupon,
+      yearsToMat:     eir.yearsToMat,
+      dayBasis:       eir.dayBasis
+    } : null,
     input: {
       period: { begin: state.begin, end: state.end, last: state.last },
       instrument: {

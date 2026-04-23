@@ -118,6 +118,78 @@
     return (lo + hi) / 2;
   }
 
+  /* ---------- Effective Interest Rate (EIR) ----------
+     Returns an always-computable yield report for the instrument.
+     See income-calculator.html::computeEIR for the canonical doc comment. */
+  function computeEIR(instr) {
+    if (!instr) return null;
+    const settle   = parseISO(instr.settlementDate);
+    const maturity = parseISO(instr.maturityDate);
+    if (!settle || !maturity || maturity <= settle) return null;
+    const basis = instr.dayBasis || 'ACT/360';
+    const daysPerYear = (basis === 'ACT/365' || basis === 'ACT/ACT') ? 365 : 360;
+    const totalDays  = Math.round((maturity - settle) / ONE_DAY);
+    const yearsToMat = totalDays / daysPerYear;
+    const face  = instr.faceValue || 0;
+    const price = instr.purchasePrice || face;
+    const amort = instr.amortization || { method: 'none' };
+    const c     = instr.coupon || { type: 'Fixed', fixedRate: 0 };
+    let couponRate = 0;
+    if (c.type === 'Fixed') couponRate = c.fixedRate || 0;
+    else {
+      let raw = (c.floatingRate || 0) + (c.spread || 0);
+      if (c.floor != null) raw = Math.max(raw, c.floor);
+      if (c.cap   != null) raw = Math.min(raw, c.cap);
+      couponRate = raw;
+    }
+    const annualCoupon = face * couponRate;
+
+    let impliedYTM = null;
+    if (price > 0 && face > 0 && yearsToMat > 0) {
+      const cfs = [];
+      const fullYears = Math.floor(yearsToMat);
+      for (let y = 1; y <= fullYears; y++) cfs.push({ t: y, amount: annualCoupon });
+      const stub = yearsToMat - fullYears;
+      cfs.push({ t: yearsToMat, amount: face + (stub > 0 ? annualCoupon * stub : 0) });
+      impliedYTM = solveYield(price, cfs);
+    }
+
+    let effectiveYield = null, source = 'par', note = '';
+    if (amort.method === 'effectiveInterestPrice') {
+      effectiveYield = impliedYTM;
+      source = 'price';
+      note = 'Yield solved from purchase price vs. projected coupon cashflows.';
+    } else if (amort.method === 'effectiveInterestFormula') {
+      effectiveYield = couponRate + (amort.spread != null ? amort.spread : 0);
+      source = 'formula';
+      note = 'Yield = coupon + user-supplied spread.';
+    } else if (amort.method === 'effectiveInterestIRR') {
+      effectiveYield = amort.yieldOverride != null ? amort.yieldOverride : couponRate;
+      source = 'override';
+      note = 'Yield override supplied by user.';
+    } else if (amort.method === 'straightLine') {
+      source = 'straightLine';
+      note = 'Straight-line amortization — no effective yield; implied YTM shown for reference.';
+    } else {
+      source = price === face ? 'par' : 'implied';
+      note = price === face
+        ? 'Bond purchased at par — no amortization.'
+        : 'No amortization method set — implied YTM shown for reference.';
+    }
+
+    const cashYield   = price > 0 ? (annualCoupon / price) : null;
+    const totalCoupon = annualCoupon * yearsToMat;
+    const totalReturn = (price > 0 && yearsToMat > 0)
+      ? ((face + totalCoupon - price) / price) / yearsToMat : null;
+
+    return {
+      method: amort.method || 'none',
+      couponRate, annualCoupon,
+      effectiveYield, impliedYTM, cashYield, totalReturn,
+      yearsToMat, dayBasis: basis, source, note
+    };
+  }
+
   /* ---------- Core schedule builder ---------- */
   function buildSchedule(instr) {
     if (!instr) return { rows: [], effectiveYield: null };
@@ -397,6 +469,11 @@
 
     const built   = buildSchedule(instrument);
     const summary = summarize(built.rows, period.begin, period.end);
+    const eir     = computeEIR(instrument);
+    // Align EIR's "effectiveYield" with the schedule-refined yield actually applied.
+    if (eir && built.effectiveYield != null && eir.source === 'price') {
+      eir.effectiveYield = built.effectiveYield;
+    }
     const je      = generateDIU(instrument, summary);
 
     const { windowRows, ...summaryOut } = summary;
@@ -417,6 +494,7 @@
         amortizationMethod: (instrument.amortization || {}).method || 'none',
         dayBasis: instrument.dayBasis
       },
+      effectiveInterestRate: eir,
       summary: summaryOut,
       periodRows: windowRows,
       schedule: built.rows,
@@ -427,6 +505,8 @@
   return {
     calculate,
     buildSchedule,
+    computeEIR,
+    solveYield,
     summarize,
     generateDIU,
     validate,

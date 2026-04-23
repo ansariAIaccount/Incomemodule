@@ -8,6 +8,7 @@ The engine's `calculate(input)` returns a JSON object. This document describes e
 {
   "ok": true,
   "meta": { ... },
+  "effectiveInterestRate": { ... },
   "summary": { ... },
   "periodRows": [ ... ],
   "schedule":   [ ... ],
@@ -39,13 +40,55 @@ Diagnostic and audit information about the run.
 | `period.begin`      | ISO date | Echoed. |
 | `period.end`        | ISO date | Echoed. |
 | `period.last`       | ISO date | Echoed. |
-| `effectiveYield`    | number or null | The yield `y` actually used for the effective-interest family (per year, decimal). `null` when amortization method is `none` or `straightLine`. |
+| `effectiveYield`    | number or null | The yield `y` actually used for the effective-interest family (per year, decimal). `null` when amortization method is `none` or `straightLine`. For `effectiveInterestPrice`, this is the **secant-refined** yield (same as `effectiveInterestRate.effectiveYield`). |
 | `amortizationMethod`| enum    | `"none"`, `"straightLine"`, `"effectiveInterestPrice"`, `"effectiveInterestFormula"`, `"effectiveInterestIRR"`. |
 | `dayBasis`          | enum    | `"ACT/360"`, `"ACT/365"`, `"ACT/ACT"`, `"30/360"`. |
 
 ---
 
-## 2. `summary`
+## 2. `effectiveInterestRate`
+
+Self-contained yield report produced by `computeEIR(instrument)`. Always present (not null) as long as the instrument has valid `settlementDate`, `maturityDate`, and `faceValue`. See `income-calculator-calc-logic.md` §14 for the full calculation spec.
+
+| Field            | Type          | Description |
+|------------------|---------------|-------------|
+| `method`         | enum          | `amortization.method` in effect. One of `none`, `straightLine`, `effectiveInterestPrice`, `effectiveInterestFormula`, `effectiveInterestIRR`. |
+| `source`         | enum          | Where `effectiveYield` came from — `"price"` (solved from purchase price), `"formula"` (coupon + user spread), `"override"` (user-supplied yield), `"straightLine"` (linear amort, no EIR driver), `"implied"` (no amort selected, YTM informational), `"par"` (priced at face). |
+| `note`           | string        | Human-readable explanation of what `effectiveYield` represents under the active method. |
+| `effectiveYield` | number / null | Yield actually driving amortization (decimal; `0.08` = 8%). `null` under `straightLine`, `none`, or `par`. For `effectiveInterestPrice`, aligned with `meta.effectiveYield`. |
+| `impliedYTM`     | number / null | Always-computed yield-to-maturity solved from `purchasePrice` against projected annual coupon + face-at-maturity cashflows. `null` on degenerate inputs (price ≤ 0, zero-term). Uses annual compounding with fractional stub. |
+| `cashYield`      | number / null | `annualCoupon ÷ purchasePrice` — current (running) yield. |
+| `totalReturn`    | number / null | Simple annualized total return: `((faceValue + totalCoupon − purchasePrice) / purchasePrice) / yearsToMat`. Ignores time value of intermediate coupons. |
+| `couponRate`     | number        | Effective coupon rate. For Floating, post cap/floor clamp using the current `floatingRate + spread`. |
+| `annualCoupon`   | number        | `faceValue × couponRate` — nominal annual coupon cash flow. |
+| `yearsToMat`     | number        | `totalDays / daysPerYear` where `daysPerYear ∈ {360, 365}` per `dayBasis`. |
+| `dayBasis`       | enum          | Echoed from `input.instrument.dayBasis`. |
+
+### Alignment with `meta.effectiveYield`
+
+For `method = "effectiveInterestPrice"`, the engine runs a two-stage solve (§9.3 and §13 of the calc-logic doc): bisection for a seed yield, then secant refinement against the actual daily schedule. The **refined** yield is what the amortization layer uses. After the schedule runs, the engine overwrites `effectiveInterestRate.effectiveYield` with that refined value so it matches `meta.effectiveYield` exactly. `effectiveInterestRate.impliedYTM` stays at the pure-IRR value for reconciliation against third-party yield engines.
+
+### Example
+
+```json
+"effectiveInterestRate": {
+  "method":         "effectiveInterestPrice",
+  "source":         "price",
+  "note":           "Yield solved from purchase price vs. projected coupon cashflows.",
+  "effectiveYield": 0.078683,
+  "impliedYTM":     0.079366,
+  "cashYield":      0.063158,
+  "totalReturn":    0.080686,
+  "couponRate":     0.06,
+  "annualCoupon":   60000,
+  "yearsToMat":     3.0027,
+  "dayBasis":       "ACT/365"
+}
+```
+
+---
+
+## 3. `summary`
 
 Period totals — derived from the subset of daily rows inside `[period.begin, period.end]`.
 
@@ -65,7 +108,7 @@ Period totals — derived from the subset of daily rows inside `[period.begin, p
 
 ---
 
-## 3. `periodRows` and `schedule`
+## 4. `periodRows` and `schedule`
 
 Both are arrays of daily row objects with identical shape. The difference:
 
@@ -104,7 +147,7 @@ Each row:
 
 ---
 
-## 4. `journalEntries`
+## 5. `journalEntries`
 
 Debit/credit pairs representing the period's accounting impact. Each pair is emitted only when the underlying total is non-zero (with a `0.005` dead-zone on amortization and non-use fee lines to suppress rounding noise).
 
@@ -141,7 +184,7 @@ Each entry:
 
 ---
 
-## 5. Numeric Precision
+## 6. Numeric Precision
 
 All numbers in the output are rounded to 6 decimal places (`Math.round(v * 1e6) / 1e6`). Display-layer rounding is independent — the HTML UI formats money to 2 dp and rates to 4 dp at render time.
 
@@ -149,7 +192,7 @@ Aggregate totals in `summary` are computed by summing the raw (unrounded) daily 
 
 ---
 
-## 6. Example — Truncated Alliance Output
+## 7. Example — Truncated Alliance Output
 
 ```json
 {

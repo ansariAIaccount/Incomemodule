@@ -354,7 +354,228 @@ The secant refinement downstream tightens yield against the actual daily-grid sc
 
 ---
 
-## 14. Worked Example — Alliance Manufacturing
+## 14. Effective Interest Rate (Yield Analytics)
+
+§9 described how a yield `y` drives **book-value amortization** on the daily grid. This section describes the engine's **standalone EIR output block** — a self-contained yield report produced by `computeEIR(instrument)` and surfaced in two places:
+
+- UI: the **Effective Interest Rate — Yield Analytics** panel on the Summary tab, plus the fifth KPI card.
+- Output JSON: top-level `effectiveInterestRate` object, plus `meta.effectiveYield` for the amortization driver yield.
+
+The EIR block is **always computed**, regardless of which amortization method (if any) is selected. When an effective-interest method is active, the `effectiveYield` in the block is the same number driving amortization. Otherwise the block still surfaces the implied yield-to-maturity and other informational yield metrics so the user can compare.
+
+### 14.1 Fields Produced
+
+```
+effectiveInterestRate = {
+  method,             // amortization.method actually selected
+  source,             // 'price' | 'formula' | 'override' | 'straightLine' | 'implied' | 'par'
+  note,               // human-readable explanation of what `effectiveYield` represents
+  effectiveYield,     // decimal; the yield driving amortization (or null if none)
+  impliedYTM,         // decimal; always-solved yield-to-maturity from purchase price
+  cashYield,          // decimal; annual coupon ÷ purchase price (current yield)
+  totalReturn,        // decimal; annualized simple total return
+  couponRate,         // decimal; effective coupon rate (post cap/floor for Floating)
+  annualCoupon,       // dollars; face × couponRate
+  yearsToMat,         // total days ÷ daysPerYear (360 or 365 per basis)
+  dayBasis            // echoed from input
+}
+```
+
+### 14.2 Coupon Rate (`couponRate`)
+
+For `coupon.type = "Fixed"`:
+
+```
+couponRate = coupon.fixedRate
+```
+
+For `coupon.type = "Floating"`, the index rate plus spread, clamped by cap/floor:
+
+```
+raw        = coupon.floatingRate + coupon.spread
+couponRate = clamp(raw, coupon.floor, coupon.cap)
+```
+
+For floating notes, this captures the yield *as of today's index reset*. If the index changes during the life of the instrument, the implied YTM from price is a snapshot, not a forward projection. Users modeling forward curves should rely on `effectiveInterestFormula` or external yield overrides.
+
+### 14.3 Annual Coupon (`annualCoupon`)
+
+```
+annualCoupon = faceValue × couponRate
+```
+
+This is the nominal annual coupon cash flow. For fixed notes it's a constant; for floating notes it reflects the current clamped rate only.
+
+### 14.4 Years to Maturity (`yearsToMat`)
+
+```
+totalDays   = (maturityDate - settlementDate)   in whole days
+daysPerYear = 365   if dayBasis ∈ {ACT/365, ACT/ACT}
+              360   otherwise
+yearsToMat  = totalDays / daysPerYear
+```
+
+The divisor follows the instrument's day-count basis so `yearsToMat` is internally consistent with the daily-grid schedule walk.
+
+### 14.5 Cash Yield (`cashYield`)
+
+The current (running) yield — coupon cash flow scaled by what you paid:
+
+```
+cashYield = annualCoupon / purchasePrice     (null if purchasePrice ≤ 0)
+```
+
+At par (`purchasePrice = faceValue`), `cashYield == couponRate`. Below par, cash yield exceeds coupon; above par, it falls below.
+
+### 14.6 Annualized Total Return (`totalReturn`)
+
+A simple (non-compounded) annualized return using the pull-to-par realized at maturity:
+
+```
+totalCoupon = annualCoupon × yearsToMat
+totalReturn = ( (faceValue + totalCoupon − purchasePrice) / purchasePrice ) / yearsToMat
+```
+
+This differs from `impliedYTM` in two ways:
+
+1. Simple (arithmetic) rather than compounded.
+2. Ignores time value of intermediate coupons.
+
+Useful as a sanity check on `impliedYTM`: for a par bond, both collapse to the coupon rate; for a deep discount, `totalReturn < impliedYTM` because money earned later is worth less.
+
+### 14.7 Implied Yield-to-Maturity (`impliedYTM`)
+
+The textbook yield-to-maturity solved from `purchasePrice` and the projected coupon-plus-face cashflow series:
+
+```
+fullYears = floor(yearsToMat)
+stub      = yearsToMat − fullYears
+
+cashflows = [ { t = 1,          amount = annualCoupon }
+              { t = 2,          amount = annualCoupon }
+              ...
+              { t = fullYears,  amount = annualCoupon }
+              { t = yearsToMat, amount = faceValue + annualCoupon × stub } ]
+
+impliedYTM = solveYield(purchasePrice, cashflows)
+```
+
+Where `solveYield` is the bisection solver documented in §13 (`NPV(y, cfs) = Σ amount / (1+y)^t` → bracket `[-0.99, 5.0]`, 200 iterations, tolerance `1e-9`).
+
+**Key properties**:
+
+- Always computed when `purchasePrice > 0`, `faceValue > 0`, and `yearsToMat > 0` — irrespective of `amortization.method`.
+- Uses *annual compounding* with fractional stub (not continuous, not semi-annual — consistent with §9.3 Stage 1).
+- For Floating coupons, uses today's clamped rate for all future periods. This is a snapshot yield; it does not project the index forward.
+- Returns `null` on degenerate inputs (prices ≤ 0, zero-length terms) or if the bisection fails to bracket a root.
+
+### 14.8 Driver Yield (`effectiveYield`) and `source`
+
+`effectiveYield` is the yield the **amortization layer actually applies** to carrying value. It's picked from `amortization.method`:
+
+| `method`                   | `effectiveYield`                                          | `source`       | `note` (human-readable)                                               |
+|---                         |---                                                        |---             |---                                                                    |
+| `effectiveInterestPrice`   | Same as `impliedYTM`, then secant-refined (§9.3 Stage 2)  | `price`        | "Yield solved from purchase price vs. projected coupon cashflows."    |
+| `effectiveInterestFormula` | `couponRate + amortization.spread`                        | `formula`      | "Yield = coupon + user-supplied spread."                              |
+| `effectiveInterestIRR`     | `amortization.yieldOverride` (falls back to `couponRate`) | `override`     | "Yield override supplied by user."                                    |
+| `straightLine`             | `null`                                                    | `straightLine` | "Straight-line amortization — no effective yield; implied YTM shown for reference." |
+| `none` with `PP = Face`    | `null`                                                    | `par`          | "Bond purchased at par — no amortization."                            |
+| `none` with `PP ≠ Face`    | `null`                                                    | `implied`      | "No amortization method set — implied YTM shown for reference."       |
+
+### 14.9 Alignment Rule: Price Method
+
+For `effectiveInterestPrice`, the pure-IRR solve in 14.7 and the **secant-refined yield** in §9.3 Stage 2 differ by a few basis points, because the IRR uses an annual-compounding cashflow approximation while the scheduler walks daily simple interest.
+
+The engine explicitly aligns the two so users see one consistent number:
+
+```
+After buildSchedule() runs, rows.effectiveYield = the refined y.
+After computeEIR() runs, if source === 'price':
+   effectiveInterestRate.effectiveYield = rows.effectiveYield       (refined)
+   effectiveInterestRate.impliedYTM     = pure-IRR from cashflows   (unchanged)
+```
+
+So the "EIR" shown on the summary KPI and the amortization math driving `dailyAmort` and `carryingValue` in the schedule are guaranteed to match to the penny. The `impliedYTM` stays available for reconciliation against third-party yield engines that don't do the daily-grid refinement.
+
+### 14.10 Interpretation Cheat Sheet
+
+For a Fixed-rate bond:
+
+| Situation            | `couponRate` | `cashYield` | `impliedYTM` | `effectiveYield` |
+|---                   |---           |---          |---           |---               |
+| Par bond             | = coupon     | = coupon    | = coupon     | `null` (or coupon if `effectiveInterestFormula` with zero spread) |
+| Discount             | coupon       | > coupon    | > coupon     | = `impliedYTM` (refined) under `effectiveInterestPrice` |
+| Premium              | coupon       | < coupon    | < coupon     | = `impliedYTM` (refined) under `effectiveInterestPrice` |
+
+For a Floating-rate bond, all four metrics are re-evaluated each time `computeEIR` is called with the current `coupon.floatingRate`; they are snapshots, not forward projections.
+
+### 14.11 Worked Example — Discount Bond
+
+Inputs: `faceValue = 1,000,000`, `purchasePrice = 950,000`, 3-year term, `coupon.fixedRate = 0.06`, `dayBasis = ACT/365`, `amortization.method = effectiveInterestPrice`.
+
+Derived:
+
+```
+daysPerYear = 365
+totalDays   = 1096
+yearsToMat  = 1096 / 365 = 3.0027
+annualCoupon = 1,000,000 × 0.06 = 60,000
+cashYield    = 60,000 / 950,000 = 0.063158  (6.3158%)
+totalReturn  = ((1,000,000 + 60,000 × 3.0027 - 950,000) / 950,000) / 3.0027
+             = (230,164 / 950,000) / 3.0027
+             = 0.080686  (8.0686%)
+```
+
+IRR-solve input cashflows:
+
+```
+[ { t=1, amount=60,000 },
+  { t=2, amount=60,000 },
+  { t=3, amount=60,000 },
+  { t=3.0027, amount=1,000,000 + 60,000 × 0.0027 } ]
+```
+
+Bisection:
+
+```
+solveYield(950,000, cashflows) → 0.079366  (7.9366%)   ← impliedYTM
+```
+
+Secant-refine against the daily schedule targeting `runCarrying(y) = 1,000,000`:
+
+```
+effectiveYield = 0.078683  (7.8683%)                   ← used by amortization
+```
+
+Output EIR block:
+
+```json
+{
+  "method": "effectiveInterestPrice",
+  "source": "price",
+  "couponRate":     0.06,
+  "annualCoupon":   60000,
+  "cashYield":      0.063158,
+  "impliedYTM":     0.079366,
+  "effectiveYield": 0.078683,
+  "totalReturn":    0.080686,
+  "yearsToMat":     3.0027,
+  "dayBasis":       "ACT/365"
+}
+```
+
+`meta.effectiveYield` will echo `0.078683`.
+
+### 14.12 Implementation Pointers
+
+- Engine function: `computeEIR(instrument)` in `income-calculator-engine.js` (near the top of the schedule builder).
+- Aligned in `calculate()`: after `buildSchedule(instr)` runs, if `built.effectiveYield != null` and `source === 'price'`, the engine overwrites `eir.effectiveYield` with the refined value.
+- UI rendering: `renderEIRPanel()` in `income-calculator.html` reads `state.eir` and writes to `#eir-panel`.
+- Re-used inside `buildOutputPayload()` so the JSON export includes the full EIR block plus `meta.effectiveYield`.
+
+---
+
+## 15. Worked Example — Alliance Manufacturing
 
 **Inputs**
 
@@ -399,7 +620,7 @@ totalCapitalized = sum of PIK that got rolled on Jan 15, Feb 15, Mar 5
 
 ---
 
-## 15. Worked Example — Copperleaf Discount Bond (EIR from Price)
+## 16. Worked Example — Copperleaf Discount Bond (EIR from Price)
 
 **Inputs**
 
@@ -432,7 +653,7 @@ Over the full 6 years, `carryingValue` accretes upward from 9,250,000 and lands 
 
 ---
 
-## 16. Edge Cases and Safeguards
+## 17. Edge Cases and Safeguards
 
 | Situation | Engine behavior |
 |-----------|-----------------|
@@ -447,7 +668,7 @@ Over the full 6 years, `carryingValue` accretes upward from 9,250,000 and lands 
 
 ---
 
-## 17. Precision and Rounding
+## 18. Precision and Rounding
 
 - All intermediate math is done in IEEE-754 doubles. No per-step rounding.
 - Display-only rounding happens in `fmtMoney` (2 dp) and `fmtPct` (4 dp).
@@ -456,7 +677,7 @@ Over the full 6 years, `carryingValue` accretes upward from 9,250,000 and lands 
 
 ---
 
-## 18. Sign Conventions Summary
+## 19. Sign Conventions Summary
 
 | Quantity       | Positive means | Negative means |
 |----------------|----------------|----------------|
