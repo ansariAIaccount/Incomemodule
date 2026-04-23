@@ -1,0 +1,68 @@
+{
+  "period": {
+    "begin": "2020-01-01",
+    "end":   "2020-03-05",
+    "last":  "2019-12-31"
+  },
+
+  "instrument": {
+    "id":             "alliance",
+    "legalEntity":    "FIS Capital Partners I",
+    "leid":           7,
+    "deal":           "Alliance Manufacturing",
+    "position":       "Alliance Manufacturing (Convertible Note)",
+    "incomeSecurity": "Alliance Manufacturing (Convertible Note)",
+
+    "faceValue":      25000000,
+    "purchasePrice":  25000000,
+    "commitment":     25000000,
+
+    "settlementDate": "2019-01-15",
+    "maturityDate":   "2020-03-05",
+
+    "dayBasis":                   "ACT/360",
+    "accrualFreq":                "daily",
+    "accrualDayCountExclusive":   false,
+    "paydateDayCountInclusive":   true,
+    "interestPreviousDay":        false,
+
+    "coupon": {
+      "type":         "Fixed",
+      "fixedRate":    0.12,
+      "floatingRate": 0.0,
+      "spread":       0.0,
+      "floor":        null,
+      "cap":          null
+    },
+
+    "pik": {
+      "enabled":                 true,
+      "rate":                    0.14,
+      "capitalizationFrequency": "Monthly"
+    },
+
+    "nonUseFee": {
+      "enabled": false,
+      "rate":    0.0
+    },
+
+    "principalRepayment": "AtMaturity",
+    "principalSchedule": [
+      { "date": "2019-01-15", "type": "initial", "amount": 25000000 }
+    ],
+
+    "amortization": {
+      "method":         "none",
+      "spread":         0.0,
+      "yieldOverride":  null
+    },
+
+    "amortStart":      null,
+    "amortEnd":        null,
+    "holidayCalendar": "none",
+    "skipHolidays":    false,
+
+    "type":   "pikNoteFixed",
+    "preset": "Alliance Manufacturing · Interest + PIK @ par"
+  }
+}
