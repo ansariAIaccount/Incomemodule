@@ -1,0 +1,128 @@
+{
+  "_comment": "Sample Investran DIU batch payload. This is the body `investran_outbound.py` POSTs to /api/DataImport/v1/batches (as multipart/form-data with the CSV under the `file` part). The `externalKey` is a deterministic hash of instrumentId + period + rows, so retries after a crash do not double-post.",
+  "_target": "POST https://investranweb-livedev-us.fiscloudservices.com/api/DataImport/v1/batches",
+
+  "api": "DataImport/v1",
+  "endpoint": "/batches",
+
+  "envelope": {
+    "templateId":   "b1e8d7c4-3f5a-4c62-8d9e-7a6b5c4d3e2f",
+    "templateName": "GL_JOURNAL_V1",
+    "externalKey":  "calc-alliance-2020-01-01-2020-03-05-1f4c9e2b8a",
+    "batchType":    "STANDARD",
+    "batchComments":"Posted by income-calculator · alliance · 2020-01-01→2020-03-05",
+    "generatedAt":  "2026-04-24T14:05:32.104Z",
+    "engineVersion":"1.0.0"
+  },
+
+  "meta": {
+    "instrumentId":   "alliance",
+    "instrumentType": "pikNoteFixed",
+    "period":         { "begin": "2020-01-01", "end": "2020-03-05", "last": "2019-12-31" },
+    "amortizationMethod": "none",
+    "dayBasis":       "ACT/360",
+    "effectiveYield": 0.1206
+  },
+
+  "summary": {
+    "periodStart":       "2020-01-01",
+    "periodEnd":         "2020-03-05",
+    "daysCount":         65,
+    "openingBalance":    28456806.60,
+    "closingBalance":    29147067.63,
+    "totalCashAccrual":  624480.78,
+    "totalPikAccrual":   728560.91,
+    "totalCapitalized":  690261.04,
+    "totalAmort":        0,
+    "totalNonUseFee":    0
+  },
+
+  "effectiveInterestRate": {
+    "method":         "none",
+    "source":         "par",
+    "note":           "No amortization — EIR equals coupon rate.",
+    "effectiveYield": 0.12,
+    "impliedYTM":     0.1206,
+    "cashYield":      0.12,
+    "totalReturn":    0.12,
+    "couponRate":     0.12,
+    "annualCoupon":   3000000,
+    "yearsToMat":     1.139,
+    "dayBasis":       "ACT/360"
+  },
+
+  "journalEntries": [
+    {
+      "legalEntity":         "FIS Capital Partners I",
+      "leid":                7,
+      "batchId":             "CALC-20200305-ALLIANCE-001",
+      "jeIndex":             1,
+      "txIndex":             1,
+      "glDate":              "2020-03-05",
+      "effectiveDate":       "2020-03-05",
+      "deal":                "Alliance Manufacturing",
+      "position":            "Alliance Manufacturing (Convertible Note)",
+      "incomeSecurity":      "Alliance Manufacturing (Convertible Note)",
+      "transactionType":     "InterestIncome",
+      "account":             "40100",
+      "allocationRule":      "STANDARD",
+      "batchType":           "STANDARD",
+      "batchComments":       "Period 2020-01-01 to 2020-03-05",
+      "transactionComments": "Cash coupon accrual",
+      "originalAmount":      624480.78,
+      "amountLE":            624480.78,
+      "fx":                  1.0,
+      "amountLocal":         624480.78,
+      "isDebit":             false,
+      "leDomain":            "USD"
+    },
+    {
+      "legalEntity":         "FIS Capital Partners I",
+      "leid":                7,
+      "batchId":             "CALC-20200305-ALLIANCE-001",
+      "jeIndex":             1,
+      "txIndex":             2,
+      "glDate":              "2020-03-05",
+      "effectiveDate":       "2020-03-05",
+      "deal":                "Alliance Manufacturing",
+      "position":            "Alliance Manufacturing (Convertible Note)",
+      "incomeSecurity":      "Alliance Manufacturing (Convertible Note)",
+      "transactionType":     "InterestReceivable",
+      "account":             "23000",
+      "allocationRule":      "STANDARD",
+      "batchType":           "STANDARD",
+      "batchComments":       "Period 2020-01-01 to 2020-03-05",
+      "transactionComments": "Cash coupon receivable",
+      "originalAmount":      624480.78,
+      "amountLE":            624480.78,
+      "fx":                  1.0,
+      "amountLocal":         624480.78,
+      "isDebit":             true,
+      "leDomain":            "USD"
+    },
+    {
+      "legalEntity":         "FIS Capital Partners I",
+      "leid":                7,
+      "batchId":             "CALC-20200305-ALLIANCE-001",
+      "jeIndex":             2,
+      "txIndex":             1,
+      "glDate":              "2020-03-05",
+      "effectiveDate":       "2020-03-05",
+      "deal":                "Alliance Manufacturing",
+      "position":            "Alliance Manufacturing (Convertible Note)",
+      "incomeSecurity":      "Alliance Manufacturing (Convertible Note)",
+      "transactionType":     "PIKCapitalization",
+      "account":             "40150",
+      "allocationRule":      "STANDARD",
+      "batchType":           "STANDARD",
+      "batchComments":       "Period 2020-01-01 to 2020-03-05",
+      "transactionComments": "PIK interest capitalized to principal",
+      "originalAmount":      690261.04,
+      "amountLE":            690261.04,
+      "fx":                  1.0,
+      "amountLocal":         690261.04,
+      "isDebit":             true,
+      "leDomain":            "USD"
+    }
+  ]
+}

@@ -257,6 +257,9 @@
     <!-- Left rail: Instrument picker -->
     <aside class="w-[300px] shrink-0 bg-white border-r border-gray-200 p-4 flex flex-col gap-4 no-print">
       <div>
+        <button id="btn-new-instrument" class="mat-btn primary w-full justify-center mb-3" title="Create a new blank instrument">
+          <span class="material-icons-outlined text-[18px]">add_circle</span>Add New Instrument
+        </button>
         <div class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2 flex items-center gap-1">
           <span class="material-icons-outlined text-[16px]">account_tree</span>Instrument
         </div>
@@ -283,12 +286,6 @@
             <button class="mat-btn outline !py-1 !px-2 text-xs" data-date-fmt="eu">EU</button>
           </div>
         </div>
-      </div>
-      <div class="border-t border-gray-200 pt-4">
-        <div class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2 flex items-center gap-1">
-          <span class="material-icons-outlined text-[16px]">bookmarks</span>Presets
-        </div>
-        <div id="presets" class="flex flex-col gap-1"></div>
       </div>
       <div class="mt-auto pt-4 border-t border-gray-200 text-[11px] text-gray-500 leading-relaxed">
         Prototype of the Loan Calculator redesign. Implements N-1…N-9 plus the 21-item options list: day-count conventions, PIK, caps/floors, amortization methods, non-use fees.
@@ -515,8 +512,8 @@
     <div class="json-modal-panel">
       <div class="json-modal-header">
         <div>
-          <div id="json-modal-title" class="font-semibold text-[15px]">Import JSON Payload</div>
-          <div class="text-[11px] text-gray-500">Paste an input payload ({period, instrument}) and click Apply to load it into the calculator.</div>
+          <div id="json-modal-title" class="font-semibold text-[15px]">Import Investran CRM v2 Payload</div>
+          <div class="text-[11px] text-gray-500">Paste an Investran CRM v2 security response ({legalEntity, deal, position, period, security}) and click Apply. The flat {period, instrument} shape is also accepted for backward compatibility.</div>
         </div>
         <button class="mat-btn outline !py-1 !px-2" data-close="1" aria-label="Close"><span class="material-icons-outlined text-[18px]">close</span></button>
       </div>
@@ -525,7 +522,7 @@
           <button id="btn-json-sample" class="mat-btn outline !py-1 !px-2 text-xs">Load sample</button>
           <button id="btn-json-current" class="mat-btn outline !py-1 !px-2 text-xs">Fill from current instrument</button>
           <span id="json-modal-status" class="mat-chip gray">empty</span>
-          <span class="ml-auto text-[11px] text-gray-500">Schema: <code class="text-gray-700">{ period, instrument }</code></span>
+          <span class="ml-auto text-[11px] text-gray-500">Source: <code class="text-gray-700">GET /api/ReferenceData/v2/positions/{id}/securities</code></span>
         </div>
         <textarea id="json-input" spellcheck="false" placeholder='{ "period": { ... }, "instrument": { ... } }'></textarea>
         <div id="json-modal-errors" class="json-modal-errors" style="display:none;"></div>
@@ -1324,29 +1321,51 @@ function onPickerChange(){
   render();
 }
 
-/* ---------- Presets panel ---------- */
-function renderPresets(){
-  const wrap = byId('presets');
-  wrap.innerHTML = INSTRUMENTS.map(i =>
-    `<div class="nav-pill ${i.id===state.instrumentId?'active':''}" data-preset="${i.id}">
-       <span class="material-icons-outlined">${i.id==='revolver'?'sync':i.id==='floatingLoan'?'waves':i.id==='discountBond'?'toll':'account_balance'}</span>
-       <span class="flex-1 truncate">${i.preset}</span>
-     </div>`
-  ).join('');
-  wrap.querySelectorAll('[data-preset]').forEach(el => el.onclick = ()=>{
-    state.instrumentId = el.dataset.preset;
-    // sensible window
-    const inst = currentInstrument();
-    state.begin = inst.settlementDate;
-    const end = addDays(parseISO(inst.settlementDate), 90);
-    const endISO = toISO(end);
-    state.end = endISO > inst.maturityDate ? inst.maturityDate : endISO;
-    state.last = toISO(addDays(parseISO(state.begin),-1));
-    populatePickers();
-    byId('sel-security').value = inst.id;
-    loadFormFromInstrument();
-    render();
-  });
+/* ---------- Presets panel removed (use "Add New Instrument" button) ---------- */
+function renderPresets(){ /* no-op: presets panel removed */ }
+
+/* ---------- Add a brand-new blank instrument ---------- */
+function addBlankInstrument(){
+  const today = toISO(new Date());
+  const mat   = toISO(addDays(new Date(), 365 * 3)); // default 3yr
+  const id    = 'new-' + Date.now().toString(36);
+  const n     = INSTRUMENTS.filter(i => /^New Instrument/.test(i.incomeSecurity || '')).length + 1;
+  const label = 'New Instrument ' + n;
+  const fresh = {
+    id,
+    legalEntity: 'New Legal Entity',
+    leid: 0,
+    deal: 'New Deal',
+    position: label,
+    incomeSecurity: label,
+    faceValue: 1000000,
+    purchasePrice: 1000000,
+    commitment: 1000000,
+    settlementDate: today,
+    maturityDate: mat,
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis: 'ACT/360',
+    coupon: { type:'Fixed', fixedRate:0.08, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0, capitalizationFrequency:'Monthly' },
+    principalRepayment: 'AtMaturity',
+    principalSchedule: [ { date: today, type:'initial', amount: 1000000 } ],
+    amortization: { method:'none' },
+    nonUseFee: { enabled:false, rate:0 },
+    type: 'fixedCouponNoAmort',
+    preset: label
+  };
+  INSTRUMENTS.push(fresh);
+  state.instrumentId = id;
+  state.begin = today;
+  state.end   = toISO(addDays(new Date(), 90));
+  state.last  = toISO(addDays(parseISO(state.begin), -1));
+  populatePickers();
+  byId('sel-security').value = id;
+  loadFormFromInstrument();
+  render();
+  toast('New instrument added ✓');
 }
 
 /* ---------- Type dropdown ---------- */
@@ -1488,21 +1507,59 @@ function renderMethodPicker(){
 }
 
 /* ---------- Events table ---------- */
-function renderEventsTable(){
+// Which event types make sense for the selected income-security type?
+// Revolvers / facilities can draw additional principal; bullets, bonds,
+// amortizing term loans cannot. Paydowns are universally allowed
+// (even bullets can have optional early prepayments).
+function allowedEventTypes(i){
+  if(!i) return ['initial','draw','paydown'];
+  const revolverTypes = new Set(['drawsAddons','nonUseFeeFacility']);
+  const isFacility = revolverTypes.has(i.type) || i.nonUseFee && i.nonUseFee.enabled;
+  if(isFacility) return ['initial','draw','paydown'];
+  return ['initial','paydown'];
+}
+function eventTypeHint(i){
+  const allowed = allowedEventTypes(i);
+  if(allowed.includes('draw')) return 'Revolver / facility — initial draw, additional draws, and paydowns allowed.';
+  return 'Term instrument — initial disbursement and paydowns only (no revolver draws).';
+}
+let _eventsRendered = { id:null, count:-1, allowed:'' };
+function renderEventsTable(force){
   const i = currentInstrument();
   const evs = (i.principalSchedule||[]);
+  const allowed = allowedEventTypes(i);
+  const allowedKey = allowed.join(',');
+  // Skip full rebuild when nothing changed — prevents input focus
+  // loss while the user is typing into a row. Inline edits fire render() which
+  // calls this; we only rebuild the DOM when a row was added/removed or the
+  // allowed-types set changed (i.e. user switched income-security type).
+  if(!force
+     && _eventsRendered.id === i.id
+     && _eventsRendered.count === evs.length
+     && _eventsRendered.allowed === allowedKey) return;
+  _eventsRendered = { id: i.id, count: evs.length, allowed: allowedKey };
+  const optionsHtml = (selected) => {
+    const opts = allowed.map(t =>
+      `<option value="${t}" ${t===selected?'selected':''}>${t}</option>`
+    );
+    // Preserve data integrity: if a row's current type is no longer allowed,
+    // render it anyway with a warning marker so nothing is silently dropped.
+    if(selected && !allowed.includes(selected)){
+      opts.push(`<option value="${selected}" selected>⚠ ${selected} (not valid for this type)</option>`);
+    }
+    return opts.join('');
+  };
   const rows = evs.map((e, idx) => `
     <tr>
-      <td class="left"><input type="date" class="mat-input" data-ev="date" data-idx="${idx}" value="${e.date}"/></td>
-      <td><select class="mat-select" data-ev="type" data-idx="${idx}">
-        <option ${e.type==='initial'?'selected':''}>initial</option>
-        <option ${e.type==='draw'?'selected':''}>draw</option>
-        <option ${e.type==='paydown'?'selected':''}>paydown</option>
-      </select></td>
-      <td><input type="number" step="0.01" class="mat-input" data-ev="amount" data-idx="${idx}" value="${e.amount}"/></td>
-      <td><button class="mat-btn ghost !py-1 !px-2 text-xs" data-del="${idx}"><span class="material-icons-outlined text-[16px]">delete</span></button></td>
+      <td class="left"><input type="date" class="mat-input" data-ev="date" data-idx="${idx}" value="${e.date||''}"/></td>
+      <td><select class="mat-select" data-ev="type" data-idx="${idx}">${optionsHtml(e.type)}</select></td>
+      <td><input type="number" step="0.01" class="mat-input" data-ev="amount" data-idx="${idx}" value="${e.amount ?? 0}"/></td>
+      <td><button class="mat-btn ghost !py-1 !px-2 text-xs" data-del="${idx}" title="Remove event"><span class="material-icons-outlined text-[16px]">delete</span></button></td>
     </tr>`).join('');
   byId('events-table').innerHTML = `
+    <div class="text-[11px] text-gray-500 mb-2 flex items-center gap-1">
+      <span class="material-icons-outlined text-[14px]">info</span>${eventTypeHint(i)}
+    </div>
     <table class="w-full text-sm">
       <thead><tr class="text-left text-gray-500 text-[11px] uppercase tracking-wider">
         <th class="p-2 font-medium">Date</th>
@@ -1512,7 +1569,8 @@ function renderEventsTable(){
       </tr></thead>
       <tbody>${rows || `<tr><td colspan="4" class="p-4 text-gray-500 italic text-sm">No events — the loan runs at face value for the full life.</td></tr>`}</tbody>
     </table>`;
-  byId('events-table').querySelectorAll('[data-ev]').forEach(el => el.oninput = (e)=>{
+  // change (not input) so typing a multi-digit amount doesn't re-render on each keystroke
+  byId('events-table').querySelectorAll('[data-ev]').forEach(el => el.onchange = (e)=>{
     const idx = +e.target.dataset.idx;
     const key = e.target.dataset.ev;
     let v = e.target.value;
@@ -1789,6 +1847,7 @@ function render(){
   state.diu      = generateDIU(i, state.summary);
   renderBreadcrumb();
   renderScheduleGrid();
+  renderEventsTable();
   renderKPIs();
   if(state.activeTab==='summary') drawCharts();
   renderDIU();
@@ -1848,6 +1907,9 @@ function wire(){
     const i = currentInstrument();
     applyType(i, byId('sel-type').value);
     loadFormFromInstrument();
+    // Force-rebuild events table so the "type" dropdown reflects the
+    // newly-allowed event types for this income-security.
+    renderEventsTable(true);
     render();
     toast('Type applied ✓');
   };
@@ -1864,12 +1926,43 @@ function wire(){
     });
   // Recalc and exports
   byId('btn-recalc').onclick = ()=> { render(); toast('Recalculated ✓'); };
+  // New instrument
+  const newBtn = byId('btn-new-instrument');
+  if(newBtn) newBtn.onclick = addBlankInstrument;
   byId('btn-add-event').onclick = ()=>{
     const i = currentInstrument();
     i.principalSchedule = i.principalSchedule || [];
-    i.principalSchedule.push({ date: state.begin, type:'draw', amount: 0 });
+    // Pick a sensible default date: 30 days after the most recent event,
+    // clamped to (settlementDate, maturityDate). Type defaults to 'paydown' if an
+    // 'initial' already exists, else 'initial'.
+    const sorted = i.principalSchedule.slice().sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+    const last = sorted[sorted.length-1];
+    const settle = parseISO(i.settlementDate);
+    const maturity = parseISO(i.maturityDate);
+    let nextDate;
+    if(last && last.date){
+      const d = addDays(parseISO(last.date), 30);
+      nextDate = (maturity && d > maturity) ? toISO(addDays(maturity, -1)) : toISO(d);
+    } else {
+      nextDate = i.settlementDate || state.begin;
+    }
+    if(settle && parseISO(nextDate) < settle) nextDate = i.settlementDate;
+    const hasInitial = i.principalSchedule.some(e => e.type === 'initial');
+    const allowed = allowedEventTypes(i);
+    // Pick a default type that actually makes sense for this income-security:
+    //  - no 'initial' yet → 'initial'
+    //  - facility/revolver → 'draw' (additional capital call)
+    //  - otherwise         → 'paydown' (scheduled or prepayment)
+    let defaultType;
+    if(!hasInitial)                   defaultType = 'initial';
+    else if(allowed.includes('draw')) defaultType = 'draw';
+    else                              defaultType = 'paydown';
+    // Fallback: ensure we only ever default to something allowed
+    if(!allowed.includes(defaultType)) defaultType = allowed[0];
+    const defaultAmt  = defaultType === 'initial' ? (i.faceValue || 0) : 0;
+    i.principalSchedule.push({ date: nextDate, type: defaultType, amount: defaultAmt });
     render();
-    toast('Event added');
+    toast(`Event added (${defaultType})`);
   };
   byId('btn-schedule-csv').onclick = ()=>{
     const hdrs = ['date','balance','draw','paydown','couponRate','floatingRate','currentRate','dailyCash','cumInterestAccrued','capitalized','pikRate','dailyPik','cumPikAccrued','amortDaily','cumAmort','carryingValue','nonUseFee'];
@@ -1916,44 +2009,66 @@ function closeJsonModal(){
   byId('json-modal').style.display = 'none';
   byId('json-modal-errors').style.display = 'none';
 }
+// Investran CRM v2 response sample — the exact shape returned by
+//   GET /api/ReferenceData/v2/positions/{positionId}/securities
+// This mirrors ./investran-crm-input.sample.json and is what
+// investran_inbound.py ingests before passing data to the calculator.
 function loadSampleIntoModal(){
   const sample = {
-    period: { begin: '2020-01-01', end: '2020-03-05', last: '2019-12-31' },
-    instrument: {
+    api: 'ReferenceData/v2',
+    endpoint: '/positions/{positionId}/securities',
+    traceId: '00-8f3c9a1b2e4d6f78-a1b2c3d4e5f60708-00',
+    legalEntity: {
+      id: '7f3a1c10-8e4b-4a2d-9f5e-6c0d4b2a1e3f',
+      externalId: 7,
+      name: 'FIS Capital Partners I'
+    },
+    deal:     { id:'1a5b9c20-4f8e-4d7c-b2a6-9e3d0c8f7a64', name:'Alliance Manufacturing' },
+    position: { id:'c9e0b2d4-5a3f-4e61-8c7d-0f1e2a3b4c5d', name:'Alliance Manufacturing (Convertible Note)' },
+    period:   { begin:'2020-01-01', end:'2020-03-05', last:'2019-12-31' },
+    security: {
       id: 'alliance',
-      legalEntity: 'FIS Capital Partners I', leid: 7,
-      deal: 'Alliance Manufacturing',
-      position: 'Alliance Manufacturing (Convertible Note)',
-      incomeSecurity: 'Alliance Manufacturing (Convertible Note)',
+      externalId: 'ALLIANCE-2019-CN',
+      name: 'Alliance Manufacturing (Convertible Note)',
+      securityType: 'PrivateDebt',
+      investranType: 'pikNoteFixed',
       faceValue: 25000000, purchasePrice: 25000000, commitment: 25000000,
+      currency: 'USD',
       settlementDate: '2019-01-15', maturityDate: '2020-03-05',
       dayBasis: 'ACT/360', accrualFreq: 'daily',
-      accrualDayCountExclusive: false, paydateDayCountInclusive: true,
-      coupon: { type:'Fixed', fixedRate: 0.12, floatingRate: 0, spread: 0, floor: null, cap: null },
-      pik: { enabled: true, rate: 0.14, capitalizationFrequency: 'Monthly' },
-      nonUseFee: { enabled: false, rate: 0 },
+      accrualDayCountExclusive: false, paydateDayCountInclusive: true, interestPreviousDay: false,
+      coupon: { type:'Fixed', fixedRate:0.12, floatingRate:0, spread:0, floor:null, cap:null },
+      pik: { enabled:true, rate:0.14, capitalizationFrequency:'Monthly' },
+      nonUseFee: { enabled:false, rate:0 },
       principalRepayment: 'AtMaturity',
       principalSchedule: [ { date:'2019-01-15', type:'initial', amount:25000000 } ],
-      amortization: { method: 'none', spread: 0, yieldOverride: null },
-      amortStart: null, amortEnd: null, holidayCalendar: 'none', skipHolidays: false,
-      type: 'pikNoteFixed'
+      amortization: { method:'none', startDate:null, endDate:null, spread:0, yieldOverride:null },
+      holidayCalendar: 'none', skipHolidays: false
     }
   };
   byId('json-input').value = JSON.stringify(sample, null, 2);
   byId('json-modal-status').className = 'mat-chip green';
-  byId('json-modal-status').textContent = 'sample loaded';
+  byId('json-modal-status').textContent = 'Investran CRM v2 sample loaded';
   byId('json-modal-errors').style.display = 'none';
 }
+// Emit the current instrument in Investran CRM v2 response shape so users
+// can round-trip it through investran_inbound.py without reshaping.
 function loadCurrentIntoModal(){
   writeFormToInstrument();
   const i = currentInstrument();
   const payload = {
-    period: { begin: state.begin, end: state.end, last: state.last },
-    instrument: {
+    api: 'ReferenceData/v2',
+    endpoint: '/positions/{positionId}/securities',
+    legalEntity: { id:null, externalId: i.leid, name: i.legalEntity },
+    deal:        { id:null, name: i.deal },
+    position:    { id:null, name: i.position },
+    period:      { begin: state.begin, end: state.end, last: state.last },
+    security: {
       id: i.id,
-      legalEntity: i.legalEntity, leid: i.leid,
-      deal: i.deal, position: i.position, incomeSecurity: i.incomeSecurity,
+      name: i.incomeSecurity,
+      investranType: i.type || 'simpleDaily',
       faceValue: i.faceValue, purchasePrice: i.purchasePrice, commitment: i.commitment,
+      currency: 'USD',
       settlementDate: i.settlementDate, maturityDate: i.maturityDate,
       dayBasis: i.dayBasis, accrualFreq: i.accrualFreq || 'daily',
       accrualDayCountExclusive: !!i.accrualDayCountExclusive,
@@ -1964,21 +2079,66 @@ function loadCurrentIntoModal(){
       nonUseFee: i.nonUseFee || { enabled:false, rate:0 },
       principalRepayment: i.principalRepayment || 'AtMaturity',
       principalSchedule: i.principalSchedule || [],
-      amortization: i.amortization || { method:'none' },
-      amortStart: i.amortStart || null,
-      amortEnd:   i.amortEnd   || null,
+      amortization: i.amortization || { method:'none', startDate:null, endDate:null },
       holidayCalendar: i.holidayCalendar || 'none',
-      skipHolidays: !!i.skipHolidays,
-      type: i.type || 'simpleDaily',
-      preset: i.preset || null
+      skipHolidays: !!i.skipHolidays
     }
   };
   byId('json-input').value = JSON.stringify(payload, null, 2);
   byId('json-modal-status').className = 'mat-chip green';
-  byId('json-modal-status').textContent = 'current loaded';
+  byId('json-modal-status').textContent = 'current instrument (CRM shape)';
   byId('json-modal-errors').style.display = 'none';
 }
 
+// Normalize any supported input shape into { period, instrument }.
+// Accepts:
+//   • Investran CRM v2 envelope  { legalEntity, deal, position, period, security }
+//   • Flat legacy shape          { period, instrument }
+// Returns { ok:true, period, instrument } or { ok:false, errors:[] }.
+function normalizeInvestranPayload(p){
+  if(!p || typeof p !== 'object') return { ok:false, errors:['Payload must be a JSON object'] };
+  // Investran CRM v2 response detection: has `security` + some of the env fields.
+  if(p.security && (p.legalEntity || p.deal || p.position)){
+    const s = p.security, le = p.legalEntity || {}, d = p.deal || {}, pos = p.position || {};
+    const instrument = {
+      id: s.id || s.externalId || 'imported',
+      legalEntity: le.name,
+      leid: le.externalId || 0,
+      deal: d.name,
+      position: pos.name,
+      incomeSecurity: s.name,
+      faceValue: s.faceValue,
+      purchasePrice: s.purchasePrice,
+      commitment: s.commitment,
+      settlementDate: s.settlementDate,
+      maturityDate: s.maturityDate,
+      dayBasis: s.dayBasis,
+      accrualFreq: s.accrualFreq || 'daily',
+      accrualDayCountExclusive: !!s.accrualDayCountExclusive,
+      paydateDayCountInclusive: s.paydateDayCountInclusive !== false,
+      interestPreviousDay: !!s.interestPreviousDay,
+      coupon: s.coupon || { type:'Fixed', fixedRate:0 },
+      pik: s.pik || { enabled:false, rate:0 },
+      nonUseFee: s.nonUseFee || { enabled:false, rate:0 },
+      principalRepayment: s.principalRepayment || 'AtMaturity',
+      principalSchedule: Array.isArray(s.principalSchedule) ? s.principalSchedule : [],
+      amortization: s.amortization || { method:'none' },
+      holidayCalendar: s.holidayCalendar || 'none',
+      skipHolidays: !!s.skipHolidays,
+      type: s.investranType || s.type || 'simpleDaily',
+      preset: (d.name || '') + ' · ' + (s.name || '')
+    };
+    return { ok:true, period: p.period || {}, instrument };
+  }
+  // Flat shape (backward compatibility for hand-authored payloads)
+  if(p.instrument && p.period){
+    return { ok:true, period: p.period, instrument: p.instrument };
+  }
+  return { ok:false, errors:['Unrecognized shape — expected Investran CRM v2 envelope ({legalEntity, deal, position, period, security}) or flat {period, instrument}.'] };
+}
+
+// Validate the NORMALIZED payload ({period, instrument}). Pre-normalization
+// envelope detection happens in normalizeInvestranPayload().
 function validatePayload(p){
   const errs = [];
   if(!p || typeof p!=='object') return ['Payload must be a JSON object'];
@@ -1987,7 +2147,7 @@ function validatePayload(p){
     if(!p.period.begin) errs.push('Missing period.begin');
     if(!p.period.end)   errs.push('Missing period.end');
   }
-  if(!p.instrument)   errs.push('Missing "instrument"');
+  if(!p.instrument)   errs.push('Missing "instrument" / "security"');
   else {
     const i = p.instrument;
     ['id','settlementDate','maturityDate','dayBasis','faceValue','purchasePrice'].forEach(k=>{
@@ -2003,20 +2163,28 @@ function validatePayload(p){
 function applyJsonFromModal(){
   const raw = byId('json-input').value.trim();
   const errBox = byId('json-modal-errors');
-  let payload;
-  try { payload = JSON.parse(raw); }
+  let rawPayload;
+  try { rawPayload = JSON.parse(raw); }
   catch(e){
     errBox.style.display = 'block';
     errBox.textContent = 'Parse error: ' + e.message;
     return;
   }
+  // Accept Investran CRM v2 envelope OR the flat legacy shape.
+  const normalized = normalizeInvestranPayload(rawPayload);
+  if(!normalized.ok){
+    errBox.style.display = 'block';
+    errBox.textContent = (normalized.errors || ['Unknown payload shape']).join('\n');
+    return;
+  }
+  const payload = { period: normalized.period, instrument: normalized.instrument };
   const errs = validatePayload(payload);
   if(errs.length){
     errBox.style.display = 'block';
     errBox.textContent = errs.join('\n');
     return;
   }
-  // Build a fresh instrument (uniquify the id so we don't clobber the presets).
+  // Build a fresh instrument (uniquify the id so we don't clobber existing ones).
   const base = payload.instrument;
   let newId = base.id || 'imported';
   if(INSTRUMENTS.some(x => x.id === newId)) newId = newId + '-' + Date.now().toString(36);
@@ -2048,6 +2216,33 @@ function applyJsonFromModal(){
 function roundFloat(v){
   if(typeof v === 'number' && Number.isFinite(v)) return Math.round(v * 1e6) / 1e6;
   return v;
+}
+// Cheap deterministic hash for the DIU idempotency key shown in the HTML.
+// The authoritative key is recomputed by investran_outbound.py using SHA256,
+// so this is informational only. 10 hex chars matches the Python truncation.
+function djb2Hex(s){
+  let h = 5381 >>> 0;
+  for(let i=0; i<s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(16).padStart(10,'0').slice(0,10);
+}
+function buildInvestranBatch(instr, period, entries){
+  const sig = JSON.stringify({
+    id: instr.id, begin: period.begin, end: period.end, rows: entries.length
+  });
+  const extKey = `calc-${instr.id}-${period.begin}-${period.end}-${djb2Hex(sig)}`;
+  return {
+    api: 'DataImport/v1',
+    endpoint: '/batches',
+    envelope: {
+      templateName:  'GL_JOURNAL_V1',
+      externalKey:   extKey,
+      batchType:     'STANDARD',
+      batchComments: `Posted by income-calculator · ${instr.id} · ${period.begin}→${period.end}`,
+      generatedAt:   new Date().toISOString(),
+      engineVersion: '1.0.0',
+      _note: 'investran_outbound.py recomputes externalKey with SHA256 before POST; this value is informational.'
+    }
+  };
 }
 function deepRound(obj){
   if(Array.isArray(obj)) return obj.map(deepRound);
@@ -2143,7 +2338,12 @@ function buildOutputPayload(){
       nonUseFee: r.nonUseFee, cumNonUseFee: r.cumNonUseFee,
       hasEvent: r.hasEvent
     })),
-    journalEntries: state.diu || []
+    journalEntries: state.diu || [],
+    // Investran DIU batch envelope — matches ./investran-diu-output.sample.json.
+    // Feed this file directly to investran_outbound.py to POST the JEs.
+    investranBatch: buildInvestranBatch(i,
+      { begin: state.begin, end: state.end, last: state.last },
+      state.diu || [])
   };
 }
 function exportJson(){
