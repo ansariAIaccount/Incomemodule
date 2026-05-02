@@ -341,6 +341,7 @@
               <div class="mat-field"><label>Face Value</label><input id="f-face" type="number" step="0.01" class="mat-input"/></div>
               <div class="mat-field"><label>Purchase Price</label><input id="f-price" type="number" step="0.01" class="mat-input"/></div>
               <div class="mat-field"><label>Commitment (Revolver)</label><input id="f-commit" type="number" step="0.01" class="mat-input"/></div>
+              <div class="mat-field"><label>Covered Amount (Guarantee)</label><input id="f-covered" type="number" step="0.01" class="mat-input" placeholder="for guarantee instruments"/></div>
               <div class="mat-field"><label>Settlement Date</label><input id="f-settle" type="date" class="mat-input"/></div>
               <div class="mat-field"><label>Maturity Date</label><input id="f-maturity" type="date" class="mat-input"/></div>
               <div class="mat-field"><label>Amort Start (Req 10)</label><input id="f-amortStart" type="date" class="mat-input" title="Optional — defaults to settlement date"/></div>
@@ -377,6 +378,7 @@
                 <select id="f-couponType" class="mat-select">
                   <option value="Fixed">Fixed</option>
                   <option value="Floating">Floating</option>
+                  <option value="SONIA">Compounded SONIA + Margin (RFR)</option>
                 </select>
               </div>
               <div class="mat-field"><label>Coupon Rate</label><input id="f-coupon" type="number" step="0.0001" class="mat-input" placeholder="e.g. 0.12 = 12%"/></div>
@@ -444,6 +446,67 @@
               <div id="events-table"></div>
             </div>
           </div>
+
+          <!-- Fees & IFRS treatment -->
+          <div class="section-card col-span-12">
+            <header>
+              <span class="material-icons-outlined">request_quote</span>
+              <h3>Fees · IFRS 9 / 15 Treatment</h3>
+              <span class="ml-auto text-[11px] text-gray-500">Arrangement, commitment, guarantee &amp; other fees. Indexed (% × base × dcf) or flat amounts.</span>
+              <button id="btn-add-fee" class="mat-btn ghost ml-3"><span class="material-icons-outlined text-[18px]">add</span>Add fee</button>
+            </header>
+            <div class="body">
+              <div id="fees-table"></div>
+              <div class="mt-3 grid grid-cols-12 gap-3">
+                <div class="mat-field col-span-12 md:col-span-3">
+                  <label>IFRS 9 Classification</label>
+                  <select id="f-ifrs9" class="mat-select">
+                    <option value="AmortisedCost">Amortised Cost (HTC, SPPI passes)</option>
+                    <option value="FVOCI">FVOCI (HTC&amp;Sell, SPPI passes)</option>
+                    <option value="FVTPL">FVTPL (other / SPPI fails)</option>
+                  </select>
+                </div>
+                <div class="mat-field col-span-6 md:col-span-3">
+                  <label>ECL Stage</label>
+                  <select id="f-ecl" class="mat-select">
+                    <option value="1">Stage 1 — 12-month ECL</option>
+                    <option value="2">Stage 2 — Lifetime ECL (perf.)</option>
+                    <option value="3">Stage 3 — Credit-impaired</option>
+                  </select>
+                </div>
+                <div class="mat-field col-span-6 md:col-span-3"><label>PD (annual)</label><input id="f-pd" type="number" step="0.0001" class="mat-input" placeholder="e.g. 0.005"/></div>
+                <div class="mat-field col-span-6 md:col-span-3"><label>LGD</label><input id="f-lgd" type="number" step="0.01" class="mat-input" placeholder="e.g. 0.40"/></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SONIA / Margin ratchet + ESG -->
+          <div class="section-card col-span-12">
+            <header>
+              <span class="material-icons-outlined">trending_up</span>
+              <h3>SONIA / RFR · Margin Ratchet &amp; ESG Adjustment</h3>
+              <span class="ml-auto text-[11px] text-gray-500">Date-effective margin steps and ESG adjustment. Active when Coupon Type = Compounded SONIA.</span>
+              <button id="btn-add-margin" class="mat-btn ghost ml-3"><span class="material-icons-outlined text-[18px]">add</span>Add margin step</button>
+            </header>
+            <div class="body grid grid-cols-12 gap-3">
+              <div class="col-span-12">
+                <div id="margin-table"></div>
+              </div>
+              <div class="mat-field col-span-6 md:col-span-3"><label>SONIA Base Rate (today)</label><input id="f-rfrBase" type="number" step="0.00001" class="mat-input" placeholder="e.g. 0.0475"/></div>
+              <div class="mat-field col-span-6 md:col-span-3"><label>Lookback (RFR Banking Days)</label><input id="f-rfrLookback" type="number" step="1" class="mat-input" placeholder="5"/></div>
+              <div class="mat-field col-span-6 md:col-span-3"><label>ESG Adj From</label><input id="f-esgFrom" type="date" class="mat-input"/></div>
+              <div class="mat-field col-span-6 md:col-span-3"><label>ESG Adj (bps, ± allowed)</label><input id="f-esgBps" type="number" step="0.1" class="mat-input" placeholder="e.g. -2.5"/></div>
+              <div class="mat-field col-span-6 md:col-span-3"><label>Business Day Convention</label>
+                <select id="f-bdc" class="mat-select">
+                  <option value="none">None</option>
+                  <option value="modifiedFollowing">Modified Following</option>
+                  <option value="following">Following</option>
+                  <option value="preceding">Preceding</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
 
@@ -757,18 +820,35 @@ function buildSchedule(instr){
   const basis = instr.dayBasis || 'ACT/360';
   const events = (instr.principalSchedule||[]).slice().sort((a,b)=> a.date.localeCompare(b.date));
 
-  // For revolvers / loans the "balance" starts at initial draw (first event w/ type=draw at settle) or faceValue
+  // For revolvers / loans the "balance" starts at initial draw (first event w/ type=draw at settle) or faceValue.
+  // Facility / deferred-drawdown case: if the principalSchedule has draws AFTER
+  // settlement and NO initial/draw event at settlement, the loan starts at
+  // zero balance (e.g. SP023 / Libra 2 — signed Oct 2024, first draw Feb 2026).
   const initialDraw = events.find(e => e.date===toISO(settle) && (e.type==='draw' || e.type==='initial'));
-  let balance       = initialDraw ? initialDraw.amount : (instr.faceValue||0);
+  const hasFutureDraws = events.some(e => e.type === 'draw' && e.date > toISO(settle));
+  let balance;
+  if(initialDraw)            balance = initialDraw.amount;
+  else if(hasFutureDraws)    balance = 0;       // facility with deferred drawdown
+  else                       balance = instr.faceValue || 0;
   let drawnBalance  = balance;
   const commitment  = instr.commitment ?? instr.faceValue;
 
   // Carrying value start = purchase price if given, else face
   let carryingValue = (instr.purchasePrice ?? instr.faceValue) || 0;
 
-  // Precompute total life (years) and a rough cashflow set for IRR methods
+  // Precompute total life (years) and a rough cashflow set for IRR methods.
+  // For SONIA / CompoundedRFR coupons the fixedRate is 0 — derive an
+  // indicative coupon from the rfr base + first margin step + ESG adj so the
+  // EIR solver can still project cashflows.
   const totalDays = Math.round((maturity-settle)/ONE_DAY);
-  const couponRateNominal = instr.coupon?.fixedRate ?? 0;
+  let couponRateNominal = instr.coupon?.fixedRate ?? 0;
+  if(!couponRateNominal && (instr.coupon?.type === 'SONIA' || instr.coupon?.type === 'CompoundedRFR')){
+    const rfrBase = instr.rfr?.baseRate ?? 0;
+    const firstStep = (instr.marginSchedule || [])[0];
+    const marginBps = firstStep?.marginBps ?? ((instr.coupon?.spread ?? 0) * 10000);
+    const esgBps    = instr.esgAdjustment?.deltaBps ?? 0;
+    couponRateNominal = rfrBase + (marginBps + esgBps)/10000;
+  }
 
   // Effective interest yield (y):
   //   method effectiveInterestPrice  -> solve from PP
@@ -828,6 +908,65 @@ function buildSchedule(instr){
   let cumAmort = 0;
   let cumNonUseFee = 0;
 
+  // ---- Fee accrual setup (multi-fee) ----------------------------------
+  // instr.fees: [{ id, kind, label, mode, rate, base, amount, frequency,
+  //                paymentDate, ifrs, accrueFrom, accrueTo }]
+  //   kind        : arrangement | commitment | guarantee | other
+  //   mode        : 'percent' (rate × base × dcf) | 'flat' (amount on paymentDate)
+  //   base        : commitment | undrawn | drawn | covered | face
+  //   ifrs        : IFRS9-EIR | IFRS15-overTime | IFRS15-pointInTime
+  //   frequency   : oneOff | daily | monthly | quarterly | semiAnnual | annual
+  // EIR-classified fees (IFRS 9) accrete into carrying value as deferred
+  // income; recognised pro-rata over the life. IFRS 15 fees are recognised
+  // over the service period (commitment/guarantee) or at the point-in-time.
+  const fees = Array.isArray(instr.fees) ? instr.fees : [];
+  const feeAccum = fees.map(f => ({
+    id: f.id, kind: f.kind, label: f.label || f.kind, ifrs: f.ifrs || 'IFRS15-overTime',
+    cumAccrued: 0, cumRecognised: 0, cumPaid: 0
+  }));
+  const totalLifeDays = Math.max(1, Math.round((maturity - settle)/ONE_DAY));
+  // For IFRS9-EIR fees: deferred income at t0 = sum(flat one-off) + 0 (% accrue daily over life)
+  let deferredEIRPool = 0;
+  for(const f of fees){
+    if(f.ifrs === 'IFRS9-EIR' && f.mode === 'flat' && f.frequency === 'oneOff'){
+      deferredEIRPool += (f.amount || 0);
+      // Reduce initial carrying value by the deferred fee (cash received at signing
+      // is offset against carrying amount; it accretes back into interest income).
+      carryingValue -= (f.amount || 0);
+    } else if(f.ifrs === 'IFRS9-EIR' && f.mode === 'percent' && f.frequency === 'oneOff'){
+      const baseAmt = ((b)=>{
+        if(b==='commitment') return commitment;
+        if(b==='face')       return instr.faceValue || 0;
+        if(b==='drawn')      return drawnBalance;
+        if(b==='covered')    return instr.coveredAmount || 0;
+        return commitment;
+      })(f.base);
+      const oneOff = baseAmt * (f.rate || 0);
+      deferredEIRPool += oneOff;
+      carryingValue -= oneOff;
+    }
+  }
+  const eirDailyAccretion = deferredEIRPool > 0 ? (deferredEIRPool / totalLifeDays) : 0;
+
+  // ---- SONIA / margin ratchet helpers ---------------------------------
+  // instr.marginSchedule: [{ from: ISO, to: ISO|null, marginBps: number }]
+  // instr.esgAdjustment : { from: ISO, deltaBps: number }   (e.g., -2.5)
+  // instr.rfr            : { index, baseRate, lookbackDays, rounding }
+  function lookupMarginBps(dateISO){
+    const ms = instr.marginSchedule || [];
+    for(const m of ms){
+      const f = m.from || '0000-01-01';
+      const t = m.to   || '9999-12-31';
+      if(dateISO >= f && dateISO <= t) return m.marginBps;
+    }
+    return null;
+  }
+  function esgDeltaBps(dateISO){
+    const e = instr.esgAdjustment;
+    if(!e || !e.from) return 0;
+    return dateISO >= e.from ? (e.deltaBps || 0) : 0;
+  }
+
   const rows = [];
   const days = eachDay(settle, maturity);
   for(let i=0; i<days.length; i++){
@@ -839,15 +978,29 @@ function buildSchedule(instr){
     for(const e of evs){
       if(e.type==='initial'){ initial += e.amount; /* already counted into starting balance */ }
       else if(e.type==='draw'){ draw += e.amount; balance += e.amount; drawnBalance += e.amount; carryingValue += e.amount; }
-      else if(e.type==='paydown'){ paydown += e.amount; balance -= e.amount; drawnBalance -= e.amount; carryingValue -= e.amount; }
+      // 'repayment' is an alias for 'paydown' used by guarantee / equity-fund
+      // examples — semantically clearer when reading the schedule.
+      else if(e.type==='paydown' || e.type==='repayment'){ paydown += e.amount; balance -= e.amount; drawnBalance -= e.amount; carryingValue -= e.amount; }
     }
 
     // ----- Determine effective coupon rate for today -----
     let couponRate = instr.coupon?.fixedRate ?? 0;
     let floatingRate = instr.coupon?.floatingRate ?? 0;
+    const todayISO = toISO(d);
     if(instr.coupon?.type === 'Floating'){
       // Apply spread + cap/floor
       let r = floatingRate + (instr.coupon.spread ?? 0);
+      if(instr.coupon.floor != null) r = Math.max(r, instr.coupon.floor);
+      if(instr.coupon.cap   != null) r = Math.min(r, instr.coupon.cap);
+      couponRate = r;
+    } else if(instr.coupon?.type === 'SONIA' || instr.coupon?.type === 'CompoundedRFR'){
+      // RFR (SONIA) + ratcheted margin + optional ESG adjustment.
+      // Lookback period is informational here; we use today's RFR fix.
+      const rfrBase = (instr.rfr?.baseRate ?? floatingRate) || 0;
+      const baseMarginBps = lookupMarginBps(todayISO);
+      const marginBps = (baseMarginBps != null ? baseMarginBps : (instr.coupon.spread ?? 0)*10000)
+                       + esgDeltaBps(todayISO);
+      let r = rfrBase + marginBps/10000;
       if(instr.coupon.floor != null) r = Math.max(r, instr.coupon.floor);
       if(instr.coupon.cap   != null) r = Math.min(r, instr.coupon.cap);
       couponRate = r;
@@ -866,7 +1019,14 @@ function buildSchedule(instr){
     const dcf = skipToday ? 0 : dayCountFactor(basis, d);
 
     // ----- Daily cash accrual -----
-    const dailyCash = balance * couponRate * dcf;
+    // For guarantee / equity instruments NWF does not earn the underlying
+    // loan's coupon (only fees / dividends), so suppress interest accrual.
+    // The coupon rate stays on the row for reference (drives the underlying
+    // loan's behaviour and any rate-linked guarantee fee calcs).
+    const noInterest = instr.instrumentKind === 'guarantee'
+                    || instr.instrumentKind === 'equity-fund'
+                    || instr.instrumentKind === 'equity-direct';
+    const dailyCash = noInterest ? 0 : (balance * couponRate * dcf);
     cumCashAccrued += dailyCash;
     cumInterestEarned += dailyCash;
 
@@ -883,6 +1043,89 @@ function buildSchedule(instr){
     if(instr.nonUseFee?.enabled && commitment > drawnBalance){
       dailyNonUse = (commitment - drawnBalance) * (instr.nonUseFee.rate ?? 0) * dcf;
       cumNonUseFee += dailyNonUse;
+    }
+
+    // ----- Multi-fee daily accrual (IFRS 9 / 15 aware) -----
+    // Each fee accrues on its own base × rate × dcf when in-window. EIR-classified
+    // fees feed deferredEIRPool (one-off side already booked at t0); the pool
+    // accretes daily into interest income (via carryingValue accretion). IFRS 15
+    // fees recognise income directly on the fee line.
+    let dailyFees = 0;
+    const dailyFeeBreakdown = {};
+    for(let fi=0; fi<fees.length; fi++){
+      const f = fees[fi];
+      const acc = feeAccum[fi];
+      const accFrom = f.accrueFrom ? parseISO(f.accrueFrom) : settle;
+      const accTo   = f.accrueTo   ? parseISO(f.accrueTo)   : maturity;
+      if(d < accFrom || d > accTo) continue;
+      let amt = 0;
+      // One-off fees (arrangement, structuring) are captured into the
+      // deferredEIRPool at t0 — skip the daily accrual loop entirely so
+      // they don't double-count. They surface via dailyEIRAccretion (IFRS 9)
+      // or as a point-in-time recognition row on paymentDate (IFRS 15).
+      if(f.frequency === 'oneOff') {
+        // Point-in-time IFRS 15: recognise the full amount on paymentDate.
+        if(f.ifrs === 'IFRS15-pointInTime' && f.paymentDate && toISO(d) === f.paymentDate){
+          if(f.mode === 'percent'){
+            const baseAmt = (b => {
+              if(b==='commitment') return commitment;
+              if(b==='face')       return instr.faceValue || 0;
+              if(b==='drawn')      return drawnBalance;
+              if(b==='covered')    return instr.coveredAmount || 0;
+              return commitment;
+            })(f.base || 'commitment');
+            amt = baseAmt * (f.rate || 0);
+          } else {
+            amt = f.amount || 0;
+          }
+        }
+        // IFRS9-EIR / IFRS15-overTime one-offs: skip — already in EIR pool.
+      } else if(f.mode === 'percent' || f.mode === 'marginLinked'){
+        // For guarantee instruments, "drawn" / "undrawn" naturally refer to
+        // the covered tranche, not the full facility. Fall back to commitment-
+        // based for non-guarantee loans so existing behaviour is preserved.
+        const isGuar = instr.instrumentKind === 'guarantee';
+        const cap = isGuar && instr.coveredAmount ? instr.coveredAmount : commitment;
+        const baseAmt = (b => {
+          if(b==='commitment') return commitment;
+          if(b==='undrawn')    return Math.max(0, cap - drawnBalance);
+          if(b==='drawn')      return Math.min(drawnBalance, cap);
+          if(b==='covered')    return instr.coveredAmount || 0;
+          if(b==='face')       return instr.faceValue || 0;
+          return cap;
+        })(f.base || 'undrawn');
+        if(f.mode === 'marginLinked'){
+          // UK convention: commitment fee = marginMultiple × current margin × undrawn × dcf.
+          // Margin includes ESG adjustment so the fee tracks the contractual
+          // economics. marginMultiple defaults to 0.35 (35%).
+          const baseMarginBps = lookupMarginBps(todayISO);
+          const marginBps = (baseMarginBps != null ? baseMarginBps
+                              : (instr.coupon?.spread ?? 0) * 10000)
+                            + esgDeltaBps(todayISO);
+          const effectiveRate = (marginBps/10000) * (f.marginMultiple ?? 0.35);
+          amt = baseAmt * effectiveRate * dcf;
+        } else {
+          amt = baseAmt * (f.rate || 0) * dcf;
+        }
+      } else if(f.mode === 'flat'){
+        // Spread flat amount linearly across accrual window
+        const lifeDays = Math.max(1, Math.round((accTo - accFrom)/ONE_DAY) + 1);
+        amt = (f.amount || 0) / lifeDays;
+      }
+      if(amt){
+        acc.cumAccrued += amt;
+        dailyFees += amt;
+        dailyFeeBreakdown[acc.label] = (dailyFeeBreakdown[acc.label]||0) + amt;
+      }
+    }
+
+    // ----- EIR accretion of deferred IFRS 9 fees -----
+    // Deferred income (from arrangement / OID-style fees) accretes back into
+    // interest income via increasing the carrying value daily.
+    let dailyEIRAccretion = 0;
+    if(eirDailyAccretion > 0){
+      dailyEIRAccretion = eirDailyAccretion;
+      carryingValue += dailyEIRAccretion;
     }
 
     // ----- Capitalization (PIK) -----
@@ -940,12 +1183,19 @@ function buildSchedule(instr){
       cumAmort,
       nonUseFee: dailyNonUse,
       cumNonUseFee,
+      // IFRS-aware fee fields
+      dailyFees,
+      feeBreakdown: dailyFeeBreakdown,
+      dailyEIRAccretion,
+      cumEIRAccretion: (rows.length ? rows[rows.length-1].cumEIRAccretion : 0) + dailyEIRAccretion,
       hasEvent: evs.length > 0 || capitalized > 0
     });
   }
   // Stash the engine's applied yield so computeEIR can align its effectiveYield
   // with the value the scheduler actually used.
   rows.effectiveYield = effectiveYield;
+  rows.feeBreakdown   = feeAccum;          // per-fee cumulative accrual
+  rows.deferredEIRPool = deferredEIRPool;  // total IFRS-9 deferred income at t0
   return rows;
 }
 
@@ -953,6 +1203,16 @@ function buildSchedule(instr){
 function summarize(rows, beginISO, endISO){
   const win = rows.filter(r => r.date >= beginISO && r.date <= endISO);
   const sum = (arr, k) => arr.reduce((a,r)=> a + (r[k]||0), 0);
+  // Build a per-fee breakdown for the window by walking each day's
+  // feeBreakdown map and aggregating by label.
+  const feeBreakdown = {};
+  for(const r of win){
+    if(r.feeBreakdown){
+      for(const [k,v] of Object.entries(r.feeBreakdown)){
+        feeBreakdown[k] = (feeBreakdown[k] || 0) + (v || 0);
+      }
+    }
+  }
   return {
     rows: win,
     totalCashAccrual: sum(win,'dailyCash'),
@@ -960,6 +1220,9 @@ function summarize(rows, beginISO, endISO){
     totalCapitalized: sum(win,'capitalized'),
     totalAmort:       sum(win,'amortDaily'),
     totalNonUseFee:   sum(win,'nonUseFee'),
+    totalFees:        sum(win,'dailyFees'),
+    totalEIRAccretion: sum(win,'dailyEIRAccretion'),
+    feeBreakdown,                  // { 'Arrangement Fee': 12345.67, ... }
     daysCount:        win.length,
     openingBalance:   win[0]?.balance ?? 0,
     closingBalance:   win[win.length-1]?.balance ?? 0,
@@ -1013,6 +1276,23 @@ function generateDIU(instr, summary){
   if(summary.totalNonUseFee > 0.005){
     add('Non-Use Fee Income', summary.totalNonUseFee, false, '40200', summary.periodEnd, `Non-use fee for ${summary.periodEnd}`);
     add('Non-Use Fee Receivable', summary.totalNonUseFee, true, '23100', summary.periodEnd, `Non-use fee for ${summary.periodEnd}`);
+    jeIndex++;
+  }
+  // EIR accretion of deferred IFRS-9 fees (arrangement / OID-style)
+  // DR Loan carrying value (40110) / CR Interest income (40100)
+  if(Math.abs(summary.totalEIRAccretion || 0) > 0.005){
+    const v = summary.totalEIRAccretion;
+    add('EIR Fee Accretion (IFRS 9)',          v, false, '40100', summary.periodEnd, `IFRS 9 EIR fee accretion for ${summary.periodEnd}`);
+    add('EIR Fee Accretion Offset (IFRS 9)',   v, true,  '40110', summary.periodEnd, `IFRS 9 EIR fee accretion for ${summary.periodEnd}`);
+    jeIndex++;
+  }
+  // IFRS 15 fees — by label, posted to fee-income / fee-receivable pair.
+  // GL split: 40250 Fee Income (commitment / arrangement / guarantee), 23150 Fee Receivable.
+  const fb = summary.feeBreakdown || {};
+  for(const [label, amt] of Object.entries(fb)){
+    if(Math.abs(amt) <= 0.005) continue;
+    add(`${label} Income (IFRS 15)`,     amt, false, '40250', summary.periodEnd, `${label} accrual for ${summary.periodEnd}`);
+    add(`${label} Receivable`,           amt, true,  '23150', summary.periodEnd, `${label} accrual for ${summary.periodEnd}`);
     jeIndex++;
   }
   return entries;
@@ -1127,6 +1407,505 @@ const INSTRUMENTS = [
     nonUseFee: { enabled:true, rate: 0.005 }, // 50 bps on undrawn
     type:'nonUseFeeFacility',
     preset:'Northwind RCF · Revolver + Non-use Fee'
+  },
+  {
+    // Direct lending / private credit unitranche term loan — the bread-and-butter
+    // middle-market financing: 1L unitranche, floating SOFR + 600 with a 1% floor,
+    // 1% OID at issue, optional 2% PIK toggle (quarterly cap), 1%/yr amortization,
+    // bullet at maturity. Mirrors what a BDC or direct-lending fund would book.
+    id:'privateCredit',
+    legalEntity:'FIS Direct Lending Fund IV', leid: 31,
+    deal:'Meridian Healthcare Services',
+    position:'Meridian Unitranche TL',
+    incomeSecurity:'Meridian Unitranche Term Loan (SOFR + 600, 1% OID, 2% PIK)',
+    faceValue: 35_000_000,
+    purchasePrice: 34_650_000, // 99.0 — 100 bps OID
+    commitment: 35_000_000,
+    settlementDate: '2025-03-15',
+    maturityDate:   '2031-03-15',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis: 'ACT/360',
+    coupon: {
+      type:'Floating',
+      fixedRate: 0,
+      floatingRate: 0.0520,   // SOFR base
+      spread: 0.0600,         // 600 bps
+      floor: 0.0100,          // 1% SOFR floor
+      cap: null
+    },
+    pik: { enabled:true, rate: 0.0200, capitalizationFrequency: 'Quarterly' },
+    principalRepayment: 'Scheduled',
+    principalSchedule: [
+      { date:'2025-03-15', type:'initial',  amount: 35_000_000 },
+      { date:'2026-03-15', type:'paydown',  amount:    350_000 }, // 1%/yr mandatory amort
+      { date:'2027-03-15', type:'paydown',  amount:    350_000 },
+      { date:'2028-03-15', type:'paydown',  amount:    350_000 },
+      { date:'2029-03-15', type:'paydown',  amount:    350_000 },
+      { date:'2030-03-15', type:'paydown',  amount:    350_000 },
+      // Bullet of remaining principal at maturity
+    ],
+    amortization: { method:'effectiveInterestPrice' }, // accrete OID over life
+    nonUseFee: { enabled:false, rate:0 },
+    type:'pikNoteVar',
+    preset:'Meridian Unitranche · Private Credit (SOFR + 600, 1% OID, 2% PIK)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Libra 2 / SP023 — UK GBP infrastructure facility, IFRS 9/15 worked example
+    // Source: NEW INCOME Calculation requirements.xlsx · Debt Example sheet.
+    //
+    // £25M HSBC Facility B4 (100%), Compounded SONIA + ratcheted Margin
+    // signed 8 Oct 2024, term 10 Oct 2031, ACT/365, modified following.
+    // - Arrangement fee 1.75% paid 13/10/2024 (IFRS 9 - capitalised into EIR)
+    // - Commitment fee 0.35% on undrawn, paid quarterly (IFRS 15 - over time)
+    // - ESG margin adjustment of -2.5 bps from 22 May 2025 onwards
+    // - Margin ratchet schedule (bps): 400 → 425 → 450 → 450 → 475 → 500 → 525
+    // - Two drawdowns: £15M actual on 17/2/2026 and £10M forecast on 30/6/2026
+    // ----------------------------------------------------------------
+    id:'libra2',
+    legalEntity:'NWF Sustainable Infrastructure', leid: 42,
+    deal:'Libra 2',
+    position:'HSBC Facility B4 - 100%',
+    incomeSecurity:'Libra 2 · HSBC Facility B4 (Compounded SONIA + Margin)',
+    counterpartyId:'SP023',
+    transactionId:'SP023',
+    bilateralFlag:'Bilateral',
+    agentName:'HSBC Bank',
+    currency:'GBP',
+    faceValue: 25_000_000,
+    purchasePrice: 25_000_000,
+    commitment: 25_000_000,
+    settlementDate: '2024-10-08',           // signing date
+    availabilityEnd: '2029-10-10',
+    maturityDate:   '2031-10-10',           // termination date
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis: 'ACT/365',
+    businessDayConvention: 'modifiedFollowing',
+    holidayCalendar: 'ukBank',
+    skipHolidays: false,
+    coupon: {
+      type:'SONIA',                          // Compounded RFR + Margin
+      fixedRate: 0,
+      floatingRate: 0,                       // resolved from rfr.baseRate at runtime
+      spread: 0,                             // margin comes from marginSchedule
+      floor: null, cap: null
+    },
+    rfr: {
+      index: 'SONIA',
+      baseRate: 0.0475,                      // illustrative SONIA fix (4.75%) — replace with feed
+      lookbackDays: 5,                       // 5 RFR Banking Days
+      rounding: 5                            // 5 decimal places
+    },
+    marginSchedule: [
+      { from:'2024-10-08', to:'2025-03-17', marginBps: 400 },
+      { from:'2025-03-18', to:'2025-05-21', marginBps: 425 },
+      { from:'2025-05-22', to:'2026-03-17', marginBps: 450 },
+      { from:'2026-03-18', to:'2027-03-17', marginBps: 450 },
+      { from:'2027-03-18', to:'2028-03-17', marginBps: 475 },
+      { from:'2028-03-18', to:'2029-03-17', marginBps: 500 },
+      { from:'2029-03-18', to:'2030-03-21', marginBps: 525 },
+      { from:'2030-03-22', to:'2031-10-10', marginBps: 525 }
+    ],
+    esgAdjustment: { from:'2025-05-22', deltaBps: -2.5 },   // ESG margin reduction
+    pik: { enabled:false, rate:0, capitalizationFrequency:'Monthly' },
+    principalRepayment: 'AtMaturity',          // bullet
+    principalSchedule: [
+      // Single £25M drawdown on 1 April 2026 — matches the reference SP023
+      // ledger which models the facility as drawn in one tranche on that date.
+      // The requirements sheet shows two sub-tranches (SP023_4 £15M actual,
+      // SP023_1 £10M forecast) but for end-state ledger consistency the
+      // reference software books a single drawdown.
+      { date:'2026-04-01', type:'draw', amount: 25_000_000, drawdownId:'SP023', status:'actual' }
+    ],
+    // Drawn at par (PP = face). The deferred arrangement fee is recognised
+    // via the IFRS 9 EIR accretion mechanism (separate from amortization),
+    // so no discount/premium amortization is needed here.
+    amortization: { method:'none' },
+    nonUseFee: { enabled:false, rate:0 },
+    // ---- Multiple fees — IFRS 9 / IFRS 15 aware ----------------------
+    fees: [
+      {
+        id:'arrangement',
+        kind:'arrangement',
+        label:'Arrangement Fee',
+        mode:'percent',                       // 1.75% × commitment = £437,500
+        rate: 0.0175,
+        base:'commitment',
+        frequency:'oneOff',
+        paymentDate:'2024-10-13',
+        // Reference SP023 software recognises this on payment date (point-in-time)
+        // rather than capitalising into EIR. Switch to IFRS15-pointInTime to tie.
+        ifrs:'IFRS15-pointInTime',
+        notes:'1.75% × £25M commitment = £437,500 paid 13/10/2024. Recognised on payment date (IFRS 15 point-in-time) — matches reference software.'
+      },
+      {
+        id:'commitment',
+        kind:'commitment',
+        label:'Commitment Fee',
+        // UK loan convention: commitment fee = 35% × current margin × undrawn × dcf.
+        // The "0.35" in the requirements sheet means 35% (of margin), not 0.35% flat.
+        // Engine resolves margin from the marginSchedule + ESG adjustment for each day.
+        mode:'marginLinked',
+        marginMultiple: 0.35,
+        base:'undrawn',
+        frequency:'quarterly',
+        paymentSchedule:'lastDayOfEach3MonthPeriod',
+        accrueFrom:'2024-10-08',
+        accrueTo:'2029-10-10',                 // through availability period
+        ifrs:'IFRS15-overTime',
+        notes:'35% of margin × undrawn commitment × dcf. Ratchets and ESG adjustment flow through automatically.'
+      }
+    ],
+    // ---- IFRS 9 classification ---------------------------------------
+    ifrs: {
+      ifrs9Classification:'AmortisedCost',
+      sppiPassed: true,
+      businessModel:'HoldToCollect',
+      ecLStage: 1,
+      pdAnnual: 0.005,
+      lgd: 0.40
+    },
+    type:'simpleDaily',                      // base type; SONIA coupon driven by ratchet table
+    preset:'Libra 2 · GBP SONIA + Ratcheted Margin (IFRS 9/15 fees)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Volt — financial guarantee on a £1bn underlying loan (covered £800m)
+    // Source: NEW INCOME Calculation requirements.xlsx · Guarantee Example
+    //
+    // Single guarantee covering an underlying loan from Bank of America.
+    // Income to NWF = guarantee fee on drawn covered portion + NWF commitment
+    // fee on undrawn covered portion + arrangement fee (IFRS 9, capitalised).
+    // Underlying loan: SONIA + 0.84% margin per annum, scheduled repayments.
+    // ----------------------------------------------------------------
+    id:'voltGuarantee',
+    instrumentKind:'guarantee',
+    legalEntity:'NWF Sustainable Infrastructure', leid: 42,
+    deal:'Volt',
+    position:'Volt Financial Guarantee (Covered Tranche)',
+    incomeSecurity:'Volt · Financial Guarantee on £1bn BoA Loan (£800m covered)',
+    counterpartyId:'CP0112',
+    transactionId:'GP017 & GP018',
+    bilateralFlag:'Bilateral',
+    agentName:'Bank of America',
+    currency:'GBP',
+    // For a guarantee instrument we treat:
+    //   faceValue / commitment = total facility (£1bn)
+    //   coveredAmount          = guaranteed portion (£800m)
+    faceValue:    1_000_000_000,
+    purchasePrice: 0,                          // no principal investment
+    commitment:   1_000_000_000,
+    coveredAmount: 800_000_000,
+    settlementDate: '2025-12-18',              // signing
+    availabilityEnd:'2028-12-18',              // 36-month availability
+    maturityDate:   '2037-12-17',              // termination
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis: 'ACT/365',
+    businessDayConvention:'modifiedFollowing',
+    holidayCalendar:'ukBank',
+    skipHolidays:false,
+    // Underlying-loan coupon — informational here; income is driven by fees.
+    coupon: { type:'SONIA', fixedRate:0, floatingRate:0, spread: 0.0084, floor:null, cap:null },
+    rfr: { index:'SONIA', baseRate: 0.0475, lookbackDays: 5, rounding: 5 },
+    marginSchedule: [
+      // Underlying loan margin = 0.84% flat for covered tranche
+      { from:'2025-12-18', to:'2037-12-17', marginBps: 84 }
+    ],
+    pik: { enabled:false, rate:0 },
+    principalRepayment:'Scheduled',
+    // Covered-tranche disbursement schedule + 18-tranche repayment ladder
+    // Drawdown profile: 6 ratable tranches of £133,333,333.33 (= £800m / 6)
+    // over the 3-year availability period — matches the reference SP023 ledger.
+    // The contractual disbursement table from the requirements sheet has 3
+    // lumpy tranches (£400m + £200m + £200m); the reference software books
+    // them ratably across the 6 interest periods.
+    principalSchedule: [
+      { date:'2026-06-30', type:'draw', amount: 133_333_333.33, status:'actual'   },
+      { date:'2026-12-31', type:'draw', amount: 133_333_333.33, status:'actual'   },
+      { date:'2027-06-30', type:'draw', amount: 133_333_333.33, status:'forecast' },
+      { date:'2027-12-31', type:'draw', amount: 133_333_333.33, status:'forecast' },
+      { date:'2028-06-30', type:'draw', amount: 133_333_333.33, status:'forecast' },
+      { date:'2028-12-29', type:'draw', amount: 133_333_333.35, status:'forecast' },
+      // Repayments — 18 × £44,444,444.44 = £800m (matches reference ledger
+      // exactly; contractual amounts are slightly different at £44,444,800
+      // per period but the reference uses round £800m / 18).
+      { date:'2029-06-29', type:'repayment', amount: 44_444_444.44 },
+      { date:'2029-12-31', type:'repayment', amount: 44_444_444.44 },
+      { date:'2030-06-28', type:'repayment', amount: 44_444_444.44 },
+      { date:'2030-12-31', type:'repayment', amount: 44_444_444.44 },
+      { date:'2031-06-30', type:'repayment', amount: 44_444_444.44 },
+      { date:'2031-12-31', type:'repayment', amount: 44_444_444.44 },
+      { date:'2032-05-28', type:'repayment', amount: 44_444_444.44 },
+      { date:'2032-12-31', type:'repayment', amount: 44_444_444.44 },
+      { date:'2033-06-30', type:'repayment', amount: 44_444_444.44 },
+      { date:'2033-12-30', type:'repayment', amount: 44_444_444.44 },
+      { date:'2034-06-30', type:'repayment', amount: 44_444_444.44 },
+      { date:'2034-12-29', type:'repayment', amount: 44_444_444.44 },
+      { date:'2035-06-29', type:'repayment', amount: 44_444_444.44 },
+      { date:'2035-12-31', type:'repayment', amount: 44_444_444.44 },
+      { date:'2036-06-30', type:'repayment', amount: 44_444_444.44 },
+      { date:'2036-12-31', type:'repayment', amount: 44_444_444.44 },
+      { date:'2037-06-30', type:'repayment', amount: 44_444_444.44 },
+      { date:'2037-12-19', type:'repayment', amount: 44_444_444.52 }
+    ],
+    amortization: { method:'none' },
+    nonUseFee: { enabled:false, rate:0 },
+    fees: [
+      {
+        id:'arrangement',
+        kind:'arrangement',
+        label:'Arrangement Fee',
+        mode:'percent',                       // 0.24% × covered (£800m) = £1.92m
+        rate: 0.0024,
+        base:'covered',
+        frequency:'oneOff',
+        paymentDate:'2025-12-30',
+        ifrs:'IFRS9-EIR',
+        notes:'0.24% of covered portion paid 30/12/2025 — IFRS 9 deferred and accreted.'
+      },
+      {
+        id:'guarantee',
+        kind:'guarantee',
+        label:'Guarantee Fee',
+        mode:'percent',                       // 0.5% p.a. × drawn covered amount
+        rate: 0.005,
+        base:'drawn',                          // engine maps drawn = current loan balance
+        frequency:'semiAnnual',
+        paymentSchedule:'lastDayOfInterestPeriod',
+        accrueFrom:'2026-04-01',               // accrual starts at first drawdown
+        accrueTo:'2037-12-17',
+        ifrs:'IFRS15-overTime',
+        notes:'0.5% p.a. on drawn covered portion. Paid every 6m on last day of interest period.'
+      },
+      {
+        id:'nwfCommitment',
+        kind:'commitment',
+        label:'NWF Commitment Fee',
+        mode:'percent',                       // 35% × guarantee fee = 0.175% × undrawn
+        rate: 0.00175,
+        base:'undrawn',                        // undrawn portion of covered tranche
+        frequency:'semiAnnual',
+        paymentSchedule:'every6mFromSigning',
+        accrueFrom:'2025-12-18',
+        accrueTo:'2028-12-18',                 // through availability period
+        ifrs:'IFRS15-overTime',
+        notes:'35% of guarantee fee × undrawn covered portion. IFRS 15 — over time during availability.'
+      }
+    ],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost',     // financial guarantee accounted at amortised cost
+      sppiPassed:true,
+      businessModel:'HoldToCollect',
+      ecLStage: 1,
+      pdAnnual: 0.0035,
+      lgd: 0.45
+    },
+    type:'simpleDaily',
+    preset:'Volt · £1bn Financial Guarantee (covered £800m, IFRS 9/15 fees)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // XYZ Buyout Fund — LP commitment to a renewable infrastructure fund
+    // Source: NEW INCOME Calculation requirements.xlsx · Equity Example #1
+    //
+    // £50m commitment to a closed-end LP. Capital calls staggered over 3
+    // years, fund term 10y + 2y extension. Income to the LP comes via:
+    //   - distributions (modelled as paydowns / not income)
+    //   - dividend income (one-off recognition events)
+    //   - capital gains at exit (not modelled here)
+    // GP charges:
+    //   - 1.75% management fee p.a. on committed during years 1-5
+    //   - 1.25% management fee p.a. on invested cost from year 5 onwards
+    //   - 8% IRR preferred return (out of scope for this calculator)
+    // Note: management fees are an EXPENSE to the LP, modelled as
+    // negative-rate "fees" so the calculator surfaces them with their
+    // own line. IFRS 9 / 15 classification is "FVTPL — equity at fair value"
+    // since SPPI fails for equity (no contractual cashflows).
+    // ----------------------------------------------------------------
+    id:'xyzBuyoutFund',
+    instrumentKind:'equity-fund',
+    legalEntity:'NWF Renewable Equity', leid: 51,
+    deal:'XYZ Buyout Fund (GBP)',
+    position:'XYZ Buyout Fund · LP Interest',
+    incomeSecurity:'XYZ Buyout Fund — £50m LP Commitment (Renewables)',
+    generalPartner:'WXY Partners LLP',
+    fundType:'LP / Closed-end',
+    sectorFocus:'Solar, Fibre Infrastructure',
+    currency:'GBP',
+    faceValue:    50_000_000,                  // commitment
+    purchasePrice: 50_000_000,
+    commitment:   50_000_000,
+    settlementDate:'2026-01-15',               // first close (illustrative)
+    availabilityEnd:'2031-01-15',              // 5-year investment period
+    maturityDate:   '2038-01-15',              // 10y term + assume 2y extension exercised
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis: 'ACT/365',
+    coupon: { type:'Fixed', fixedRate:0, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    principalRepayment:'Scheduled',
+    // Capital calls staggered over 3 years; distributions in years 7-10
+    principalSchedule: [
+      // Capital calls (drawdowns from LP perspective)
+      { date:'2026-03-31', type:'draw',    amount: 12_500_000, status:'actual'   },  // 25%
+      { date:'2026-09-30', type:'draw',    amount: 10_000_000, status:'forecast' },  // 20%
+      { date:'2027-06-30', type:'draw',    amount: 12_500_000, status:'forecast' },  // 25%
+      { date:'2027-12-31', type:'draw',    amount:  7_500_000, status:'forecast' },  // 15%
+      { date:'2028-06-30', type:'draw',    amount:  5_000_000, status:'forecast' },  // 10%
+      { date:'2028-12-31', type:'draw',    amount:  2_500_000, status:'forecast' },  // 5%
+      // Realisations (distributions back to LP — illustrative)
+      { date:'2032-12-31', type:'paydown', amount: 10_000_000 },
+      { date:'2034-12-31', type:'paydown', amount: 20_000_000 },
+      { date:'2036-12-31', type:'paydown', amount: 20_000_000 },
+      { date:'2037-12-31', type:'paydown', amount: 10_000_000 }
+    ],
+    amortization: { method:'none' },
+    nonUseFee: { enabled:false, rate:0 },
+    fees: [
+      // 1.75% on COMMITTED during the 5-year investment period
+      {
+        id:'mgmtFeeInvestmentPeriod',
+        kind:'other',
+        label:'Management Fee (Investment Period)',
+        mode:'percent',
+        rate: 0.0175,
+        base:'commitment',
+        frequency:'quarterly',
+        accrueFrom:'2026-01-15',
+        accrueTo:'2031-01-15',
+        ifrs:'IFRS15-overTime',
+        notes:'1.75% p.a. on committed capital during 5-year investment period (expense to LP).'
+      },
+      // 1.25% on INVESTED COST after the investment period
+      {
+        id:'mgmtFeePostInvestment',
+        kind:'other',
+        label:'Management Fee (Post-Investment)',
+        mode:'percent',
+        rate: 0.0125,
+        base:'drawn',                          // drawn balance ≈ invested cost
+        frequency:'quarterly',
+        accrueFrom:'2031-01-16',
+        accrueTo:'2038-01-15',
+        ifrs:'IFRS15-overTime',
+        notes:'1.25% p.a. on invested cost from year 5 onwards (step-down).'
+      }
+    ],
+    ifrs: {
+      ifrs9Classification:'FVTPL',             // equity instruments fail SPPI
+      sppiPassed:false,
+      businessModel:'Other',
+      ecLStage: null,                          // not applicable for FVTPL equity
+      pdAnnual: null,
+      lgd: null,
+      fairValueLevel:'Level 3',                // private fund interest
+      navFrequency:'Quarterly',
+      preferredReturn: 0.08,
+      gpCarry: 0.20
+    },
+    type:'simpleDaily',
+    preset:'XYZ Buyout Fund · £50m LP Commitment (Renewables, 1.75/1.25% mgmt fee)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // ABCDEF Software Ltd — Series C direct equity stake
+    // Source: NEW INCOME Calculation requirements.xlsx · Equity Example #2
+    //
+    // £100m ordinary shares for 9.09% post-money. Pre-money £120m fully
+    // diluted. Non-cumulative, as-declared dividends. 10y trade-sale exit.
+    // Quarterly fair value updates (Level 3 — comparable transactions).
+    // For the income calculator we model:
+    //   - Initial drawdown = £100m investment
+    //   - Dividends as point-in-time IFRS 15 fee recognition events
+    //   - No coupon, no maturity-based amortization (FVTPL equity)
+    // ----------------------------------------------------------------
+    id:'abcdefSeriesC',
+    instrumentKind:'equity-direct',
+    legalEntity:'NWF Renewable Equity', leid: 51,
+    deal:'ABCDEF Software Ltd',
+    position:'ABCDEF Software · Series C',
+    incomeSecurity:'ABCDEF Software — Series C Ordinary Shares (£100m, 9.09%)',
+    counterpartyId:'ABCDEF-LTD',
+    currency:'GBP',
+    faceValue:    100_000_000,                 // committed = invested
+    purchasePrice: 100_000_000,
+    commitment:   100_000_000,
+    settlementDate:'2026-04-01',
+    maturityDate:   '2036-04-01',              // 10y trade-sale horizon
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis: 'ACT/365',
+    coupon: { type:'Fixed', fixedRate:0, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-04-01', type:'initial', amount: 100_000_000 }
+    ],
+    amortization: { method:'none' },
+    nonUseFee: { enabled:false, rate:0 },
+    fees: [
+      // Illustrative declared dividend events — point-in-time IFRS 15 recognition
+      {
+        id:'dividend2027',
+        kind:'other',
+        label:'Dividend Income FY2027',
+        mode:'flat',
+        amount: 750_000,
+        frequency:'oneOff',
+        paymentDate:'2027-09-30',
+        ifrs:'IFRS15-pointInTime',
+        notes:'Non-cumulative, as-declared. Recognised when right to receive established.'
+      },
+      {
+        id:'dividend2028',
+        kind:'other',
+        label:'Dividend Income FY2028',
+        mode:'flat',
+        amount: 1_250_000,
+        frequency:'oneOff',
+        paymentDate:'2028-09-28',
+        ifrs:'IFRS15-pointInTime'
+      },
+      {
+        id:'dividend2030',
+        kind:'other',
+        label:'Dividend Income FY2030',
+        mode:'flat',
+        amount: 2_000_000,
+        frequency:'oneOff',
+        paymentDate:'2030-09-30',
+        ifrs:'IFRS15-pointInTime'
+      }
+    ],
+    capTable: {
+      preMoneyValuation: 120_000_000,
+      postMoneyOwnership: 0.0909,
+      founders: 0.45,
+      existingInvestors: 0.359,
+      esopUnallocated: 0.10
+    },
+    ifrs: {
+      ifrs9Classification:'FVTPL',             // SPPI fails — ordinary shares
+      sppiPassed:false,
+      businessModel:'Other',
+      ecLStage: null,
+      pdAnnual: null,
+      lgd: null,
+      fairValueLevel:'Level 3',                // private company, market-comparables
+      navFrequency:'Quarterly',
+      protectiveProvisions:['M&A','New Senior Securities','Budget >10% Variance','Related-Party Tx'],
+      boardRights:'1 observer seat (no vote)'
+    },
+    type:'simpleDaily',
+    preset:'ABCDEF Series C · £100m direct equity (9.09% post-money, FVTPL Level 3)'
   }
 ];
 
@@ -1259,6 +2038,16 @@ const state = {
 
 function currentInstrument(){ return INSTRUMENTS.find(i=>i.id===state.instrumentId); }
 
+/* Default accrual window for an instrument = settlement → maturity (full life).
+   Centralised so picker-change, new-instrument, and initial boot all agree. */
+function defaultWindowFor(instr){
+  if(!instr) return { begin: state.begin, end: state.end, last: state.last };
+  const begin = instr.settlementDate;
+  const end   = instr.maturityDate;
+  const last  = toISO(addDays(parseISO(begin), -1));
+  return { begin, end, last };
+}
+
 /* ---------- Formatters ---------- */
 const fmtMoney = (v)=> v==null||isNaN(v) ? '—' :
   v.toLocaleString('en-US',{ style:'currency', currency:'USD', minimumFractionDigits:2, maximumFractionDigits:2 });
@@ -1279,44 +2068,107 @@ function setTab(tab){
 }
 
 /* ---------- Instrument picker wiring (cascading) ---------- */
+// Rebuild ONLY the Income Security dropdown — every instrument, grouped by
+// Legal Entity. Called on boot and after a security pick so the user can
+// keep jumping between examples without the cascade narrowing the list.
+function rebuildSecurityDropdown(){
+  const secSel = byId('sel-security');
+  const groups = {};
+  for(const inst of INSTRUMENTS){
+    const le = inst.legalEntity || '—';
+    (groups[le] = groups[le] || []).push(inst);
+  }
+  let html = '';
+  for(const [le, arr] of Object.entries(groups)){
+    html += `<optgroup label="${le}">`;
+    html += arr.map(s=>`<option value="${s.id}">${s.incomeSecurity}</option>`).join('');
+    html += `</optgroup>`;
+  }
+  secSel.innerHTML = html;
+  secSel.value = state.instrumentId;
+}
+
 function populatePickers(){
+  // The Income Security picker is the user's primary entry point — show ALL
+  // instruments grouped by Legal Entity so they can jump directly to any
+  // example. The LE / Deal / Position dropdowns above stay in sync but are
+  // mostly informational; selecting one still narrows the security list.
+  rebuildSecurityDropdown();
+  // LE dropdown — full list, sync to current instrument
   const les = [...new Set(INSTRUMENTS.map(i=>i.legalEntity))];
   const leSel = byId('sel-le');
   leSel.innerHTML = les.map(l=>`<option>${l}</option>`).join('');
   const instr = currentInstrument();
   leSel.value = instr.legalEntity;
-  repopulateDown('le');
+  // Build deal/position dropdowns to match the current instrument's path.
+  syncCascadeToSecurity();
 }
+// Rebuild the Deal / Position dropdowns based on the current LE / Deal
+// selections. The Income Security dropdown is NEVER narrowed — it always
+// shows all 9 instruments grouped by LE so the user can jump directly to
+// any example. When the user picks LE/Deal/Position manually, we auto-
+// navigate to the first instrument matching that path.
+//
+// Browser quirk: assigning innerHTML to a <select> resets its .value to the
+// first option, so we capture the user's pick BEFORE rebuilding and restore
+// it after — otherwise picking "Volt" in the Deal dropdown silently snaps
+// back to "Libra 2" because that's the first option under that LE.
 function repopulateDown(level){
   const leSel  = byId('sel-le');
   const dealSel= byId('sel-deal');
   const posSel = byId('sel-position');
-  const secSel = byId('sel-security');
+  const wantedDeal = dealSel.value;
+  const wantedPos  = posSel.value;
   const deals = [...new Set(INSTRUMENTS.filter(i=>i.legalEntity===leSel.value).map(i=>i.deal))];
   dealSel.innerHTML = deals.map(d=>`<option>${d}</option>`).join('');
-  if(!deals.includes(dealSel.value)) dealSel.value = deals[0];
+  dealSel.value = deals.includes(wantedDeal) ? wantedDeal : deals[0];
   const positions = [...new Set(INSTRUMENTS.filter(i=>i.legalEntity===leSel.value && i.deal===dealSel.value).map(i=>i.position))];
   posSel.innerHTML = positions.map(d=>`<option>${d}</option>`).join('');
-  if(!positions.includes(posSel.value)) posSel.value = positions[0];
-  const secs = INSTRUMENTS.filter(i=>i.legalEntity===leSel.value && i.deal===dealSel.value && i.position===posSel.value);
-  secSel.innerHTML = secs.map(s=>`<option value="${s.id}">${s.incomeSecurity}</option>`).join('');
-  if(!secs.find(s=>s.id===state.instrumentId)) state.instrumentId = secs[0].id;
-  secSel.value = state.instrumentId;
+  posSel.value = positions.includes(wantedPos) ? wantedPos : positions[0];
+  // Auto-navigate to the first instrument matching the current LE/Deal/Position
+  const match = INSTRUMENTS.find(i =>
+    i.legalEntity===leSel.value && i.deal===dealSel.value && i.position===posSel.value);
+  if(match) state.instrumentId = match.id;
+  // Always rebuild the security dropdown to show all instruments grouped by LE
+  rebuildSecurityDropdown();
+}
+// When the user picks any security directly, sync LE/Deal/Position to match
+// and rebuild the security dropdown to show ALL instruments again so they
+// can keep jumping between examples.
+function syncCascadeToSecurity(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  const leSel  = byId('sel-le');
+  const dealSel= byId('sel-deal');
+  const posSel = byId('sel-position');
+  leSel.value  = inst.legalEntity;
+  // Rebuild deals list under this LE so the deal value is valid
+  const deals = [...new Set(INSTRUMENTS.filter(i=>i.legalEntity===leSel.value).map(i=>i.deal))];
+  dealSel.innerHTML = deals.map(d=>`<option>${d}</option>`).join('');
+  dealSel.value = inst.deal;
+  // Same for positions
+  const positions = [...new Set(INSTRUMENTS.filter(i=>i.legalEntity===leSel.value && i.deal===dealSel.value).map(i=>i.position))];
+  posSel.innerHTML = positions.map(d=>`<option>${d}</option>`).join('');
+  posSel.value = inst.position;
 }
 function onPickerChange(){
-  state.instrumentId = byId('sel-security').value;
+  // Capture the picked id immediately. Anything later that reassigns sel-security's
+  // innerHTML would otherwise reset its value to the first option and we'd lose
+  // the user's pick.
+  const pickedId = byId('sel-security').value;
+  if(!INSTRUMENTS.find(i => i.id === pickedId)) return;
+  state.instrumentId = pickedId;
   const instr = currentInstrument();
-  // Default the accrual window to instrument's last full calendar month if current window is outside its life.
-  const sISO = instr.settlementDate, mISO = instr.maturityDate;
-  if(state.begin < sISO || state.end > mISO){
-    state.begin = sISO;
-    // Pick end of first calendar year or maturity — whichever earlier
-    const wantEnd = parseISO(sISO);
-    wantEnd.setMonth(wantEnd.getMonth()+2); // ~2 month window
-    const endISO = toISO(wantEnd);
-    state.end = endISO > mISO ? mISO : endISO;
-    state.last = toISO(addDays(parseISO(state.begin),-1));
-  }
+  if(!instr) return;
+  // Sync the LE / Deal / Position dropdowns to match the chosen security.
+  syncCascadeToSecurity();
+  // Snap the accrual window to the instrument's full life (settlement → maturity)
+  // so users see income through to maturity by default. They can still narrow
+  // the window manually via the Begin/End date inputs.
+  const w = defaultWindowFor(instr);
+  state.begin = w.begin;
+  state.end   = w.end;
+  state.last  = w.last;
   loadFormFromInstrument();
   render();
 }
@@ -1358,9 +2210,11 @@ function addBlankInstrument(){
   };
   INSTRUMENTS.push(fresh);
   state.instrumentId = id;
-  state.begin = today;
-  state.end   = toISO(addDays(new Date(), 90));
-  state.last  = toISO(addDays(parseISO(state.begin), -1));
+  // Default accrual window = settlement → maturity (full life of the new instrument)
+  const w = defaultWindowFor(fresh);
+  state.begin = w.begin;
+  state.end   = w.end;
+  state.last  = w.last;
   populatePickers();
   byId('sel-security').value = id;
   loadFormFromInstrument();
@@ -1403,6 +2257,7 @@ function loadFormFromInstrument(){
   setVal('f-face', i.faceValue);
   setVal('f-price', i.purchasePrice);
   setVal('f-commit', i.commitment);
+  if(byId('f-covered')) byId('f-covered').value = i.coveredAmount ?? '';
   setVal('f-settle', i.settlementDate);
   setVal('f-maturity', i.maturityDate);
   setVal('f-amortStart', i.amortStart || '');
@@ -1426,12 +2281,26 @@ function loadFormFromInstrument(){
   setVal('f-cap',   i.coupon?.cap ?? '');
   byId('f-nonUseEnabled').checked = !!i.nonUseFee?.enabled;
   setVal('f-nonUseRate', i.nonUseFee?.rate ?? 0);
+  // ---- IFRS 9 / 15 fields ----
+  if(byId('f-ifrs9')) byId('f-ifrs9').value = i.ifrs?.ifrs9Classification || 'AmortisedCost';
+  if(byId('f-ecl'))   byId('f-ecl').value   = String(i.ifrs?.ecLStage || 1);
+  if(byId('f-pd'))    byId('f-pd').value    = i.ifrs?.pdAnnual ?? '';
+  if(byId('f-lgd'))   byId('f-lgd').value   = i.ifrs?.lgd ?? '';
+  // ---- SONIA / RFR fields ----
+  if(byId('f-rfrBase'))     byId('f-rfrBase').value     = i.rfr?.baseRate ?? '';
+  if(byId('f-rfrLookback')) byId('f-rfrLookback').value = i.rfr?.lookbackDays ?? '';
+  // ---- ESG ----
+  if(byId('f-esgFrom')) byId('f-esgFrom').value = i.esgAdjustment?.from || '';
+  if(byId('f-esgBps'))  byId('f-esgBps').value  = i.esgAdjustment?.deltaBps ?? '';
+  if(byId('f-bdc'))     byId('f-bdc').value     = i.businessDayConvention || 'none';
   // dates
   setVal('in-begin', state.begin);
   setVal('in-end',   state.end);
   setVal('in-last',  state.last);
   renderMethodPicker();
   renderEventsTable();
+  renderFeesTable();
+  renderMarginTable();
 }
 
 function writeFormToInstrument(){
@@ -1440,6 +2309,7 @@ function writeFormToInstrument(){
   i.faceValue       = num('f-face');
   i.purchasePrice   = num('f-price');
   i.commitment      = num('f-commit');
+  if(byId('f-covered') && byId('f-covered').value !== '') i.coveredAmount = num('f-covered');
   i.settlementDate  = byId('f-settle').value;
   i.maturityDate    = byId('f-maturity').value;
   i.amortStart      = byId('f-amortStart').value || null;
@@ -1466,6 +2336,23 @@ function writeFormToInstrument(){
   i.nonUseFee = i.nonUseFee || {};
   i.nonUseFee.enabled = byId('f-nonUseEnabled').checked;
   i.nonUseFee.rate    = num('f-nonUseRate');
+  // ---- IFRS 9 / 15 fields ----
+  i.ifrs = i.ifrs || {};
+  if(byId('f-ifrs9')) i.ifrs.ifrs9Classification = byId('f-ifrs9').value;
+  if(byId('f-ecl'))   i.ifrs.ecLStage = parseInt(byId('f-ecl').value,10) || 1;
+  if(byId('f-pd'))    i.ifrs.pdAnnual = parseFloat(byId('f-pd').value)||0;
+  if(byId('f-lgd'))   i.ifrs.lgd      = parseFloat(byId('f-lgd').value)||0;
+  // ---- SONIA / RFR fields ----
+  i.rfr = i.rfr || {};
+  if(byId('f-rfrBase'))     i.rfr.baseRate     = parseFloat(byId('f-rfrBase').value)||0;
+  if(byId('f-rfrLookback')) i.rfr.lookbackDays = parseInt(byId('f-rfrLookback').value,10)||0;
+  // ---- ESG adjustment ----
+  if(byId('f-esgFrom') && byId('f-esgBps')){
+    const from = byId('f-esgFrom').value;
+    const bps  = parseFloat(byId('f-esgBps').value);
+    i.esgAdjustment = (from || !isNaN(bps)) ? { from, deltaBps: isNaN(bps) ? 0 : bps } : null;
+  }
+  if(byId('f-bdc')) i.businessDayConvention = byId('f-bdc').value;
   state.begin = byId('in-begin').value;
   state.end   = byId('in-end').value;
   state.last  = byId('in-last').value;
@@ -1512,15 +2399,34 @@ function renderMethodPicker(){
 // amortizing term loans cannot. Paydowns are universally allowed
 // (even bullets can have optional early prepayments).
 function allowedEventTypes(i){
-  if(!i) return ['initial','draw','paydown'];
+  if(!i) return ['initial','draw','paydown','repayment'];
+  // Guarantees naturally describe repayments rather than paydowns
+  if(i.instrumentKind === 'guarantee') return ['initial','draw','repayment'];
+  if(i.instrumentKind === 'equity-fund') return ['initial','draw','paydown']; // distributions modelled as paydowns
   const revolverTypes = new Set(['drawsAddons','nonUseFeeFacility']);
-  const isFacility = revolverTypes.has(i.type) || i.nonUseFee && i.nonUseFee.enabled;
+  // Facility heuristics — any of these means the loan can be drawn over time:
+  //  - explicit revolver/facility income-security type
+  //  - non-use fee enabled (50bps on undrawn)
+  //  - a commitment fee in the fees array (same economic role)
+  //  - an availabilityEnd date is set (deferred-drawdown facility)
+  //  - the principal schedule already records a draw event
+  //  - coupon type is SONIA/RFR (typical of UK facility lending)
+  const hasCommitmentFee = Array.isArray(i.fees) && i.fees.some(f => f.kind === 'commitment');
+  const hasFutureDraw    = Array.isArray(i.principalSchedule) && i.principalSchedule.some(e => e.type === 'draw');
+  const hasAvailability  = !!i.availabilityEnd;
+  const rfrCoupon        = i.coupon?.type === 'SONIA' || i.coupon?.type === 'CompoundedRFR';
+  const isFacility = revolverTypes.has(i.type)
+                  || (i.nonUseFee && i.nonUseFee.enabled)
+                  || hasCommitmentFee
+                  || hasFutureDraw
+                  || hasAvailability
+                  || rfrCoupon;
   if(isFacility) return ['initial','draw','paydown'];
   return ['initial','paydown'];
 }
 function eventTypeHint(i){
   const allowed = allowedEventTypes(i);
-  if(allowed.includes('draw')) return 'Revolver / facility — initial draw, additional draws, and paydowns allowed.';
+  if(allowed.includes('draw')) return 'Revolver / facility / deferred-drawdown loan — initial, additional draws, and paydowns allowed.';
   return 'Term instrument — initial disbursement and paydowns only (no revolver draws).';
 }
 let _eventsRendered = { id:null, count:-1, allowed:'' };
@@ -1585,22 +2491,136 @@ function renderEventsTable(force){
   });
 }
 
+/* ---------- Fees table (multi-fee, IFRS 9/15) ---------- */
+let _feesRendered = { id:null, count:-1 };
+function renderFeesTable(force){
+  const i = currentInstrument();
+  i.fees = i.fees || [];
+  if(!force && _feesRendered.id===i.id && _feesRendered.count===i.fees.length) return;
+  _feesRendered = { id:i.id, count:i.fees.length };
+  const KIND_OPTS = ['arrangement','commitment','guarantee','other'];
+  const MODE_OPTS = ['percent','flat','marginLinked'];
+  const BASE_OPTS = ['commitment','undrawn','drawn','covered','face'];
+  const FREQ_OPTS = ['oneOff','daily','monthly','quarterly','semiAnnual','annual'];
+  const IFRS_OPTS = [
+    ['IFRS9-EIR',          'IFRS 9 — included in EIR (capitalised)'],
+    ['IFRS15-overTime',    'IFRS 15 — recognised over time'],
+    ['IFRS15-pointInTime', 'IFRS 15 — recognised point-in-time'],
+  ];
+  const opt = (arr, sel) => arr.map(v => `<option value="${v}" ${v===sel?'selected':''}>${v}</option>`).join('');
+  const optKv = (arr, sel) => arr.map(([v,l]) => `<option value="${v}" ${v===sel?'selected':''}>${l}</option>`).join('');
+  const rows = i.fees.map((f, idx) => `
+    <tr>
+      <td><input type="text"   class="mat-input" data-fee="label"        data-idx="${idx}" value="${f.label||''}" placeholder="Label"/></td>
+      <td><select               class="mat-select" data-fee="kind"        data-idx="${idx}">${opt(KIND_OPTS, f.kind)}</select></td>
+      <td><select               class="mat-select" data-fee="mode"        data-idx="${idx}">${opt(MODE_OPTS, f.mode)}</select></td>
+      <td><input type="number" step="0.0001" class="mat-input" data-fee="rate"   data-idx="${idx}" value="${f.rate ?? ''}" placeholder="% e.g. 0.0175"/></td>
+      <td><input type="number" step="0.01"   class="mat-input" data-fee="amount" data-idx="${idx}" value="${f.amount ?? ''}" placeholder="flat £"/></td>
+      <td><select               class="mat-select" data-fee="base"        data-idx="${idx}">${opt(BASE_OPTS, f.base || 'undrawn')}</select></td>
+      <td><select               class="mat-select" data-fee="frequency"   data-idx="${idx}">${opt(FREQ_OPTS, f.frequency || 'oneOff')}</select></td>
+      <td><input type="date"   class="mat-input" data-fee="paymentDate"   data-idx="${idx}" value="${f.paymentDate||''}"/></td>
+      <td><select               class="mat-select" data-fee="ifrs"        data-idx="${idx}">${optKv(IFRS_OPTS, f.ifrs || 'IFRS15-overTime')}</select></td>
+      <td><button class="mat-btn ghost !py-1 !px-2 text-xs" data-feeDel="${idx}" title="Remove fee"><span class="material-icons-outlined text-[16px]">delete</span></button></td>
+    </tr>`).join('');
+  byId('fees-table').innerHTML = `
+    <table class="w-full text-sm">
+      <thead><tr class="text-left text-gray-500 text-[11px] uppercase tracking-wider">
+        <th class="p-2 font-medium">Label</th>
+        <th class="p-2 font-medium">Kind</th>
+        <th class="p-2 font-medium">Mode</th>
+        <th class="p-2 font-medium">Rate (%)</th>
+        <th class="p-2 font-medium">Flat Amount</th>
+        <th class="p-2 font-medium">Base</th>
+        <th class="p-2 font-medium">Frequency</th>
+        <th class="p-2 font-medium">Payment Date</th>
+        <th class="p-2 font-medium">IFRS Treatment</th>
+        <th class="p-2"></th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="10" class="p-4 text-gray-500 italic text-sm">No fees — add an Arrangement Fee, Commitment Fee, etc.</td></tr>`}</tbody>
+    </table>`;
+  byId('fees-table').querySelectorAll('[data-fee]').forEach(el => el.onchange = (e)=>{
+    const idx = +e.target.dataset.idx;
+    const key = e.target.dataset.fee;
+    let v = e.target.value;
+    if(key==='rate' || key==='amount') v = parseFloat(v) || 0;
+    i.fees[idx][key] = v;
+    if(key==='kind' && !i.fees[idx].label) i.fees[idx].label =
+      ({arrangement:'Arrangement Fee', commitment:'Commitment Fee', guarantee:'Guarantee Fee', other:'Other Fee'})[v] || v;
+    render();
+  });
+  byId('fees-table').querySelectorAll('[data-feeDel]').forEach(el => el.onclick = (e)=>{
+    const idx = +e.target.closest('[data-feeDel]').dataset.feedel || +e.target.closest('[data-feeDel]').getAttribute('data-feeDel');
+    i.fees.splice(idx, 1);
+    renderFeesTable(true);
+    render();
+  });
+}
+
+/* ---------- Margin ratchet table ---------- */
+let _marginRendered = { id:null, count:-1 };
+function renderMarginTable(force){
+  const i = currentInstrument();
+  i.marginSchedule = i.marginSchedule || [];
+  if(!force && _marginRendered.id===i.id && _marginRendered.count===i.marginSchedule.length) return;
+  _marginRendered = { id:i.id, count:i.marginSchedule.length };
+  const rows = i.marginSchedule.map((m, idx) => `
+    <tr>
+      <td><input type="date"   class="mat-input" data-mg="from"     data-idx="${idx}" value="${m.from||''}"/></td>
+      <td><input type="date"   class="mat-input" data-mg="to"       data-idx="${idx}" value="${m.to||''}"/></td>
+      <td><input type="number" step="0.1" class="mat-input" data-mg="marginBps" data-idx="${idx}" value="${m.marginBps ?? ''}" placeholder="bps"/></td>
+      <td><button class="mat-btn ghost !py-1 !px-2 text-xs" data-mgDel="${idx}" title="Remove step"><span class="material-icons-outlined text-[16px]">delete</span></button></td>
+    </tr>`).join('');
+  byId('margin-table').innerHTML = `
+    <table class="w-full text-sm">
+      <thead><tr class="text-left text-gray-500 text-[11px] uppercase tracking-wider">
+        <th class="p-2 font-medium">From</th>
+        <th class="p-2 font-medium">To</th>
+        <th class="p-2 font-medium">Margin (bps)</th>
+        <th class="p-2"></th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="4" class="p-4 text-gray-500 italic text-sm">No margin steps — using flat spread from Coupon section.</td></tr>`}</tbody>
+    </table>`;
+  byId('margin-table').querySelectorAll('[data-mg]').forEach(el => el.onchange = (e)=>{
+    const idx = +e.target.dataset.idx;
+    const key = e.target.dataset.mg;
+    let v = e.target.value;
+    if(key==='marginBps') v = parseFloat(v) || 0;
+    i.marginSchedule[idx][key] = v;
+    render();
+  });
+  byId('margin-table').querySelectorAll('[data-mgDel]').forEach(el => el.onclick = (e)=>{
+    const idx = +e.target.closest('[data-mgDel]').getAttribute('data-mgDel');
+    i.marginSchedule.splice(+idx, 1);
+    renderMarginTable(true);
+    render();
+  });
+}
+
 /* ---------- Schedule grid ---------- */
 function renderScheduleGrid(){
   const wrap = byId('schedule-grid');
   const i = currentInstrument();
   const dimOutOfWindow = byId('opt-in-window')?.checked ?? true;
   const hl = byId('opt-highlight-events')?.checked ?? true;
+  // Build per-fee columns dynamically so the user sees each fee's daily accrual
+  // in its own column (Arrangement, Commitment, Guarantee, NWF Commitment, etc.).
+  const feeLabels = (i.fees || []).map(f => f.label || f.kind);
+  const feeHeaders = feeLabels.map(l => `Fee · ${l}`);
   const headers = [
-    'Date','Loan Balance','Initial','Draws','Paydowns','Coupon Rate','Floating','Current Rate',
+    'Date','Loan Balance','Initial','Draws','Repayments','Coupon Rate','Floating','Current Rate',
     'Daily Accrued Interest','Cum. Interest','Capitalized Int.','Cash Int. Pmt',
     'PIK Rate','Daily PIK','Cum. PIK','PIK Paydown',
-    'Amort/day','Cum Amort','Carrying Value'
+    'Amort/day','Cum Amort','Carrying Value',
+    'Daily Fees', ...feeHeaders, 'EIR Accr. (IFRS 9)'
   ];
   const rows = state.schedule.map(r => {
     const inWindow = r.date >= state.begin && r.date <= state.end;
     const cls = (hl && r.hasEvent ? 'event ' : '') + (!inWindow && dimOutOfWindow ? 'out-of-window ' : '');
     const endOfPeriod = r.date === state.end;
+    const perFeeCells = feeLabels.map(l => {
+      const v = r.feeBreakdown?.[l] || 0;
+      return `<td>${v ? fmtMoney(v) : '—'}</td>`;
+    }).join('');
     return `<tr class="${cls}${endOfPeriod?' period-end':''}">
       <td class="left">${fmtDate(r.date)}</td>
       <td>${fmtMoney(r.balance)}</td>
@@ -1621,6 +2641,9 @@ function renderScheduleGrid(){
       <td>${r.amortDaily ? fmtMoney(r.amortDaily) : '—'}</td>
       <td>${r.cumAmort ? fmtMoney(r.cumAmort) : '—'}</td>
       <td>${fmtMoney(r.carryingValue)}</td>
+      <td>${r.dailyFees ? fmtMoney(r.dailyFees) : '—'}</td>
+      ${perFeeCells}
+      <td>${r.dailyEIRAccretion ? fmtMoney(r.dailyEIRAccretion) : '—'}</td>
     </tr>`;
   }).join('');
   wrap.innerHTML = `<table>
@@ -1646,9 +2669,17 @@ function renderKPIs(){
   const eirSub = e.cashYield != null
     ? `Cash yield ${fmtPct(e.cashYield,4)} · Coupon ${fmtPct(e.couponRate,4)}`
     : (e.note || '—');
+  const i = currentInstrument();
+  const ifrsClass = i.ifrs?.ifrs9Classification || '—';
+  const ecl = i.ifrs?.ecLStage ? `Stage ${i.ifrs.ecLStage}` : '';
+  const feeBreakdownStr = s?.feeBreakdown
+    ? Object.entries(s.feeBreakdown).map(([k,v])=>`${k}: ${fmtMoney(v)}`).join(' · ') || '—'
+    : '—';
   const kpis = [
     { label:'Accrued Interest',  value: fmtMoney(s?.totalCashAccrual),  sub:`${s?.daysCount||0} days · ${fmtDate(s?.periodStart)} → ${fmtDate(s?.periodEnd)}` },
     { label:'Accrued PIK',       value: fmtMoney(s?.totalPikAccrual),   sub:`Capitalized: ${fmtMoney(s?.totalCapitalized)}` },
+    { label:'Total Fees (period)', value: fmtMoney(s?.totalFees),       sub: feeBreakdownStr },
+    { label:'EIR Accretion (IFRS 9)', value: fmtMoney(s?.totalEIRAccretion), sub:`Deferred fee pool ${i.id ? '— ' : ''}${ifrsClass}${ecl?' · '+ecl:''}` },
     { label:'Closing Balance',   value: fmtMoney(s?.closingBalance),    sub:`Opening: ${fmtMoney(s?.openingBalance)}` },
     { label:'Carrying Value',    value: fmtMoney(s?.closingCarrying),   sub:`Amortization Δ: ${fmtMoney(s?.totalAmort)}` },
     { label:eirLabel,            value: eirRate!=null ? fmtPct(eirRate,4) : '—', sub: eirSub }
@@ -1824,7 +2855,10 @@ function renderBreadcrumb(){
   pikChip.className = 'mat-chip ' + (i.pik?.enabled ? 'green' : 'gray');
   pikChip.textContent = i.pik?.enabled ? `PIK ${fmtPct(i.pik.rate,2)} · ${i.pik.capitalizationFrequency}` : 'PIK Disabled';
   const amortChip = byId('bc-amort-chip');
-  if(i.nonUseFee?.enabled){
+  if(i.instrumentKind === 'guarantee' && i.coveredAmount){
+    amortChip.className = 'mat-chip green';
+    amortChip.textContent = `Covered ${fmtMoney(i.coveredAmount)}`;
+  } else if(i.nonUseFee?.enabled){
     amortChip.className = 'mat-chip amber';
     amortChip.textContent = `Non-use ${fmtPct(i.nonUseFee.rate,2)}`;
   } else {
@@ -1898,8 +2932,17 @@ function wire(){
   // Tab buttons
   document.querySelectorAll('.tab-btn').forEach(b => b.onclick = ()=> setTab(b.dataset.tab));
   // Picker cascading
+  // LE / Deal / Position changes act as a filter — narrow the Income Security
+  // dropdown to that path. Selecting a Security directly re-expands the list
+  // and syncs the upper three dropdowns.
   ['sel-le','sel-deal','sel-position'].forEach(id => byId(id).onchange = ()=>{ repopulateDown(id.slice(4)); onPickerChange(); });
-  byId('sel-security').onchange = onPickerChange;
+  byId('sel-security').onchange = ()=>{
+    onPickerChange();
+    // Re-expand the security dropdown to all instruments (in case the cascade
+    // narrowed it earlier). Don't rerun the full picker rebuild — that wipes
+    // the deal/position values we just synced inside onPickerChange.
+    rebuildSecurityDropdown();
+  };
   // Date format
   document.querySelectorAll('[data-date-fmt]').forEach(b => b.onclick = ()=>{ state.dateFormat = b.dataset.dateFmt; render(); });
   // Type dropdown — applies template then re-renders
@@ -1964,8 +3007,41 @@ function wire(){
     render();
     toast(`Event added (${defaultType})`);
   };
+  // Add a new fee row with sensible defaults (Arrangement / Commitment / etc.)
+  const btnAddFee = byId('btn-add-fee');
+  if(btnAddFee) btnAddFee.onclick = ()=>{
+    const i = currentInstrument();
+    i.fees = i.fees || [];
+    // Default to Commitment Fee on undrawn quarterly (IFRS 15) — most common ask
+    i.fees.push({
+      id: 'fee-' + Date.now().toString(36),
+      kind: 'commitment',
+      label: 'Commitment Fee',
+      mode: 'percent',
+      rate: 0.0035,
+      base: 'undrawn',
+      frequency: 'quarterly',
+      paymentDate: i.settlementDate || '',
+      ifrs: 'IFRS15-overTime'
+    });
+    renderFeesTable(true);
+    render();
+    toast('Fee added — set rate & IFRS treatment');
+  };
+  // Add a new margin step
+  const btnAddMargin = byId('btn-add-margin');
+  if(btnAddMargin) btnAddMargin.onclick = ()=>{
+    const i = currentInstrument();
+    i.marginSchedule = i.marginSchedule || [];
+    const last = i.marginSchedule[i.marginSchedule.length-1];
+    const newFrom = last?.to ? toISO(addDays(parseISO(last.to), 1)) : (i.settlementDate || state.begin);
+    i.marginSchedule.push({ from: newFrom, to: i.maturityDate || '', marginBps: last?.marginBps ?? 400 });
+    renderMarginTable(true);
+    render();
+    toast('Margin step added');
+  };
   byId('btn-schedule-csv').onclick = ()=>{
-    const hdrs = ['date','balance','draw','paydown','couponRate','floatingRate','currentRate','dailyCash','cumInterestAccrued','capitalized','pikRate','dailyPik','cumPikAccrued','amortDaily','cumAmort','carryingValue','nonUseFee'];
+    const hdrs = ['date','balance','draw','paydown','couponRate','floatingRate','currentRate','dailyCash','cumInterestAccrued','capitalized','pikRate','dailyPik','cumPikAccrued','amortDaily','cumAmort','carryingValue','nonUseFee','dailyFees','dailyEIRAccretion','cumEIRAccretion'];
     downloadCSV('income-schedule.csv', toCSV(state.schedule, hdrs));
     toast('Schedule downloaded ✓');
   };
@@ -2364,6 +3440,15 @@ function exportJson(){
 document.addEventListener('DOMContentLoaded', ()=>{
   populateTypeDropdown();
   populatePickers();
+  // Default accrual window = settlement → maturity for the boot instrument,
+  // so users see income through to maturity without having to widen the dates.
+  const boot = currentInstrument();
+  if(boot){
+    const w = defaultWindowFor(boot);
+    state.begin = w.begin;
+    state.end   = w.end;
+    state.last  = w.last;
+  }
   renderPresets();
   loadFormFromInstrument();
   wire();
