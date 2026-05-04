@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>PE Income Calculator</title>
+<title>Private Equity Loan Calculator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -142,6 +142,8 @@
   .grid-scroll tbody tr.out-of-window td { color:#9099ad }
   .grid-scroll tbody tr:hover td { background:#f4f6fb }
   .grid-scroll tbody tr.period-end td { border-top: 2px solid #2940f5; font-weight:600 }
+  .grid-scroll tbody tr.aggregate td { background:#eef3ff; font-weight:600; border-top:1px solid #c7d2fe; border-bottom:1px solid #c7d2fe }
+  .grid-scroll tbody tr.aggregate td.left { color:#2940f5 }
   .kpi {
     background: white;
     border-radius: 12px;
@@ -234,7 +236,7 @@
     <div class="h-14 px-4 flex items-center gap-3">
       <span class="material-icons-outlined text-brand-600 text-3xl">calculate</span>
       <div class="leading-tight">
-        <div class="text-[15px] font-semibold">PE Income Calculator</div>
+        <div class="text-[15px] font-semibold">Private Equity Loan Calculator</div>
         <div class="text-[11px] text-gray-500">Back office · Private Equity & Hybrid Funds</div>
       </div>
       <nav class="ml-8 flex items-center gap-1">
@@ -267,8 +269,9 @@
           <div class="mat-field"><label>Legal Entity</label><select id="sel-le" class="mat-select"></select></div>
           <div class="mat-field"><label>Deal</label><select id="sel-deal" class="mat-select"></select></div>
           <div class="mat-field"><label>Position</label><select id="sel-position" class="mat-select"></select></div>
-          <div class="mat-field"><label>Income Security</label><select id="sel-security" class="mat-select"></select></div>
+          <div class="mat-field"><label>Income Security <span class="text-[10px] text-gray-400">(jump anywhere)</span></label><select id="sel-security" class="mat-select"></select></div>
         </div>
+        <div id="security-readout" class="mt-3 p-3 rounded bg-brand-50 border border-brand-200"></div>
       </div>
       <div class="border-t border-gray-200 pt-4">
         <div class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2 flex items-center gap-1">
@@ -512,10 +515,32 @@
 
       <!-- ============ TAB: SCHEDULE ============ -->
       <section class="tab-panel hidden" data-tab="schedule">
-        <div class="flex items-center gap-3 mb-3">
-          <h3 class="text-base font-semibold flex items-center gap-2"><span class="material-icons-outlined text-brand-600">calendar_view_day</span>Loan Calculator Income Schedule (N-7)</h3>
+        <div class="flex flex-wrap items-center gap-3 mb-3">
+          <h3 class="text-base font-semibold flex items-center gap-2"><span class="material-icons-outlined text-brand-600">calendar_view_day</span>Income Schedule</h3>
           <span id="grid-count" class="mat-chip gray"></span>
-          <div class="ml-auto flex items-center gap-2">
+          <div class="ml-auto flex flex-wrap items-center gap-2">
+            <div class="mat-field !mb-0" style="min-width:180px">
+              <label>Show rows</label>
+              <select id="opt-density" class="mat-select">
+                <option value="all">Every day (full schedule)</option>
+                <option value="events">Event days &amp; rate changes</option>
+                <option value="monthEnd" selected>Month-ends (one row per month)</option>
+                <option value="quarterEnd">Quarter-ends only</option>
+                <option value="yearEnd">Year-ends only</option>
+                <option value="monthly">Monthly aggregates (sum interest / fees)</option>
+                <option value="quarterly">Quarterly aggregates</option>
+                <option value="annual">Annual aggregates</option>
+              </select>
+            </div>
+            <div class="mat-field !mb-0" style="min-width:140px">
+              <label>Columns</label>
+              <select id="opt-columns" class="mat-select">
+                <option value="all">All columns</option>
+                <option value="essentials" selected>Essentials only</option>
+                <option value="rates">Rates &amp; balance</option>
+                <option value="income">Income &amp; fees</option>
+              </select>
+            </div>
             <label class="toggle"><input id="opt-in-window" type="checkbox" checked><span class="track"></span>Dim out-of-window</label>
             <label class="toggle"><input id="opt-highlight-events" type="checkbox" checked><span class="track"></span>Highlight events</label>
             <button id="btn-schedule-csv" class="mat-btn outline"><span class="material-icons-outlined text-[18px]">download</span>CSV</button>
@@ -545,6 +570,14 @@
             <header><span class="material-icons-outlined">percent</span><h3>Effective Interest Rate &mdash; Yield Analytics</h3></header>
             <div class="body" id="eir-panel"></div>
           </div>
+          <div class="section-card col-span-12">
+            <header>
+              <span class="material-icons-outlined">water_drop</span>
+              <h3>Cash Flow Forecast &amp; Maturity Ladder (IFRS 7)</h3>
+              <span class="ml-auto text-[11px] text-gray-500">As-of: <input id="cf-asof" type="date" class="mat-input !py-1 !px-2 inline-block" style="width:140px"/></span>
+            </header>
+            <div class="body" id="cashflow-panel"></div>
+          </div>
         </div>
       </section>
 
@@ -568,6 +601,90 @@
   </div>
 
   <div id="toast"></div>
+
+  <!-- ===== Add Instrument Modal ===== -->
+  <div id="add-modal" class="json-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
+    <div class="json-modal-backdrop" data-close-add="1"></div>
+    <div class="json-modal-panel" style="width:min(960px, 95vw);">
+      <div class="json-modal-header">
+        <div>
+          <div id="add-modal-title" class="font-semibold text-[15px]">Add New Instrument</div>
+          <div class="text-[11px] text-gray-500">Capture LE → Deal → Position → Income Security in one flow. Saved instruments persist across sessions in this browser.</div>
+        </div>
+        <button class="mat-btn outline !py-1 !px-2" data-close-add="1" aria-label="Close"><span class="material-icons-outlined text-[18px]">close</span></button>
+      </div>
+      <div class="json-modal-body">
+        <!-- Hierarchy -->
+        <div class="grid grid-cols-12 gap-3 mb-4">
+          <div class="mat-field col-span-12 md:col-span-6">
+            <label>Legal Entity</label>
+            <div class="flex items-stretch gap-2">
+              <select id="add-le" class="mat-select" style="flex:1"></select>
+              <button id="add-refresh-le" type="button" class="mat-btn outline !py-1 !px-2 text-xs" title="Refresh from Investran">
+                <span class="material-icons-outlined text-[16px]">cloud_download</span>From Investran
+              </button>
+            </div>
+            <div class="text-[10px] text-gray-500 mt-1">Pick from existing LEs or refresh from Investran. Type a new LE name to add one.</div>
+          </div>
+          <div class="mat-field col-span-12 md:col-span-6">
+            <label>Or type new Legal Entity</label>
+            <input id="add-le-new" class="mat-input" placeholder="e.g. NWF Renewable Equity II"/>
+          </div>
+          <div class="mat-field col-span-12 md:col-span-6"><label>Deal</label><input id="add-deal" class="mat-input" list="add-deal-list" placeholder="e.g. Project Athena"/><datalist id="add-deal-list"></datalist></div>
+          <div class="mat-field col-span-12 md:col-span-6"><label>Position</label><input id="add-position" class="mat-input" placeholder="e.g. NWF 100% holding · Athena Senior"/></div>
+          <div class="mat-field col-span-6 md:col-span-3"><label>Position ID</label><input id="add-positionId" class="mat-input" placeholder="auto-generated"/></div>
+          <div class="mat-field col-span-6 md:col-span-3"><label>Security ID</label><input id="add-securityId" class="mat-input" placeholder="auto-generated"/></div>
+          <div class="mat-field col-span-12 md:col-span-6"><label>Income Security (contract name)</label><input id="add-security" class="mat-input" placeholder="e.g. Athena Senior Term Loan (SONIA + 425)"/></div>
+        </div>
+        <!-- Instrument kind + key terms -->
+        <div class="grid grid-cols-12 gap-3 mb-2">
+          <div class="mat-field col-span-12 md:col-span-3">
+            <label>Instrument Kind</label>
+            <select id="add-kind" class="mat-select">
+              <option value="loan">Loan</option>
+              <option value="guarantee">Guarantee</option>
+              <option value="equity-fund">Equity — Fund (LP)</option>
+              <option value="equity-direct">Equity — Direct</option>
+            </select>
+          </div>
+          <div class="mat-field col-span-6 md:col-span-3"><label>Currency</label>
+            <select id="add-ccy" class="mat-select">
+              <option value="GBP">GBP</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+          <div class="mat-field col-span-6 md:col-span-3"><label>Day Basis</label>
+            <select id="add-basis" class="mat-select">
+              <option value="ACT/365">ACT/365</option>
+              <option value="ACT/360">ACT/360</option>
+              <option value="ACT/ACT">ACT/ACT</option>
+              <option value="30/360">30/360</option>
+            </select>
+          </div>
+          <div class="mat-field col-span-6 md:col-span-3"><label>Coupon Type</label>
+            <select id="add-couponType" class="mat-select">
+              <option value="Fixed">Fixed</option>
+              <option value="Floating">Floating</option>
+              <option value="SONIA">SONIA + Margin</option>
+            </select>
+          </div>
+          <div class="mat-field col-span-6 md:col-span-3"><label>Face Value</label><input id="add-face" type="number" step="0.01" class="mat-input" value="1000000"/></div>
+          <div class="mat-field col-span-6 md:col-span-3"><label>Purchase Price</label><input id="add-price" type="number" step="0.01" class="mat-input" value="1000000"/></div>
+          <div class="mat-field col-span-6 md:col-span-3"><label>Commitment</label><input id="add-commit" type="number" step="0.01" class="mat-input" value="1000000"/></div>
+          <div class="mat-field col-span-6 md:col-span-3"><label>Coupon Rate (decimal)</label><input id="add-rate" type="number" step="0.0001" class="mat-input" value="0.08" placeholder="e.g. 0.08 = 8%"/></div>
+          <div class="mat-field col-span-6 md:col-span-3"><label>Settlement Date</label><input id="add-settle" type="date" class="mat-input"/></div>
+          <div class="mat-field col-span-6 md:col-span-3"><label>Maturity Date</label><input id="add-maturity" type="date" class="mat-input"/></div>
+        </div>
+        <div id="add-modal-errors" class="json-modal-errors" style="display:none;"></div>
+      </div>
+      <div class="json-modal-footer">
+        <span class="text-[11px] text-gray-500 mr-auto">User-created instruments are stored in this browser (localStorage) and persist across reloads.</span>
+        <button class="mat-btn outline" data-close-add="1">Cancel</button>
+        <button id="btn-add-save" class="mat-btn primary"><span class="material-icons-outlined text-[18px]">save</span>Save Instrument</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ===== JSON Import Modal ===== -->
   <div id="json-modal" class="json-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="json-modal-title">
@@ -813,6 +930,92 @@ function computeEIR(instr){
 -------------------------------------------------- */
 function buildSchedule(instr){
   if(!instr) return [];
+
+  // ---- Multi-tranche / multi-underlying support -------------------------
+  // If instr.tranches is non-empty (a loan with fixed + floating tranches in
+  // one transaction) OR instr.underlyingLoans is non-empty (a guarantee
+  // covering multiple loans), recursively build a schedule per sub-instrument
+  // and aggregate row-by-row. Each sub-instrument inherits the parent's
+  // settlement/maturity and identifying fields unless overridden.
+  // Closes scenarios #10 (fixed+floating mix) and G1 (multiple underlyings).
+  const subs = (Array.isArray(instr.tranches) && instr.tranches.length)
+    ? instr.tranches
+    : (Array.isArray(instr.underlyingLoans) && instr.underlyingLoans.length)
+      ? instr.underlyingLoans
+      : null;
+  if(subs){
+    // Build schedule for each sub-instrument with parent context inherited
+    const subSchedules = subs.map(s => {
+      const merged = Object.assign({}, instr, s);
+      // Don't recurse infinitely
+      delete merged.tranches;
+      delete merged.underlyingLoans;
+      // Each sub keeps its own coupon, marginSchedule, principalSchedule, etc.
+      return buildSchedule(merged);
+    });
+    // Aggregate row-by-row by date. Use the longest sub's date list as the
+    // canonical day grid (all subs share parent settle/maturity so all grids
+    // are equal length).
+    const longest = subSchedules.reduce((a,b) => b.length > a.length ? b : a, subSchedules[0]);
+    const aggregated = [];
+    const SUM_KEYS = ['balance','drawnBalance','carryingValue','initialPurchase','draw','paydown',
+                      'dailyCash','cumInterestAccrued','cumInterestEarned',
+                      'capitalized','cashInterestPayment','dailyPik','cumPikAccrued','cumPikEarned',
+                      'pikPaydown','amortDaily','cumAmort','nonUseFee','cumNonUseFee',
+                      'dailyFees','dailyEIRAccretion','cumEIRAccretion',
+                      'dailyDefaultInterest','dailyDefaultFee','cumDefaultInterest','cumDefaultFee'];
+    for(let k = 0; k < longest.length; k++){
+      const date = longest[k].date;
+      const r = { date, jsDate: longest[k].jsDate, dayOfWeek: longest[k].dayOfWeek,
+                  feeBreakdown: {}, hasEvent: false,
+                  // weighted-average rate placeholders
+                  couponRate: 0, floatingRate: 0, currentRate: 0, pikRate: 0 };
+      for(const key of SUM_KEYS) r[key] = 0;
+      let totalBal = 0;
+      for(const sched of subSchedules){
+        const sr = sched[k]; if(!sr) continue;
+        for(const key of SUM_KEYS){ r[key] += (sr[key] || 0); }
+        totalBal += (sr.balance || 0);
+        r.hasEvent = r.hasEvent || sr.hasEvent;
+        // merge per-fee breakdown
+        if(sr.feeBreakdown){
+          for(const [fk,fv] of Object.entries(sr.feeBreakdown)){
+            r.feeBreakdown[fk] = (r.feeBreakdown[fk] || 0) + (fv || 0);
+          }
+        }
+      }
+      // Weighted-average rates by balance
+      if(totalBal > 0){
+        for(const sched of subSchedules){
+          const sr = sched[k]; if(!sr || !sr.balance) continue;
+          const w = sr.balance / totalBal;
+          r.couponRate   += (sr.couponRate   || 0) * w;
+          r.floatingRate += (sr.floatingRate || 0) * w;
+          r.currentRate  += (sr.currentRate  || 0) * w;
+          r.pikRate      += (sr.pikRate      || 0) * w;
+        }
+      }
+      aggregated.push(r);
+    }
+    // Aggregate per-fee accumulation across sub-schedules
+    const aggFeeBreakdown = [];
+    const seen = new Map();
+    for(const sched of subSchedules){
+      for(const f of (sched.feeBreakdown || [])){
+        const key = f.label;
+        if(!seen.has(key)){
+          seen.set(key, { label:f.label, ifrs:f.ifrs, cumAccrued: 0, cumRecognised: 0, cumPaid: 0 });
+          aggFeeBreakdown.push(seen.get(key));
+        }
+        seen.get(key).cumAccrued += f.cumAccrued || 0;
+      }
+    }
+    aggregated.feeBreakdown = aggFeeBreakdown;
+    aggregated.deferredEIRPool = subSchedules.reduce((a,s) => a + (s.deferredEIRPool || 0), 0);
+    aggregated.tranchesUsed = subs.map(s => s.id || s.label);
+    return aggregated;
+  }
+
   const settle   = parseISO(instr.settlementDate);
   const maturity = parseISO(instr.maturityDate);
   if(!settle || !maturity || maturity < settle) return [];
@@ -907,6 +1110,51 @@ function buildSchedule(instr){
   let cumInterestEarned = 0, cumPikEarned = 0;
   let cumAmort = 0;
   let cumNonUseFee = 0;
+  // ---- IFRS 9 ECL state -------------------------------------------------
+  // ECL allowance is a contra-asset that grows toward the target ECL each day.
+  // Target = (Stage 1 ? 12-month PD : lifetime PD) × LGD × EAD.
+  // Daily ECL change = target - allowance, posted DR P&L / CR Loan Loss Allow.
+  let eclAllowance = 0;
+  let cumECLChange = 0;
+  // ---- FX revaluation state ---------------------------------------------
+  // Reval P&L is computed daily as opening-balance × (todayFX - yesterdayFX),
+  // where FX = instrument currency → functional currency. fxRateSchedule
+  // [{date, rate}] supplies date-effective fixings; default to 1.0.
+  const fxScheduleSorted = (instr.fxRateSchedule || []).slice().sort((a,b)=>a.date.localeCompare(b.date));
+  function fxRateOn(dateISO){
+    if(!fxScheduleSorted.length) return 1.0;
+    let r = fxScheduleSorted[0].rate;
+    for(const step of fxScheduleSorted){
+      if(step.date <= dateISO) r = step.rate;
+      else break;
+    }
+    return r;
+  }
+  let prevFX = fxScheduleSorted[0]?.rate ?? 1.0;
+  let cumFXGain = 0;
+  // ---- IFRS 9 hedge accounting state ------------------------------------
+  // hedge: { type:'CFH'|'FVH', notional, fixedRate, floatingRate,
+  //          fairValueSchedule:[{date, mtm}], effectivenessRatio:0.95,
+  //          settlementDates:[...] }
+  // CFH: effective portion → cashFlowHedgeReserve (OCI 35000); ineffective → P&L (45100)
+  // FVH: hedge MTM change → P&L (45200); offsetting hedged-item FV change → P&L
+  // Reclassification on settlement: DR Hedge Reserve / CR P&L Hedge Income
+  const hedgeFVSorted = ((instr.hedge?.fairValueSchedule) || []).slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const hedgeSettlements = new Set((instr.hedge?.settlementDates) || []);
+  let prevHedgeMTM = hedgeFVSorted[0]?.mtm ?? 0;
+  let cashFlowHedgeReserve = 0;     // OCI accumulator (CFH only)
+  let cumHedgeOCI = 0;              // total OCI movement to date
+  let cumHedgePL  = 0;              // total P&L impact (effective for FVH, ineffective for CFH)
+  let cumHedgeReclass = 0;          // reserve reclassified to P&L on settlements (CFH)
+  function hedgeMTMOn(dateISO){
+    if(!hedgeFVSorted.length) return 0;
+    let m = hedgeFVSorted[0].mtm;
+    for(const step of hedgeFVSorted){
+      if(step.date <= dateISO) m = step.mtm;
+      else break;
+    }
+    return m;
+  }
 
   // ---- Fee accrual setup (multi-fee) ----------------------------------
   // instr.fees: [{ id, kind, label, mode, rate, base, amount, frequency,
@@ -983,6 +1231,38 @@ function buildSchedule(instr){
       else if(e.type==='paydown' || e.type==='repayment'){ paydown += e.amount; balance -= e.amount; drawnBalance -= e.amount; carryingValue -= e.amount; }
     }
 
+    // ----- IFRS 9 modification accounting (§5.4.3) -----------------------
+    // modificationEvents: [{date, modType, gainLoss, newCoupon, newMaturity,
+    //                       newSchedule, reason, pvDelta}]
+    // Substantial mod (≥10% PV change) → derecognise + new instrument (the
+    // engine logs the event and applies new terms forward; full derecog/re-
+    // recog requires splitting into two instruments which we surface in DIU).
+    // Non-substantial → adjust carrying value + post P&L gain/loss.
+    let dailyModGain = 0;
+    let modEventDescription = null;
+    const dISO = toISO(d);
+    for(const mev of (instr.modificationEvents || [])){
+      if(mev.date !== dISO) continue;
+      const gainLoss = mev.gainLoss || 0;
+      dailyModGain += gainLoss;
+      modEventDescription = (mev.modType === 'substantial' ? 'Substantial' : 'Non-substantial')
+                          + ' modification' + (mev.reason ? ' — ' + mev.reason : '');
+      // Apply forward-looking term changes
+      if(mev.newCoupon){
+        instr.coupon = Object.assign({}, instr.coupon || {}, mev.newCoupon);
+      }
+      if(mev.newMaturity){
+        // Note: maturity change mid-life only takes effect for accrual purposes
+        // beyond this date. The day grid was fixed at loop start so we won't
+        // extend rows — set a flag for the user.
+        instr.maturityDate = mev.newMaturity;
+      }
+      // For non-substantial mods, adjust carrying value by gain/loss (P&L pair posted via DIU)
+      if(mev.modType !== 'substantial' && gainLoss){
+        carryingValue += gainLoss;
+      }
+    }
+
     // ----- Determine effective coupon rate for today -----
     let couponRate = instr.coupon?.fixedRate ?? 0;
     let floatingRate = instr.coupon?.floatingRate ?? 0;
@@ -1030,12 +1310,113 @@ function buildSchedule(instr){
     cumCashAccrued += dailyCash;
     cumInterestEarned += dailyCash;
 
+    // ----- Default interest / default fee accrual -----
+    // instr.defaultEvents: [{date, kind:'missedPayment'|'covenantBreach',
+    //                        defaultRateBps, defaultFeeAmount, endDate?, reason}]
+    // From the event date (until endDate or maturity) the engine adds
+    // defaultRateBps × balance × dcf as additional default interest, and
+    // recognises defaultFeeAmount as a one-off default fee on the event date.
+    let dailyDefaultInterest = 0;
+    let dailyDefaultFee = 0;
+    if(Array.isArray(instr.defaultEvents)){
+      for(const ev of instr.defaultEvents){
+        if(!ev.date) continue;
+        const evEnd = ev.endDate || toISO(maturity);
+        if(todayISO >= ev.date && todayISO <= evEnd && ev.defaultRateBps){
+          dailyDefaultInterest += balance * (ev.defaultRateBps/10000) * dcf;
+        }
+        if(todayISO === ev.date && ev.defaultFeeAmount){
+          dailyDefaultFee += ev.defaultFeeAmount;
+        }
+      }
+    }
+
     // ----- Daily PIK accrual -----
     let dailyPik = 0;
     if(pikEnabled){
       dailyPik = balance * pikRateNominal * dcf;
       cumPikAccrued += dailyPik;
       cumPikEarned  += dailyPik;
+    }
+
+    // ----- IFRS 9 ECL provisioning ---------------------------------------
+    // Target ECL based on stage:
+    //   Stage 1: 12-month ECL  =  pdAnnual × lgd × balance
+    //   Stage 2: lifetime ECL  =  min(1, pdAnnual × yearsRemaining) × lgd × balance
+    //   Stage 3: lifetime ECL on net carrying (= gross - existing allowance)
+    // Daily change = target - allowance (positive grows allowance, negative reverses).
+    let dailyECLChange = 0;
+    if(instr.ifrs && instr.ifrs.computeECL !== false){
+      const stage = instr.ifrs.ecLStage || 1;
+      const pdAnn = instr.ifrs.pdAnnual || 0;
+      const lgd   = instr.ifrs.lgd || 0;
+      if(pdAnn > 0 && lgd > 0 && balance > 0){
+        const yrsRemaining = Math.max(0, (maturity - d) / (365 * ONE_DAY));
+        let lifetimePD = Math.min(1, pdAnn * yrsRemaining);
+        let targetECL;
+        if(stage === 1){
+          targetECL = balance * pdAnn * lgd;
+        } else if(stage === 2){
+          targetECL = balance * lifetimePD * lgd;
+        } else {
+          // Stage 3 — credit-impaired: lifetime ECL on net carrying
+          const netCarrying = Math.max(0, balance - eclAllowance);
+          targetECL = netCarrying * lifetimePD * lgd + eclAllowance;
+          // Clamp so the net allowance stays sane
+          targetECL = Math.min(balance, targetECL);
+        }
+        dailyECLChange = targetECL - eclAllowance;
+        eclAllowance += dailyECLChange;
+        cumECLChange += dailyECLChange;
+      }
+    }
+
+    // ----- FX revaluation ------------------------------------------------
+    // Revalue OPENING balance at today's rate vs prior day's rate. Flow
+    // changes on the day (draws/repayments) get booked at today's FX so they
+    // don't generate FX P&L themselves.
+    const todayFX = fxRateOn(todayISO);
+    const dailyFXGain = (i === 0) ? 0 : (balance - draw + paydown) * (todayFX - prevFX);
+    // (balance - draw + paydown) reconstructs the opening balance: today's
+    // closing balance was already adjusted for the day's flows above.
+    cumFXGain += dailyFXGain;
+    prevFX = todayFX;
+
+    // ----- IFRS 9 hedge accounting (§6) --------------------------------
+    // Daily hedge MTM change is split into effective (OCI for CFH) and
+    // ineffective (P&L for both CFH and FVH). For FVH the entire change is
+    // P&L because it directly offsets the hedged item's FV movements.
+    let dailyHedgeOCI = 0;          // CFH effective portion
+    let dailyHedgePL  = 0;          // ineffective (CFH) or full hedge MTM (FVH)
+    let dailyHedgeReclass = 0;      // CFH reclassification to P&L on settlement
+    let hedgeEffectiveness = null;  // 80-125% test indicator
+    if(instr.hedge && instr.hedge.type){
+      const effRatio = instr.hedge.effectivenessRatio ?? 0.95;
+      const todayMTM = hedgeMTMOn(dISO);
+      const dMTM = (i === 0) ? 0 : todayMTM - prevHedgeMTM;
+      prevHedgeMTM = todayMTM;
+      if(instr.hedge.type === 'CFH'){
+        // Cash flow hedge: effective portion to OCI, ineffective to P&L
+        dailyHedgeOCI = dMTM * effRatio;
+        dailyHedgePL  = dMTM * (1 - effRatio);
+        cashFlowHedgeReserve += dailyHedgeOCI;
+        // Reclassify reserve to P&L on settlement dates (when hedged cashflow occurs)
+        if(hedgeSettlements.has(dISO) && cashFlowHedgeReserve !== 0){
+          dailyHedgeReclass = cashFlowHedgeReserve;
+          cashFlowHedgeReserve = 0;
+        }
+      } else if(instr.hedge.type === 'FVH'){
+        // Fair value hedge: full MTM change to P&L
+        dailyHedgePL = dMTM;
+      }
+      // Effectiveness ratio test — must be in 80-125% range under IFRS 9
+      // (legacy IAS 39 numerical test; IFRS 9 §6.4.1 only requires economic
+      // relationship + dominant credit risk, but we surface the ratio for
+      // diagnostic purposes).
+      hedgeEffectiveness = effRatio;
+      cumHedgeOCI += dailyHedgeOCI;
+      cumHedgePL  += dailyHedgePL;
+      cumHedgeReclass += dailyHedgeReclass;
     }
 
     // ----- Non-use fee (on undrawn commitment) -----
@@ -1081,6 +1462,18 @@ function buildSchedule(instr){
         }
         // IFRS9-EIR / IFRS15-overTime one-offs: skip — already in EIR pool.
       } else if(f.mode === 'percent' || f.mode === 'marginLinked'){
+        // Per-fee rate ratchet: if feeRateSchedule = [{from,to,rate}] is set,
+        // resolve today's rate from the schedule (otherwise fall back to f.rate).
+        // Closes scenario #14 (commitment fee % ratchets) and G3 (time-based
+        // guarantee fee adjustments) — works for any percent-mode fee.
+        let effectiveRate = f.rate || 0;
+        if(Array.isArray(f.feeRateSchedule) && f.feeRateSchedule.length){
+          for(const step of f.feeRateSchedule){
+            const fr = step.from || '0000-01-01';
+            const to = step.to   || '9999-12-31';
+            if(todayISO >= fr && todayISO <= to){ effectiveRate = step.rate; break; }
+          }
+        }
         // For guarantee instruments, "drawn" / "undrawn" naturally refer to
         // the covered tranche, not the full facility. Fall back to commitment-
         // based for non-guarantee loans so existing behaviour is preserved.
@@ -1102,10 +1495,10 @@ function buildSchedule(instr){
           const marginBps = (baseMarginBps != null ? baseMarginBps
                               : (instr.coupon?.spread ?? 0) * 10000)
                             + esgDeltaBps(todayISO);
-          const effectiveRate = (marginBps/10000) * (f.marginMultiple ?? 0.35);
-          amt = baseAmt * effectiveRate * dcf;
+          const eff = (marginBps/10000) * (f.marginMultiple ?? 0.35);
+          amt = baseAmt * eff * dcf;
         } else {
-          amt = baseAmt * (f.rate || 0) * dcf;
+          amt = baseAmt * effectiveRate * dcf;
         }
       } else if(f.mode === 'flat'){
         // Spread flat amount linearly across accrual window
@@ -1188,7 +1581,29 @@ function buildSchedule(instr){
       feeBreakdown: dailyFeeBreakdown,
       dailyEIRAccretion,
       cumEIRAccretion: (rows.length ? rows[rows.length-1].cumEIRAccretion : 0) + dailyEIRAccretion,
-      hasEvent: evs.length > 0 || capitalized > 0
+      // Default interest / default fee
+      dailyDefaultInterest,
+      dailyDefaultFee,
+      cumDefaultInterest: (rows.length ? rows[rows.length-1].cumDefaultInterest : 0) + dailyDefaultInterest,
+      cumDefaultFee:      (rows.length ? rows[rows.length-1].cumDefaultFee : 0) + dailyDefaultFee,
+      // ECL provisioning (IFRS 9 §5.5)
+      dailyECLChange,
+      eclAllowance,
+      cumECLChange,
+      // Modification accounting (IFRS 9 §5.4.3)
+      dailyModGain,
+      modEventDescription,
+      cumModGain: (rows.length ? rows[rows.length-1].cumModGain : 0) + dailyModGain,
+      // FX revaluation
+      fxRate: todayFX,
+      dailyFXGain,
+      cumFXGain,
+      balanceFC: balance * todayFX,                       // balance in functional currency
+      // Hedge accounting (IFRS 9 §6)
+      dailyHedgeOCI, dailyHedgePL, dailyHedgeReclass,
+      cashFlowHedgeReserve, cumHedgeOCI, cumHedgePL, cumHedgeReclass,
+      hedgeEffectiveness,
+      hasEvent: evs.length > 0 || capitalized > 0 || dailyDefaultFee > 0
     });
   }
   // Stash the engine's applied yield so computeEIR can align its effectiveYield
@@ -1222,6 +1637,20 @@ function summarize(rows, beginISO, endISO){
     totalNonUseFee:   sum(win,'nonUseFee'),
     totalFees:        sum(win,'dailyFees'),
     totalEIRAccretion: sum(win,'dailyEIRAccretion'),
+    totalDefaultInterest: sum(win,'dailyDefaultInterest'),
+    totalDefaultFee:      sum(win,'dailyDefaultFee'),
+    totalDraws:           sum(win,'draw'),
+    totalRepayments:      sum(win,'paydown'),
+    totalECLChange:       sum(win,'dailyECLChange'),
+    closingECLAllowance:  win[win.length-1]?.eclAllowance ?? 0,
+    totalFXGain:          sum(win,'dailyFXGain'),
+    closingBalanceFC:     win[win.length-1]?.balanceFC ?? 0,
+    totalModGain:         sum(win,'dailyModGain'),
+    modEvents:            win.filter(r => r.modEventDescription).map(r => ({date: r.date, description: r.modEventDescription, gainLoss: r.dailyModGain})),
+    totalHedgeOCI:        sum(win,'dailyHedgeOCI'),
+    totalHedgePL:         sum(win,'dailyHedgePL'),
+    totalHedgeReclass:    sum(win,'dailyHedgeReclass'),
+    closingHedgeReserve:  win[win.length-1]?.cashFlowHedgeReserve ?? 0,
     feeBreakdown,                  // { 'Arrangement Fee': 12345.67, ... }
     daysCount:        win.length,
     openingBalance:   win[0]?.balance ?? 0,
@@ -1229,6 +1658,64 @@ function summarize(rows, beginISO, endISO){
     closingCarrying:  win[win.length-1]?.carryingValue ?? 0,
     periodStart:      win[0]?.date,
     periodEnd:        win[win.length-1]?.date
+  };
+}
+
+/* ---------- Cash flow forecast & maturity ladder ----------
+   Project daily flows from `asOfDate` forward into bucketed maturity ladders.
+   Standard IFRS 7 liquidity disclosure buckets:
+     ≤30d, 31-90d, 91-180d, 181d-1yr, 1-5yr, >5yr.
+   Each bucket sums the principal repayments, interest, fees, and EIR
+   accretion expected to settle in that window.
+*/
+function buildCashFlowForecast(rows, asOfISO){
+  if(!rows || !rows.length) return null;
+  const asOfDate = parseISO(asOfISO);
+  if(!asOfDate) return null;
+  const D = ms => Math.floor(ms / ONE_DAY);
+  const cutoffs = [
+    { label:'≤30d',     maxDays: 30  },
+    { label:'31-90d',   maxDays: 90  },
+    { label:'91-180d',  maxDays: 180 },
+    { label:'181d-1yr', maxDays: 365 },
+    { label:'1-5yr',    maxDays: 365 * 5 },
+    { label:'>5yr',     maxDays: Infinity }
+  ];
+  // Initialise buckets
+  const buckets = cutoffs.map((c, ix) => ({
+    label: c.label,
+    fromDays: ix === 0 ? 0 : cutoffs[ix-1].maxDays + 1,
+    toDays:   c.maxDays,
+    principal: 0, interest: 0, fees: 0, eir: 0, defaultInt: 0, total: 0,
+    rowsCount: 0
+  }));
+  let totalPrincipal=0, totalInterest=0, totalFees=0, totalEIR=0, totalDefault=0;
+  for(const r of rows){
+    const rd = parseISO(r.date);
+    if(rd < asOfDate) continue;
+    const days = D(rd - asOfDate);
+    const b = buckets.find(b => days >= b.fromDays && days <= b.toDays);
+    if(!b) continue;
+    const principal = (r.paydown || 0);
+    const interest  = (r.dailyCash || 0);
+    const fees      = (r.dailyFees || 0);
+    const eir       = (r.dailyEIRAccretion || 0);
+    const defaultInt= (r.dailyDefaultInterest || 0);
+    b.principal += principal; b.interest += interest; b.fees += fees;
+    b.eir += eir; b.defaultInt += defaultInt;
+    b.total += principal + interest + fees + eir + defaultInt;
+    b.rowsCount++;
+    totalPrincipal += principal; totalInterest += interest; totalFees += fees;
+    totalEIR += eir; totalDefault += defaultInt;
+  }
+  return {
+    asOf: asOfISO,
+    buckets,
+    totals: {
+      principal: totalPrincipal, interest: totalInterest, fees: totalFees,
+      eirAccretion: totalEIR, defaultInterest: totalDefault,
+      grandTotal: totalPrincipal + totalInterest + totalFees + totalEIR + totalDefault
+    }
   };
 }
 
@@ -1278,6 +1765,94 @@ function generateDIU(instr, summary){
     add('Non-Use Fee Receivable', summary.totalNonUseFee, true, '23100', summary.periodEnd, `Non-use fee for ${summary.periodEnd}`);
     jeIndex++;
   }
+  // Hedge accounting (IFRS 9 §6) — three components per period:
+  //  1) CFH effective portion → DR/CR Hedging Instrument (16000) / Cash Flow Hedge Reserve OCI (35000)
+  //  2) Ineffective (CFH) or full MTM (FVH) → DR/CR Hedging Instrument / P&L Hedge Ineffectiveness (45100) / FV Hedge P&L (45200)
+  //  3) Reclassification on settlement → DR Cash Flow Hedge Reserve / CR Hedge Income (45100)
+  if(Math.abs(summary.totalHedgeOCI || 0) > 0.005){
+    const v = summary.totalHedgeOCI;
+    if(v > 0){
+      add('Hedging Instrument MTM (CFH OCI)',  v, true,  '16000', summary.periodEnd, `CFH effective portion to OCI for ${summary.periodEnd}`);
+      add('Cash Flow Hedge Reserve (OCI)',     v, false, '35000', summary.periodEnd, `CFH effective portion to OCI for ${summary.periodEnd}`);
+    } else {
+      add('Hedging Instrument MTM (CFH OCI)', -v, false, '16000', summary.periodEnd, `CFH effective portion to OCI for ${summary.periodEnd}`);
+      add('Cash Flow Hedge Reserve (OCI)',    -v, true,  '35000', summary.periodEnd, `CFH effective portion to OCI for ${summary.periodEnd}`);
+    }
+    jeIndex++;
+  }
+  if(Math.abs(summary.totalHedgePL || 0) > 0.005){
+    const v = summary.totalHedgePL;
+    const acct = (instr.hedge?.type === 'FVH') ? '45200' : '45100';
+    const label = (instr.hedge?.type === 'FVH') ? 'Fair Value Hedge P&L' : 'Hedge Ineffectiveness P&L';
+    if(v > 0){
+      add('Hedging Instrument MTM',  v, true,  '16000', summary.periodEnd, `Hedge MTM to P&L for ${summary.periodEnd}`);
+      add(label,                     v, false, acct,    summary.periodEnd, `Hedge MTM to P&L for ${summary.periodEnd}`);
+    } else {
+      add('Hedging Instrument MTM', -v, false, '16000', summary.periodEnd, `Hedge MTM to P&L for ${summary.periodEnd}`);
+      add(label,                    -v, true,  acct,    summary.periodEnd, `Hedge MTM to P&L for ${summary.periodEnd}`);
+    }
+    jeIndex++;
+  }
+  if(Math.abs(summary.totalHedgeReclass || 0) > 0.005){
+    const v = summary.totalHedgeReclass;
+    if(v > 0){
+      add('Cash Flow Hedge Reserve Reclass',  v, true,  '35000', summary.periodEnd, `CFH reclass to P&L on settlement ${summary.periodEnd}`);
+      add('Hedge Income (Reclass from OCI)',  v, false, '45100', summary.periodEnd, `CFH reclass to P&L on settlement ${summary.periodEnd}`);
+    } else {
+      add('Cash Flow Hedge Reserve Reclass', -v, false, '35000', summary.periodEnd, `CFH reclass to P&L on settlement ${summary.periodEnd}`);
+      add('Hedge Income (Reclass from OCI)', -v, true,  '45100', summary.periodEnd, `CFH reclass to P&L on settlement ${summary.periodEnd}`);
+    }
+    jeIndex++;
+  }
+  // Modification gain/loss (IFRS 9 §5.4.3) — DR/CR P&L Modification Gain/Loss / Loan Asset
+  if(Math.abs(summary.totalModGain || 0) > 0.005){
+    const v = summary.totalModGain;
+    if(v > 0){
+      add('Modification Gain (IFRS 9)',                  v, false, '44000', summary.periodEnd, `Modification gain for ${summary.periodEnd}`);
+      add('Modification — Loan Asset Adjustment',         v, true,  '15000', summary.periodEnd, `Modification gain for ${summary.periodEnd}`);
+    } else {
+      add('Modification Loss (IFRS 9)',                 -v, true,  '44000', summary.periodEnd, `Modification loss for ${summary.periodEnd}`);
+      add('Modification — Loan Asset Adjustment',       -v, false, '15000', summary.periodEnd, `Modification loss for ${summary.periodEnd}`);
+    }
+    jeIndex++;
+  }
+  // ECL provisioning (IFRS 9 §5.5) — DR Impairment expense / CR Loan Loss Allowance
+  // Net change can be positive (build-up) or negative (release on stage migration / paydown)
+  if(Math.abs(summary.totalECLChange || 0) > 0.005){
+    const v = summary.totalECLChange;
+    if(v > 0){
+      add('Impairment Expense (ECL)',           v, true,  '70100', summary.periodEnd, `IFRS 9 ECL provision for ${summary.periodEnd}`);
+      add('Loan Loss Allowance (Contra-Asset)', v, false, '15500', summary.periodEnd, `IFRS 9 ECL provision for ${summary.periodEnd}`);
+    } else {
+      add('Impairment Reversal (ECL)',          -v, false, '70100', summary.periodEnd, `IFRS 9 ECL release for ${summary.periodEnd}`);
+      add('Loan Loss Allowance Reversal',       -v, true,  '15500', summary.periodEnd, `IFRS 9 ECL release for ${summary.periodEnd}`);
+    }
+    jeIndex++;
+  }
+  // FX revaluation gain/loss — DR/CR Forex P&L (45000) / Loan Asset (15000)
+  if(Math.abs(summary.totalFXGain || 0) > 0.005){
+    const v = summary.totalFXGain;
+    if(v > 0){
+      add('FX Revaluation Gain', v, false, '45000', summary.periodEnd, `FX reval (functional currency) for ${summary.periodEnd}`);
+      add('FX Revaluation — Loan Asset Adjustment', v, true,  '15000', summary.periodEnd, `FX reval (functional currency) for ${summary.periodEnd}`);
+    } else {
+      add('FX Revaluation Loss', -v, true,  '45000', summary.periodEnd, `FX reval (functional currency) for ${summary.periodEnd}`);
+      add('FX Revaluation — Loan Asset Adjustment', -v, false, '15000', summary.periodEnd, `FX reval (functional currency) for ${summary.periodEnd}`);
+    }
+    jeIndex++;
+  }
+  // Default interest (penalty rate × outstanding balance from event date)
+  if((summary.totalDefaultInterest || 0) > 0.005){
+    add('Default Interest Income',     summary.totalDefaultInterest, false, '40130', summary.periodEnd, `Default interest for ${summary.periodEnd}`);
+    add('Default Interest Receivable', summary.totalDefaultInterest, true,  '23130', summary.periodEnd, `Default interest for ${summary.periodEnd}`);
+    jeIndex++;
+  }
+  // Default fee (one-off penalty fee on event date)
+  if((summary.totalDefaultFee || 0) > 0.005){
+    add('Default Fee Income',     summary.totalDefaultFee, false, '40140', summary.periodEnd, `Default fee for ${summary.periodEnd}`);
+    add('Default Fee Receivable', summary.totalDefaultFee, true,  '23140', summary.periodEnd, `Default fee for ${summary.periodEnd}`);
+    jeIndex++;
+  }
   // EIR accretion of deferred IFRS-9 fees (arrangement / OID-style)
   // DR Loan carrying value (40110) / CR Interest income (40100)
   if(Math.abs(summary.totalEIRAccretion || 0) > 0.005){
@@ -1295,6 +1870,52 @@ function generateDIU(instr, summary){
     add(`${label} Receivable`,           amt, true,  '23150', summary.periodEnd, `${label} accrual for ${summary.periodEnd}`);
     jeIndex++;
   }
+  // ----- CASH-LEG JEs (closes the half-double-entry gap) -------------------
+  // Drawdowns: DR Loan Asset (15000) / CR Cash (10000) — one pair per draw event
+  // Repayments: DR Cash (10000) / CR Loan Asset (15000) — one pair per repayment
+  // Cash settlement of accrued income at period end: DR Cash / CR Receivable
+  // (clears the corresponding 23000/23130/23140/23150 receivables booked above).
+  for(const r of summary.rows){
+    if(r.draw && r.draw > 0.005){
+      add('Loan Drawdown',          r.draw, true,  '15000', r.date, `Drawdown ${r.date}`);
+      add('Loan Drawdown — Cash',   r.draw, false, '10000', r.date, `Drawdown ${r.date}`);
+      jeIndex++;
+    }
+    if(r.paydown && r.paydown > 0.005){
+      add('Loan Repayment — Cash',   r.paydown, true,  '10000', r.date, `Repayment ${r.date}`);
+      add('Loan Repayment',          r.paydown, false, '15000', r.date, `Repayment ${r.date}`);
+      jeIndex++;
+    }
+  }
+  // Cash settlement at period end: assume accrued interest + fees paid on
+  // periodEnd date (a simplification — real systems track per-fee payment
+  // schedules). Pair up to clear the receivables we booked above.
+  if(summary.totalCashAccrual > 0.005){
+    add('Interest Cash Receipt',     summary.totalCashAccrual, true,  '10000', summary.periodEnd, `Interest cash settlement ${summary.periodEnd}`);
+    add('Interest Receivable Clear', summary.totalCashAccrual, false, '23000', summary.periodEnd, `Interest cash settlement ${summary.periodEnd}`);
+    jeIndex++;
+  }
+  for(const [label, amt] of Object.entries(fb)){
+    if(Math.abs(amt) <= 0.005) continue;
+    add(`${label} Cash Receipt`,            amt, true,  '10000', summary.periodEnd, `${label} cash settlement ${summary.periodEnd}`);
+    add(`${label} Receivable Clear`,        amt, false, '23150', summary.periodEnd, `${label} cash settlement ${summary.periodEnd}`);
+    jeIndex++;
+  }
+  if((summary.totalDefaultInterest || 0) > 0.005){
+    add('Default Interest Cash Receipt',     summary.totalDefaultInterest, true,  '10000', summary.periodEnd, `Default interest cash settlement ${summary.periodEnd}`);
+    add('Default Interest Receivable Clear', summary.totalDefaultInterest, false, '23130', summary.periodEnd, `Default interest cash settlement ${summary.periodEnd}`);
+    jeIndex++;
+  }
+  if((summary.totalDefaultFee || 0) > 0.005){
+    add('Default Fee Cash Receipt',          summary.totalDefaultFee, true,  '10000', summary.periodEnd, `Default fee cash settlement ${summary.periodEnd}`);
+    add('Default Fee Receivable Clear',      summary.totalDefaultFee, false, '23140', summary.periodEnd, `Default fee cash settlement ${summary.periodEnd}`);
+    jeIndex++;
+  }
+  if(summary.totalNonUseFee > 0.005){
+    add('Non-Use Fee Cash Receipt',          summary.totalNonUseFee, true,  '10000', summary.periodEnd, `Non-use fee cash settlement ${summary.periodEnd}`);
+    add('Non-Use Fee Receivable Clear',      summary.totalNonUseFee, false, '23100', summary.periodEnd, `Non-use fee cash settlement ${summary.periodEnd}`);
+    jeIndex++;
+  }
   return entries;
 }
 </script>
@@ -1309,10 +1930,11 @@ function generateDIU(instr, summary){
 const INSTRUMENTS = [
   {
     id:'alliance',
+    positionId:'POS-FCP1-ALLIANCE-CN', securityId:'SEC-ALLIANCE-2019-CN',
     legalEntity:'FIS Capital Partners I', leid: 7,
     deal:'Alliance Manufacturing',
-    position:'Alliance Manufacturing (Convertible Note)',
-    incomeSecurity:'Alliance Manufacturing (Convertible Note)',
+    position:'FCP-I 100% holding · Alliance CN',
+    incomeSecurity:'Alliance Manufacturing Convertible Note (12% / 14% PIK)',
     faceValue: 25000000,
     purchasePrice: 25000000, // at par
     commitment: 25000000,
@@ -1335,10 +1957,11 @@ const INSTRUMENTS = [
   },
   {
     id:'discountBond',
+    positionId:'POS-FCP1-COPPERLEAF', securityId:'SEC-COPPERLEAF-2030-SRNOTE',
     legalEntity:'FIS Capital Partners I', leid: 7,
     deal:'Copperleaf Capital',
-    position:'Copperleaf 8% 2030 Sr Notes',
-    incomeSecurity:'Copperleaf 8% 2030 Sr Notes',
+    position:'FCP-I 100% holding · Copperleaf bond',
+    incomeSecurity:'Copperleaf 8% Senior Notes 2030 (Discount Bond)',
     faceValue: 10000000,
     purchasePrice: 9_250_000,      // bought at discount
     commitment: 10_000_000,
@@ -1358,10 +1981,11 @@ const INSTRUMENTS = [
   },
   {
     id:'floatingLoan',
+    positionId:'POS-FCP2-ORION-TLB', securityId:'SEC-ORION-TLB-2024',
     legalEntity:'FIS Capital Partners II', leid: 11,
     deal:'Orion Industrial',
-    position:'Orion TL-B',
-    incomeSecurity:'Orion Term Loan B (SOFR + 575)',
+    position:'FCP-II £40m Position · Orion TL-B',
+    incomeSecurity:'Orion Industrial Term Loan B (SOFR + 575 bps)',
     faceValue: 40_000_000,
     purchasePrice: 40_000_000,
     commitment: 40_000_000,
@@ -1383,11 +2007,46 @@ const INSTRUMENTS = [
     preset:'Orion TL-B · Floating + Caps/Floors'
   },
   {
+    // ----------------------------------------------------------------
+    // Same Orion TL-B security as above, held by FCP-I in a separate
+    // £20m secondary purchase. Demonstrates that ONE security can have
+    // MULTIPLE positions across different LEs (the canonical fund-admin
+    // multi-LE syndicate model). Both positions share securityId
+    // 'SEC-ORION-TLB-2024' but have distinct positionIds, ownership %,
+    // settlement dates, and cost bases.
+    // ----------------------------------------------------------------
+    id:'floatingLoanFCP1',
+    positionId:'POS-FCP1-ORION-TLB',  securityId:'SEC-ORION-TLB-2024',  // ← same security as floatingLoan
+    legalEntity:'FIS Capital Partners I', leid: 7,
+    deal:'Orion Industrial',
+    position:'FCP-I £20m Position · Orion TL-B (Secondary)',
+    incomeSecurity:'Orion Industrial Term Loan B (SOFR + 575 bps)',
+    faceValue: 20_000_000,
+    purchasePrice: 19_700_000,            // bought at 98.5 (secondary)
+    commitment: 20_000_000,
+    settlementDate: '2025-03-15',         // FCP-I bought in 6m after FCP-II's primary
+    maturityDate:   '2031-09-15',
+    dayBasis: 'ACT/360',
+    coupon: { type:'Floating', fixedRate: 0, floatingRate: 0.051, spread: 0.0575, floor: 0.08, cap: 0.14 },
+    pik: { enabled:false, rate:0 },
+    principalRepayment: 'Scheduled',
+    principalSchedule: [
+      { date:'2025-03-15', type:'initial', amount: 20_000_000 },
+      { date:'2025-09-30', type:'paydown', amount:    500_000 },  // pro-rata
+      { date:'2026-03-31', type:'paydown', amount:    500_000 }
+    ],
+    amortization: { method:'effectiveInterestPrice' },  // accrete the discount over life
+    nonUseFee: { enabled:false, rate:0 },
+    type:'floatingCapsFloors',
+    preset:'Orion TL-B (FCP-I £20m Secondary @ 98.5)'
+  },
+  {
     id:'revolver',
+    positionId:'POS-FCO3-NORTHWIND-RCF', securityId:'SEC-NORTHWIND-RCF-2025',
     legalEntity:'FIS Credit Opps III', leid: 22,
     deal:'Northwind Ventures',
-    position:'Northwind RCF',
-    incomeSecurity:'Northwind Revolving Credit Facility',
+    position:'FCO-III 100% holding · Northwind RCF',
+    incomeSecurity:'Northwind Revolving Credit Facility (£50m commitment)',
     faceValue: 15_000_000, // drawn at settle
     purchasePrice: 15_000_000,
     commitment: 50_000_000,
@@ -1414,9 +2073,10 @@ const INSTRUMENTS = [
     // 1% OID at issue, optional 2% PIK toggle (quarterly cap), 1%/yr amortization,
     // bullet at maturity. Mirrors what a BDC or direct-lending fund would book.
     id:'privateCredit',
+    positionId:'POS-DL4-MERIDIAN', securityId:'SEC-MERIDIAN-UNITRANCHE-2025',
     legalEntity:'FIS Direct Lending Fund IV', leid: 31,
     deal:'Meridian Healthcare Services',
-    position:'Meridian Unitranche TL',
+    position:'DL-IV 100% holding · Meridian Unitranche',
     incomeSecurity:'Meridian Unitranche Term Loan (SOFR + 600, 1% OID, 2% PIK)',
     faceValue: 35_000_000,
     purchasePrice: 34_650_000, // 99.0 — 100 bps OID
@@ -1465,10 +2125,11 @@ const INSTRUMENTS = [
     // - Two drawdowns: £15M actual on 17/2/2026 and £10M forecast on 30/6/2026
     // ----------------------------------------------------------------
     id:'libra2',
+    positionId:'POS-NWF-LIBRA2-100', securityId:'SEC-LIBRA2-HSBC-FACB4',
     legalEntity:'NWF Sustainable Infrastructure', leid: 42,
     deal:'Libra 2',
-    position:'HSBC Facility B4 - 100%',
-    incomeSecurity:'Libra 2 · HSBC Facility B4 (Compounded SONIA + Margin)',
+    position:'NWF 100% Bilateral Position · Libra 2',
+    incomeSecurity:'HSBC Facility B4 — Libra 2 (Compounded SONIA + Ratcheted Margin)',
     counterpartyId:'SP023',
     transactionId:'SP023',
     bilateralFlag:'Bilateral',
@@ -1583,11 +2244,12 @@ const INSTRUMENTS = [
     // Underlying loan: SONIA + 0.84% margin per annum, scheduled repayments.
     // ----------------------------------------------------------------
     id:'voltGuarantee',
+    positionId:'POS-NWF-VOLT-GUAR', securityId:'SEC-VOLT-GP017-FINGUAR',
     instrumentKind:'guarantee',
     legalEntity:'NWF Sustainable Infrastructure', leid: 42,
     deal:'Volt',
-    position:'Volt Financial Guarantee (Covered Tranche)',
-    incomeSecurity:'Volt · Financial Guarantee on £1bn BoA Loan (£800m covered)',
+    position:'NWF Guarantor Position · Volt covered tranche',
+    incomeSecurity:'Volt Financial Guarantee on £1bn BoA Loan (£800m covered)',
     counterpartyId:'CP0112',
     transactionId:'GP017 & GP018',
     bilateralFlag:'Bilateral',
@@ -1729,11 +2391,12 @@ const INSTRUMENTS = [
     // since SPPI fails for equity (no contractual cashflows).
     // ----------------------------------------------------------------
     id:'xyzBuyoutFund',
+    positionId:'POS-NWFE-XYZ-LP', securityId:'SEC-XYZ-BUYOUT-LPINT',
     instrumentKind:'equity-fund',
     legalEntity:'NWF Renewable Equity', leid: 51,
     deal:'XYZ Buyout Fund (GBP)',
-    position:'XYZ Buyout Fund · LP Interest',
-    incomeSecurity:'XYZ Buyout Fund — £50m LP Commitment (Renewables)',
+    position:'NWFE LP Subscription · £50m commitment',
+    incomeSecurity:'XYZ Buyout Fund (GBP) — Limited Partnership Interest',
     generalPartner:'WXY Partners LLP',
     fundType:'LP / Closed-end',
     sectorFocus:'Solar, Fibre Infrastructure',
@@ -1827,11 +2490,12 @@ const INSTRUMENTS = [
     //   - No coupon, no maturity-based amortization (FVTPL equity)
     // ----------------------------------------------------------------
     id:'abcdefSeriesC',
+    positionId:'POS-NWFE-ABCDEF-SC', securityId:'SEC-ABCDEF-SERIES-C-ORD',
     instrumentKind:'equity-direct',
     legalEntity:'NWF Renewable Equity', leid: 51,
     deal:'ABCDEF Software Ltd',
-    position:'ABCDEF Software · Series C',
-    incomeSecurity:'ABCDEF Software — Series C Ordinary Shares (£100m, 9.09%)',
+    position:'NWFE Series C Subscription · £100m · 9.09% post-money',
+    incomeSecurity:'ABCDEF Software Ltd — Series C Ordinary Shares',
     counterpartyId:'ABCDEF-LTD',
     currency:'GBP',
     faceValue:    100_000_000,                 // committed = invested
@@ -1906,6 +2570,183 @@ const INSTRUMENTS = [
     },
     type:'simpleDaily',
     preset:'ABCDEF Series C · £100m direct equity (9.09% post-money, FVTPL Level 3)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Suffolk Solar — multi-tranche infrastructure loan (Fixed + Floating)
+    // Demonstrates scenario #10: fixed + floating tranches in one transaction.
+    // £100m total facility split 50/50:
+    //   - Tranche A: £50m fixed at 6.5% over 7 years (30/360)
+    //   - Tranche B: £50m SONIA + 350 bps over 7 years (ACT/365)
+    // ----------------------------------------------------------------
+    id:'suffolkMultiTranche',
+    positionId:'POS-NWF-SUFFOLK-MT', securityId:'SEC-SUFFOLK-SOLAR-MT',
+    instrumentKind:'loan',
+    legalEntity:'NWF Sustainable Infrastructure', leid: 42,
+    deal:'Suffolk Solar Phase 2',
+    position:'NWF 100% Bilateral Position · Suffolk Solar',
+    incomeSecurity:'Suffolk Solar Multi-Tranche Facility (£50m Fixed + £50m SONIA)',
+    currency:'GBP',
+    faceValue:    100_000_000,
+    purchasePrice: 100_000_000,
+    commitment:   100_000_000,
+    settlementDate:'2026-01-15',
+    maturityDate:   '2033-01-15',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    holidayCalendar:'ukBank',
+    skipHolidays:false,
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed:true, businessModel:'HoldToCollect', ecLStage:1, pdAnnual:0.005, lgd:0.40 },
+    // ---- TRANCHES ----
+    tranches: [
+      {
+        id:'trancheA-fixed',
+        label:'Tranche A · Fixed',
+        faceValue: 50_000_000,
+        purchasePrice: 50_000_000,
+        commitment:    50_000_000,
+        coupon: { type:'Fixed', fixedRate: 0.065, floatingRate:0, spread:0, floor:null, cap:null },
+        dayBasis: '30/360',
+        principalRepayment:'AtMaturity',
+        principalSchedule: [
+          { date:'2026-01-15', type:'initial', amount: 50_000_000 }
+        ]
+      },
+      {
+        id:'trancheB-floating',
+        label:'Tranche B · SONIA + 350',
+        faceValue: 50_000_000,
+        purchasePrice: 50_000_000,
+        commitment:    50_000_000,
+        coupon: { type:'SONIA', fixedRate:0, floatingRate:0, spread: 0.0350, floor:null, cap:null },
+        rfr: { index:'SONIA', baseRate: 0.0475, lookbackDays: 5, rounding: 5 },
+        marginSchedule: [
+          { from:'2026-01-15', to:'2033-01-15', marginBps: 350 }
+        ],
+        dayBasis: 'ACT/365',
+        principalRepayment:'AtMaturity',
+        principalSchedule: [
+          { date:'2026-01-15', type:'initial', amount: 50_000_000 }
+        ]
+      }
+    ],
+    preset:'Suffolk Solar · £100m Multi-Tranche (£50m Fixed 6.5% + £50m SONIA+350)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Volt Multi-Loan — financial guarantee covering MULTIPLE underlying loans
+    // Demonstrates scenario G1: single guarantee, multiple underlyings.
+    // Total covered amount £600m across two underlying loans:
+    //   - Underlying 1: £400m, SONIA + 0.84% margin (covered tranche)
+    //   - Underlying 2: £200m, Fixed 5.5% (covered tranche)
+    // Single guarantee fee structure applies to both.
+    // ----------------------------------------------------------------
+    id:'voltMultiLoan',
+    positionId:'POS-NWF-VOLT-MLG', securityId:'SEC-VOLT-GP022-MULTILOAN',
+    instrumentKind:'guarantee',
+    legalEntity:'NWF Sustainable Infrastructure', leid: 42,
+    deal:'Volt — Multi-Loan Guarantee',
+    position:'NWF Guarantor Position · Volt multi-loan covered',
+    incomeSecurity:'Volt Multi-Loan Financial Guarantee (£600m covered, 2 underlyings)',
+    counterpartyId:'CP0112',
+    transactionId:'GP022',
+    bilateralFlag:'Bilateral',
+    agentName:'Bank of America',
+    currency:'GBP',
+    faceValue:    750_000_000,
+    purchasePrice: 0,
+    commitment:   750_000_000,
+    coveredAmount: 600_000_000,
+    settlementDate:'2026-01-15',
+    availabilityEnd:'2029-01-15',
+    maturityDate:   '2036-01-15',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis:'ACT/365',
+    holidayCalendar:'ukBank',
+    skipHolidays:false,
+    coupon: { type:'Fixed', fixedRate:0, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed:true, businessModel:'HoldToCollect', ecLStage:1, pdAnnual:0.0035, lgd:0.45 },
+    // ---- UNDERLYING LOANS (each contributes to the aggregate covered drawn) ----
+    underlyingLoans: [
+      {
+        id:'underlying1-sonia',
+        label:'Underlying 1 · SONIA + 84',
+        faceValue: 400_000_000,
+        commitment: 400_000_000,
+        coveredAmount: 400_000_000,
+        coupon: { type:'SONIA', fixedRate:0, floatingRate:0, spread: 0.0084, floor:null, cap:null },
+        rfr: { index:'SONIA', baseRate: 0.0475, lookbackDays: 5, rounding: 5 },
+        marginSchedule: [{ from:'2026-01-15', to:'2036-01-15', marginBps: 84 }],
+        dayBasis: 'ACT/365',
+        principalRepayment:'Scheduled',
+        principalSchedule: [
+          { date:'2026-06-30', type:'draw',      amount: 100_000_000, status:'actual'   },
+          { date:'2027-06-30', type:'draw',      amount: 150_000_000, status:'forecast' },
+          { date:'2028-06-30', type:'draw',      amount: 150_000_000, status:'forecast' },
+          { date:'2031-06-30', type:'repayment', amount: 100_000_000 },
+          { date:'2033-06-30', type:'repayment', amount: 150_000_000 },
+          { date:'2036-01-15', type:'repayment', amount: 150_000_000 }
+        ]
+      },
+      {
+        id:'underlying2-fixed',
+        label:'Underlying 2 · Fixed 5.5%',
+        faceValue: 200_000_000,
+        commitment: 200_000_000,
+        coveredAmount: 200_000_000,
+        coupon: { type:'Fixed', fixedRate: 0.055, floatingRate:0, spread:0, floor:null, cap:null },
+        dayBasis: '30/360',
+        principalRepayment:'AtMaturity',
+        principalSchedule: [
+          { date:'2026-12-31', type:'draw',      amount: 200_000_000, status:'actual'   },
+          { date:'2036-01-15', type:'repayment', amount: 200_000_000 }
+        ]
+      }
+    ],
+    fees: [
+      {
+        id:'arrangement',
+        kind:'arrangement',
+        label:'Arrangement Fee',
+        mode:'percent',
+        rate: 0.0024,
+        base:'covered',
+        frequency:'oneOff',
+        paymentDate:'2026-01-30',
+        ifrs:'IFRS15-pointInTime',
+        notes:'0.24% × £600m covered = £1.44m on payment date.'
+      },
+      {
+        id:'guarantee',
+        kind:'guarantee',
+        label:'Guarantee Fee',
+        mode:'percent',
+        rate: 0.005,
+        base:'drawn',
+        frequency:'semiAnnual',
+        accrueFrom:'2026-06-30',
+        accrueTo:'2036-01-15',
+        ifrs:'IFRS15-overTime',
+        // FEE-RATE RATCHET: 0.5% for first 5 years, then steps to 0.6% from 2031
+        feeRateSchedule: [
+          { from:'2026-06-30', to:'2030-12-31', rate: 0.0050 },
+          { from:'2031-01-01', to:'2036-01-15', rate: 0.0060 }
+        ],
+        notes:'0.5% p.a. on drawn aggregate covered, ratcheting to 0.6% from 2031.'
+      }
+    ],
+    preset:'Volt Multi-Loan · £600m covered across 2 underlyings (SONIA + Fixed)'
   }
 ];
 
@@ -2102,17 +2943,17 @@ function populatePickers(){
   leSel.value = instr.legalEntity;
   // Build deal/position dropdowns to match the current instrument's path.
   syncCascadeToSecurity();
+  updateSecurityReadout();
 }
 // Rebuild the Deal / Position dropdowns based on the current LE / Deal
-// selections. The Income Security dropdown is NEVER narrowed — it always
-// shows all 9 instruments grouped by LE so the user can jump directly to
-// any example. When the user picks LE/Deal/Position manually, we auto-
-// navigate to the first instrument matching that path.
+// selections. Position → Security is 1:1 (matches Investran CRM v2 model)
+// so picking a Position uniquely identifies the security. The Income
+// Security dropdown still shows all instruments grouped by LE/Deal as a
+// quick-jump for demos, but the cascade is the canonical fund-admin path.
 //
 // Browser quirk: assigning innerHTML to a <select> resets its .value to the
 // first option, so we capture the user's pick BEFORE rebuilding and restore
-// it after — otherwise picking "Volt" in the Deal dropdown silently snaps
-// back to "Libra 2" because that's the first option under that LE.
+// it after.
 function repopulateDown(level){
   const leSel  = byId('sel-le');
   const dealSel= byId('sel-deal');
@@ -2122,15 +2963,25 @@ function repopulateDown(level){
   const deals = [...new Set(INSTRUMENTS.filter(i=>i.legalEntity===leSel.value).map(i=>i.deal))];
   dealSel.innerHTML = deals.map(d=>`<option>${d}</option>`).join('');
   dealSel.value = deals.includes(wantedDeal) ? wantedDeal : deals[0];
-  const positions = [...new Set(INSTRUMENTS.filter(i=>i.legalEntity===leSel.value && i.deal===dealSel.value).map(i=>i.position))];
-  posSel.innerHTML = positions.map(d=>`<option>${d}</option>`).join('');
-  posSel.value = positions.includes(wantedPos) ? wantedPos : positions[0];
-  // Auto-navigate to the first instrument matching the current LE/Deal/Position
-  const match = INSTRUMENTS.find(i =>
-    i.legalEntity===leSel.value && i.deal===dealSel.value && i.position===posSel.value);
-  if(match) state.instrumentId = match.id;
+  // Build positions list. Each option carries the instrument id so the
+  // cascade can resolve Position → Security 1:1 even when two LE+Deal+
+  // Position triples differ only in the underlying security.
+  const positions = INSTRUMENTS.filter(i=>i.legalEntity===leSel.value && i.deal===dealSel.value);
+  posSel.innerHTML = positions.map(p =>
+    `<option value="${p.id}">${p.position}</option>`
+  ).join('');
+  // Restore prior selection if still valid (compare on instrument id)
+  const wantedPosInst = INSTRUMENTS.find(p => p.position === wantedPos
+                                          && p.legalEntity===leSel.value
+                                          && p.deal===dealSel.value);
+  posSel.value = wantedPosInst ? wantedPosInst.id : (positions[0]?.id || '');
+  // Position → Security 1:1 — picking the Position deterministically resolves
+  // the active instrument (its security).
+  if(posSel.value) state.instrumentId = posSel.value;
   // Always rebuild the security dropdown to show all instruments grouped by LE
   rebuildSecurityDropdown();
+  // Refresh the security-detail readout
+  updateSecurityReadout();
 }
 // When the user picks any security directly, sync LE/Deal/Position to match
 // and rebuild the security dropdown to show ALL instruments again so they
@@ -2142,14 +2993,55 @@ function syncCascadeToSecurity(){
   const dealSel= byId('sel-deal');
   const posSel = byId('sel-position');
   leSel.value  = inst.legalEntity;
-  // Rebuild deals list under this LE so the deal value is valid
+  // Rebuild deals list under this LE
   const deals = [...new Set(INSTRUMENTS.filter(i=>i.legalEntity===leSel.value).map(i=>i.deal))];
   dealSel.innerHTML = deals.map(d=>`<option>${d}</option>`).join('');
   dealSel.value = inst.deal;
-  // Same for positions
-  const positions = [...new Set(INSTRUMENTS.filter(i=>i.legalEntity===leSel.value && i.deal===dealSel.value).map(i=>i.position))];
-  posSel.innerHTML = positions.map(d=>`<option>${d}</option>`).join('');
-  posSel.value = inst.position;
+  // Position dropdown — keyed by instrument id so the same position name in
+  // different LEs / Deals doesn't collide.
+  const positions = INSTRUMENTS.filter(i=>i.legalEntity===leSel.value && i.deal===dealSel.value);
+  posSel.innerHTML = positions.map(p =>
+    `<option value="${p.id}">${p.position}</option>`
+  ).join('');
+  posSel.value = inst.id;
+  updateSecurityReadout();
+}
+
+// Render a small readout of the resolved Security under the Position dropdown.
+// This is the "Income Security" derivation — once you pick a Position, the
+// security is determined automatically (1:1 link via positionId/securityId).
+function updateSecurityReadout(){
+  const el = byId('security-readout');
+  if(!el) return;
+  const inst = currentInstrument();
+  if(!inst){ el.innerHTML = ''; return; }
+  // Find any sibling positions that hold the SAME security (multi-LE syndicate)
+  const siblings = INSTRUMENTS.filter(p => p.securityId && p.securityId === inst.securityId && p.id !== inst.id);
+  const sibChip = siblings.length
+    ? `<span class="mat-chip amber" title="${siblings.map(s=>s.legalEntity+' · '+s.position).join('\\n')}">+${siblings.length} other position${siblings.length>1?'s':''} hold this security</span>`
+    : '';
+  const userTag = inst.isUserCreated
+    ? `<span class="mat-chip green">User-saved</span>
+       <button class="mat-btn outline !py-0 !px-2 text-xs" data-delete-user="${inst.id}" title="Delete this user-saved instrument"><span class="material-icons-outlined text-[14px]">delete</span></button>`
+    : `<span class="mat-chip gray">Seed</span>`;
+  el.innerHTML = `
+    <div class="text-[11px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-2">
+      <span>Resolved Security (1:1 from Position)</span>
+      <span class="ml-auto flex items-center gap-1">${userTag}</span>
+    </div>
+    <div class="font-medium text-gray-900 mb-1">${inst.incomeSecurity || '—'}</div>
+    <div class="text-[11px] text-gray-500 flex flex-wrap gap-2 items-center">
+      ${inst.securityId ? `<span class="mat-chip">securityId: ${inst.securityId}</span>` : ''}
+      ${inst.positionId ? `<span class="mat-chip">positionId: ${inst.positionId}</span>` : ''}
+      ${sibChip}
+    </div>`;
+  // Wire the delete button (if present)
+  const delBtn = el.querySelector('[data-delete-user]');
+  if(delBtn) delBtn.onclick = ()=>{
+    if(confirm('Delete this user-saved instrument? This cannot be undone.')){
+      deleteUserInstrument(delBtn.getAttribute('data-delete-user'));
+    }
+  };
 }
 function onPickerChange(){
   // Capture the picked id immediately. Anything later that reassigns sel-security's
@@ -2177,50 +3069,201 @@ function onPickerChange(){
 function renderPresets(){ /* no-op: presets panel removed */ }
 
 /* ---------- Add a brand-new blank instrument ---------- */
-function addBlankInstrument(){
-  const today = toISO(new Date());
-  const mat   = toISO(addDays(new Date(), 365 * 3)); // default 3yr
-  const id    = 'new-' + Date.now().toString(36);
-  const n     = INSTRUMENTS.filter(i => /^New Instrument/.test(i.incomeSecurity || '')).length + 1;
-  const label = 'New Instrument ' + n;
+// ===== User instrument persistence (localStorage) =========================
+// User-created instruments are merged into INSTRUMENTS at boot and saved
+// back whenever they change. We tag them with isUserCreated:true so we can
+// tell them apart from the seed dataset (which is hardcoded in the file).
+const LS_KEY_USER_INSTRUMENTS = 'pe-loan-calc.user-instruments.v1';
+const LS_KEY_INVESTRAN_LES    = 'pe-loan-calc.investran-les.v1';
+
+function loadUserInstrumentsFromStorage(){
+  try {
+    const raw = localStorage.getItem(LS_KEY_USER_INSTRUMENTS);
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch(e){ console.warn('Could not parse user instruments:', e); return []; }
+}
+function saveUserInstrumentsToStorage(){
+  const userInsts = INSTRUMENTS.filter(i => i.isUserCreated);
+  try { localStorage.setItem(LS_KEY_USER_INSTRUMENTS, JSON.stringify(userInsts)); }
+  catch(e){ console.warn('Could not persist user instruments:', e); }
+}
+function loadInvestranLEsFromStorage(){
+  try {
+    const raw = localStorage.getItem(LS_KEY_INVESTRAN_LES);
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch(e){ return []; }
+}
+function saveInvestranLEsToStorage(les){
+  try { localStorage.setItem(LS_KEY_INVESTRAN_LES, JSON.stringify(les)); }
+  catch(e){ console.warn('Could not persist Investran LE list:', e); }
+}
+
+// Hydrate user-saved instruments into the live INSTRUMENTS array on boot.
+function hydrateUserInstruments(){
+  const userInsts = loadUserInstrumentsFromStorage();
+  for(const u of userInsts){
+    if(!INSTRUMENTS.find(i => i.id === u.id)) INSTRUMENTS.push(u);
+  }
+  if(userInsts.length) console.info(`Hydrated ${userInsts.length} user-saved instrument(s) from localStorage.`);
+}
+
+// Combined LE list = LEs from existing dataset ∪ Investran-fetched cache.
+function getKnownLegalEntities(){
+  const fromData = [...new Set(INSTRUMENTS.map(i => i.legalEntity))];
+  const fromInvestran = loadInvestranLEsFromStorage().map(le => le.name).filter(Boolean);
+  const combined = [...new Set([...fromData, ...fromInvestran])];
+  return combined.sort((a,b) => (a||'').localeCompare(b||''));
+}
+
+// ===== Add Instrument modal ===============================================
+function openAddInstrumentModal(){
+  // Populate LE dropdown with known LEs
+  const leSel = byId('add-le');
+  leSel.innerHTML = ['<option value="">— pick existing —</option>',
+    ...getKnownLegalEntities().map(le => `<option>${le}</option>`)].join('');
+  // Populate deal datalist with deals under the currently-picked LE
+  const refreshDealList = ()=>{
+    const le = leSel.value || byId('add-le-new').value;
+    const deals = [...new Set(INSTRUMENTS.filter(i => i.legalEntity === le).map(i => i.deal))];
+    byId('add-deal-list').innerHTML = deals.map(d => `<option value="${d}">`).join('');
+  };
+  leSel.onchange = refreshDealList;
+  byId('add-le-new').oninput = refreshDealList;
+  // Default dates: today / +3yr
+  byId('add-settle').value = toISO(new Date());
+  byId('add-maturity').value = toISO(addDays(new Date(), 365 * 3));
+  // Auto-generate position/security IDs from typed names (debounced via input event)
+  const slug = (s) => (s||'').toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0, 30);
+  byId('add-position').oninput = ()=>{ if(!byId('add-positionId').value) byId('add-positionId').value = 'POS-' + slug(byId('add-position').value); };
+  byId('add-security').oninput = ()=>{ if(!byId('add-securityId').value) byId('add-securityId').value = 'SEC-' + slug(byId('add-security').value); };
+  // Show the modal
+  byId('add-modal').style.display = 'flex';
+  byId('add-modal-errors').style.display = 'none';
+  refreshDealList();
+}
+function closeAddInstrumentModal(){ byId('add-modal').style.display = 'none'; }
+
+function saveAddInstrumentModal(){
+  const errs = [];
+  const legalEntity = byId('add-le-new').value.trim() || byId('add-le').value;
+  const deal        = byId('add-deal').value.trim();
+  const position    = byId('add-position').value.trim();
+  const security    = byId('add-security').value.trim();
+  const positionId  = byId('add-positionId').value.trim() || ('POS-' + Date.now().toString(36));
+  const securityId  = byId('add-securityId').value.trim() || ('SEC-' + Date.now().toString(36));
+  if(!legalEntity) errs.push('Legal Entity is required.');
+  if(!deal)        errs.push('Deal is required.');
+  if(!position)    errs.push('Position is required.');
+  if(!security)    errs.push('Income Security is required.');
+  if(errs.length){
+    const e = byId('add-modal-errors');
+    e.innerHTML = errs.map(x=>`<div>• ${x}</div>`).join('');
+    e.style.display = 'block';
+    return;
+  }
+  const settlement = byId('add-settle').value || toISO(new Date());
+  const maturity   = byId('add-maturity').value || toISO(addDays(new Date(), 365*3));
+  const face       = parseFloat(byId('add-face').value)   || 1_000_000;
+  const price      = parseFloat(byId('add-price').value)  || face;
+  const commitment = parseFloat(byId('add-commit').value) || face;
+  const rate       = parseFloat(byId('add-rate').value)   || 0;
+  const couponType = byId('add-couponType').value;
+  const id = 'user-' + Date.now().toString(36);
+
+  // Find existing leid for the LE if known; else 0
+  const existingLE = INSTRUMENTS.find(i => i.legalEntity === legalEntity);
+  const leid = existingLE ? existingLE.leid : 0;
+
   const fresh = {
     id,
-    legalEntity: 'New Legal Entity',
-    leid: 0,
-    deal: 'New Deal',
-    position: label,
-    incomeSecurity: label,
-    faceValue: 1000000,
-    purchasePrice: 1000000,
-    commitment: 1000000,
-    settlementDate: today,
-    maturityDate: mat,
+    isUserCreated: true,
+    positionId, securityId,
+    instrumentKind: byId('add-kind').value,
+    legalEntity, leid,
+    deal, position, incomeSecurity: security,
+    currency: byId('add-ccy').value,
+    faceValue: face, purchasePrice: price, commitment,
+    settlementDate: settlement, maturityDate: maturity,
     accrualDayCountExclusive: false,
     paydateDayCountInclusive: true,
     interestPreviousDay: false,
-    dayBasis: 'ACT/360',
-    coupon: { type:'Fixed', fixedRate:0.08, floatingRate:0, spread:0, floor:null, cap:null },
+    dayBasis: byId('add-basis').value,
+    coupon: { type: couponType,
+              fixedRate: couponType === 'Fixed' ? rate : 0,
+              floatingRate: couponType === 'Floating' ? rate : 0,
+              spread: 0, floor: null, cap: null },
     pik: { enabled:false, rate:0, capitalizationFrequency:'Monthly' },
     principalRepayment: 'AtMaturity',
-    principalSchedule: [ { date: today, type:'initial', amount: 1000000 } ],
-    amortization: { method:'none' },
+    principalSchedule: [ { date: settlement, type:'initial', amount: face } ],
+    amortization: { method: 'none' },
     nonUseFee: { enabled:false, rate:0 },
-    type: 'fixedCouponNoAmort',
-    preset: label
+    fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed:true, businessModel:'HoldToCollect', ecLStage:1 },
+    type: 'simpleDaily',
+    preset: position + ' · ' + security
   };
   INSTRUMENTS.push(fresh);
+  saveUserInstrumentsToStorage();
+
+  // Switch to the new instrument
   state.instrumentId = id;
-  // Default accrual window = settlement → maturity (full life of the new instrument)
   const w = defaultWindowFor(fresh);
-  state.begin = w.begin;
-  state.end   = w.end;
-  state.last  = w.last;
+  state.begin = w.begin; state.end = w.end; state.last = w.last;
   populatePickers();
-  byId('sel-security').value = id;
   loadFormFromInstrument();
   render();
-  toast('New instrument added ✓');
+  closeAddInstrumentModal();
+  toast('Saved · "' + position + '" added to your library');
 }
+
+// Delete a user-created instrument from both runtime and localStorage.
+function deleteUserInstrument(id){
+  const idx = INSTRUMENTS.findIndex(i => i.id === id);
+  if(idx < 0) return;
+  if(!INSTRUMENTS[idx].isUserCreated){ toast('Seed instruments cannot be deleted.'); return; }
+  INSTRUMENTS.splice(idx, 1);
+  saveUserInstrumentsToStorage();
+  // Switch to first remaining instrument
+  state.instrumentId = INSTRUMENTS[0]?.id;
+  populatePickers();
+  loadFormFromInstrument();
+  render();
+  toast('Instrument deleted');
+}
+
+// ===== Refresh LEs from Investran (paste-JSON flow) =======================
+function refreshLEsFromInvestran(){
+  const json = prompt('Paste the JSON output of `python scripts/investran_inbound.py --all-les --les-only` (or any array of {id, externalId, name} objects):');
+  if(!json) return;
+  let parsed;
+  try { parsed = JSON.parse(json); } catch(e){ toast('Invalid JSON — could not parse'); return; }
+  // Accept either bare array of LE objects, or { legalEntities: [...] }, or { items: [...] }
+  const arr = Array.isArray(parsed) ? parsed
+            : (Array.isArray(parsed.legalEntities) ? parsed.legalEntities
+            : (Array.isArray(parsed.items) ? parsed.items : null));
+  if(!arr){ toast('Expected an array of LE objects'); return; }
+  const cleaned = arr.map(o => ({
+    id: o.id || o.guid || null,
+    externalId: o.externalId || o.code || null,
+    name: o.name || o.legalEntityName || null
+  })).filter(o => o.name);
+  if(!cleaned.length){ toast('No LE names found in pasted JSON'); return; }
+  saveInvestranLEsToStorage(cleaned);
+  toast(`Cached ${cleaned.length} LE${cleaned.length>1?'s':''} from Investran`);
+  // Refresh the dropdown if the modal is open
+  if(byId('add-modal') && byId('add-modal').style.display === 'flex'){
+    const leSel = byId('add-le');
+    leSel.innerHTML = ['<option value="">— pick existing —</option>',
+      ...getKnownLegalEntities().map(le => `<option>${le}</option>`)].join('');
+  }
+}
+
+// Main entry point that the "Add New Instrument" button calls.
+function addBlankInstrument(){ openAddInstrumentModal(); }
 
 /* ---------- Type dropdown ---------- */
 function populateTypeDropdown(){
@@ -2356,6 +3399,9 @@ function writeFormToInstrument(){
   state.begin = byId('in-begin').value;
   state.end   = byId('in-end').value;
   state.last  = byId('in-last').value;
+  // Persist edits to user-created instruments back to localStorage so changes
+  // survive a page reload. Seed instruments stay in-memory only.
+  if(i.isUserCreated) saveUserInstrumentsToStorage();
 }
 
 /* ---------- Method picker ---------- */
@@ -2602,55 +3648,149 @@ function renderScheduleGrid(){
   const i = currentInstrument();
   const dimOutOfWindow = byId('opt-in-window')?.checked ?? true;
   const hl = byId('opt-highlight-events')?.checked ?? true;
-  // Build per-fee columns dynamically so the user sees each fee's daily accrual
-  // in its own column (Arrangement, Commitment, Guarantee, NWF Commitment, etc.).
+  const density = byId('opt-density')?.value || 'events';
+  const colSet  = byId('opt-columns')?.value || 'essentials';
   const feeLabels = (i.fees || []).map(f => f.label || f.kind);
-  const feeHeaders = feeLabels.map(l => `Fee · ${l}`);
-  const headers = [
-    'Date','Loan Balance','Initial','Draws','Repayments','Coupon Rate','Floating','Current Rate',
-    'Daily Accrued Interest','Cum. Interest','Capitalized Int.','Cash Int. Pmt',
-    'PIK Rate','Daily PIK','Cum. PIK','PIK Paydown',
-    'Amort/day','Cum Amort','Carrying Value',
-    'Daily Fees', ...feeHeaders, 'EIR Accr. (IFRS 9)'
+
+  // ---- Filter / aggregate rows based on density ------------------------
+  // The full daily schedule can run 4,000+ rows for long-life instruments —
+  // unusable in a UI table. Density modes give the user useful slices.
+  let viewRows;
+  const isMonthEnd = (iso)=>{ const d = parseISO(iso); const n = new Date(d); n.setDate(n.getDate()+1); return n.getMonth() !== d.getMonth(); };
+  const isQuarterEnd = (iso)=>{ if(!isMonthEnd(iso)) return false; const m = parseISO(iso).getMonth(); return m===2||m===5||m===8||m===11; };
+  const isYearEnd    = (iso)=>{ if(!isMonthEnd(iso)) return false; return parseISO(iso).getMonth()===11; };
+
+  if(density === 'events'){
+    // Days where principal moves, PIK capitalises, default events, point-in-time fees,
+    // OR the coupon rate / fee rate changes (margin step, ESG step, fee ratchet step).
+    // Plus settlement / period-begin / period-end / maturity anchors.
+    const anchors = new Set([
+      state.schedule[0]?.date, state.begin, state.end, state.schedule[state.schedule.length-1]?.date
+    ].filter(Boolean));
+    // Margin schedule + ESG step dates
+    for(const m of (i.marginSchedule || [])){ if(m.from) anchors.add(m.from); }
+    if(i.esgAdjustment?.from) anchors.add(i.esgAdjustment.from);
+    // Fee-rate ratchet step dates
+    for(const f of (i.fees || [])){
+      for(const s of (f.feeRateSchedule || [])){ if(s.from) anchors.add(s.from); }
+      if(f.paymentDate) anchors.add(f.paymentDate);
+      if(f.accrueFrom)  anchors.add(f.accrueFrom);
+      if(f.accrueTo)    anchors.add(f.accrueTo);
+    }
+    // Default events
+    for(const e of (i.defaultEvents || [])){ if(e.date) anchors.add(e.date); }
+    // Day-by-day rate-change detection
+    let prevRate = null;
+    viewRows = state.schedule.filter(r => {
+      const isEvent = r.hasEvent || r.draw || r.paydown || r.capitalized || r.dailyDefaultFee || r.initialPurchase;
+      const rateChanged = prevRate != null && Math.abs((r.currentRate || 0) - prevRate) > 1e-9;
+      const keep = isEvent || rateChanged || anchors.has(r.date);
+      prevRate = r.currentRate || 0;
+      return keep;
+    });
+  } else if(density === 'monthEnd'){
+    viewRows = state.schedule.filter(r => isMonthEnd(r.date));
+  } else if(density === 'quarterEnd'){
+    viewRows = state.schedule.filter(r => isQuarterEnd(r.date));
+  } else if(density === 'yearEnd'){
+    viewRows = state.schedule.filter(r => isYearEnd(r.date));
+  } else if(density === 'monthly' || density === 'quarterly' || density === 'annual'){
+    // Aggregate: bucket key + sum of flow fields, with end-of-bucket balances.
+    const bucketOf = density === 'monthly' ? (iso => iso.slice(0,7))
+                    : density === 'quarterly' ? (iso => { const d=parseISO(iso); return d.getFullYear()+'-Q'+(Math.floor(d.getMonth()/3)+1); })
+                    : (iso => iso.slice(0,4));
+    const buckets = {};
+    for(const r of state.schedule){
+      const k = bucketOf(r.date);
+      if(!buckets[k]){
+        buckets[k] = { date:k, isAggregate:true, hasEvent:false, balance:0, drawnBalance:0, carryingValue:0,
+                       initialPurchase:0, draw:0, paydown:0, dailyCash:0, dailyPik:0, capitalized:0, dailyAmort:0,
+                       dailyFees:0, dailyEIRAccretion:0, dailyDefaultInterest:0, dailyDefaultFee:0,
+                       feeBreakdown:{}, couponRate:0, floatingRate:0, currentRate:0, pikRate:0, _rates:[] };
+      }
+      const b = buckets[k];
+      b.draw += r.draw||0; b.paydown += r.paydown||0;
+      b.initialPurchase += r.initialPurchase||0;
+      b.dailyCash += r.dailyCash||0; b.dailyPik += r.dailyPik||0;
+      b.capitalized += r.capitalized||0; b.dailyAmort += r.amortDaily||0;
+      b.dailyFees += r.dailyFees||0; b.dailyEIRAccretion += r.dailyEIRAccretion||0;
+      b.dailyDefaultInterest += r.dailyDefaultInterest||0; b.dailyDefaultFee += r.dailyDefaultFee||0;
+      // End-of-bucket balances + final rates (overwrite each iteration so last one wins)
+      b.balance = r.balance; b.drawnBalance = r.drawnBalance; b.carryingValue = r.carryingValue;
+      b.cumInterestAccrued = r.cumInterestAccrued; b.cumAmort = r.cumAmort;
+      b.cumPikAccrued = r.cumPikAccrued; b.cumNonUseFee = r.cumNonUseFee;
+      b._rates.push(r.currentRate);
+      // Aggregate per-fee
+      if(r.feeBreakdown){
+        for(const [fk,fv] of Object.entries(r.feeBreakdown)){
+          b.feeBreakdown[fk] = (b.feeBreakdown[fk]||0) + (fv||0);
+        }
+      }
+      if(r.hasEvent || r.draw || r.paydown || r.capitalized) b.hasEvent = true;
+    }
+    // Compute average rate per bucket
+    for(const b of Object.values(buckets)){
+      if(b._rates.length){ b.currentRate = b._rates.reduce((a,c)=>a+(c||0),0)/b._rates.length; b.couponRate = b.currentRate; }
+      delete b._rates;
+    }
+    viewRows = Object.values(buckets);
+    // Map flat-aggregate fields to row shape used by renderer
+    viewRows.forEach(b => { b.amortDaily = b.dailyAmort; });
+  } else {
+    viewRows = state.schedule;
+  }
+
+  // ---- Decide which columns to show -----------------------------------
+  // Column groups — keep IDs consistent so the renderer can pick from each.
+  const allCols = [
+    { id:'date',    h:'Date',                 v:r=>fmtDate(r.date)+(r.isAggregate?' (period)':''), css:'left' },
+    { id:'balance', h:'Loan Balance',         v:r=>fmtMoney(r.balance) },
+    { id:'initial', h:'Initial',              v:r=>r.initialPurchase ? fmtMoney(r.initialPurchase) : '—' },
+    { id:'draw',    h:'Draws',                v:r=>r.draw ? fmtMoney(r.draw) : '—' },
+    { id:'paydown', h:'Repayments',           v:r=>r.paydown ? fmtMoney(r.paydown) : '—' },
+    { id:'rate',    h:'Coupon Rate',          v:r=>fmtPct(r.couponRate,4) },
+    { id:'float',   h:'Floating',             v:r=>fmtPct(r.floatingRate,4) },
+    { id:'curr',    h:'Current Rate',         v:r=>fmtPct(r.currentRate,4) },
+    { id:'cash',    h:'Daily Accrued Int.',   v:r=>fmtMoney(r.dailyCash) },
+    { id:'cumInt',  h:'Cum. Interest',        v:r=>fmtMoney(r.cumInterestAccrued) },
+    { id:'capInt',  h:'Capitalized Int.',     v:r=>r.capitalized ? fmtMoney(r.capitalized) : '—' },
+    { id:'cashPmt', h:'Cash Int. Pmt',        v:r=>r.cashInterestPayment ? fmtMoney(r.cashInterestPayment) : '—' },
+    { id:'pikR',    h:'PIK Rate',             v:r=>r.pikRate ? fmtPct(r.pikRate,4) : '—' },
+    { id:'pikD',    h:'Daily PIK',            v:r=>fmtMoney(r.dailyPik) },
+    { id:'pikC',    h:'Cum. PIK',             v:r=>fmtMoney(r.cumPikAccrued) },
+    { id:'pikPay',  h:'PIK Paydown',          v:r=>r.pikPaydown ? fmtMoney(r.pikPaydown) : '—' },
+    { id:'amortD',  h:'Amort/day',            v:r=>r.amortDaily ? fmtMoney(r.amortDaily) : '—' },
+    { id:'amortC',  h:'Cum Amort',            v:r=>r.cumAmort ? fmtMoney(r.cumAmort) : '—' },
+    { id:'cv',      h:'Carrying Value',       v:r=>fmtMoney(r.carryingValue) },
+    { id:'fees',    h:'Daily Fees',           v:r=>r.dailyFees ? fmtMoney(r.dailyFees) : '—' },
+    ...feeLabels.map(l => ({ id:'fee_'+l, h:'Fee · '+l, v:r=>{const x=r.feeBreakdown?.[l]||0; return x?fmtMoney(x):'—'; } })),
+    { id:'eir',     h:'EIR Accr. (IFRS 9)',   v:r=>r.dailyEIRAccretion ? fmtMoney(r.dailyEIRAccretion) : '—' }
   ];
-  const rows = state.schedule.map(r => {
-    const inWindow = r.date >= state.begin && r.date <= state.end;
+  // Column-set presets
+  const SETS = {
+    essentials: new Set(['date','balance','draw','paydown','curr','cash','cumInt','fees','cv', ...feeLabels.map(l=>'fee_'+l)]),
+    rates:      new Set(['date','balance','draw','paydown','rate','float','curr','cv']),
+    income:     new Set(['date','cash','cumInt','pikD','pikC','fees', ...feeLabels.map(l=>'fee_'+l), 'eir'])
+  };
+  const cols = colSet === 'all' ? allCols : allCols.filter(c => SETS[colSet].has(c.id));
+  const headers = cols.map(c => c.h);
+
+  const rowsHtml = viewRows.map(r => {
+    const inWindow = r.date >= state.begin && r.date <= state.end || r.isAggregate;
     const cls = (hl && r.hasEvent ? 'event ' : '') + (!inWindow && dimOutOfWindow ? 'out-of-window ' : '');
     const endOfPeriod = r.date === state.end;
-    const perFeeCells = feeLabels.map(l => {
-      const v = r.feeBreakdown?.[l] || 0;
-      return `<td>${v ? fmtMoney(v) : '—'}</td>`;
-    }).join('');
-    return `<tr class="${cls}${endOfPeriod?' period-end':''}">
-      <td class="left">${fmtDate(r.date)}</td>
-      <td>${fmtMoney(r.balance)}</td>
-      <td>${r.initialPurchase ? fmtMoney(r.initialPurchase) : '—'}</td>
-      <td>${r.draw ? fmtMoney(r.draw) : '—'}</td>
-      <td>${r.paydown ? fmtMoney(r.paydown) : '—'}</td>
-      <td>${fmtPct(r.couponRate,4)}</td>
-      <td>${fmtPct(r.floatingRate,4)}</td>
-      <td>${fmtPct(r.currentRate,4)}</td>
-      <td>${fmtMoney(r.dailyCash)}</td>
-      <td>${fmtMoney(r.cumInterestAccrued)}</td>
-      <td>${r.capitalized ? fmtMoney(r.capitalized) : '—'}</td>
-      <td>${r.cashInterestPayment ? fmtMoney(r.cashInterestPayment) : '—'}</td>
-      <td>${r.pikRate ? fmtPct(r.pikRate,4) : '—'}</td>
-      <td>${fmtMoney(r.dailyPik)}</td>
-      <td>${fmtMoney(r.cumPikAccrued)}</td>
-      <td>${r.pikPaydown ? fmtMoney(r.pikPaydown) : '—'}</td>
-      <td>${r.amortDaily ? fmtMoney(r.amortDaily) : '—'}</td>
-      <td>${r.cumAmort ? fmtMoney(r.cumAmort) : '—'}</td>
-      <td>${fmtMoney(r.carryingValue)}</td>
-      <td>${r.dailyFees ? fmtMoney(r.dailyFees) : '—'}</td>
-      ${perFeeCells}
-      <td>${r.dailyEIRAccretion ? fmtMoney(r.dailyEIRAccretion) : '—'}</td>
-    </tr>`;
+    return `<tr class="${cls}${endOfPeriod?' period-end':''}${r.isAggregate?' aggregate':''}">${cols.map(c=>`<td class="${c.css||''}">${c.v(r)||'—'}</td>`).join('')}</tr>`;
   }).join('');
+  const rows = rowsHtml;
+  // Update grid count chip with density-aware label
+  const total = state.schedule.length;
+  const shown = viewRows.length;
+  const pctTxt = total ? ` (${Math.round(shown/total*100)}% of ${total.toLocaleString()} day rows)` : '';
+  byId('grid-count').textContent = `${shown.toLocaleString()} rows${pctTxt}`;
   wrap.innerHTML = `<table>
     <thead><tr>${headers.map((h,idx)=>`<th class="${idx===0?'left':''}">${h}</th>`).join('')}</tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
-  byId('grid-count').textContent = `${state.schedule.length} rows`;
 }
 
 /* ---------- KPIs + per-period roll-up ---------- */
@@ -2886,8 +4026,83 @@ function render(){
   if(state.activeTab==='summary') drawCharts();
   renderDIU();
   renderPresets();
+  renderCashFlowForecast();
   syncTypeDescription();
   flashStatus();
+}
+
+/* ---------- Cash Flow Forecast renderer ---------- */
+function renderCashFlowForecast(){
+  const panel = byId('cashflow-panel');
+  if(!panel) return;
+  const asOfInput = byId('cf-asof');
+  if(!asOfInput.value) asOfInput.value = state.begin || toISO(new Date());
+  const asOf = asOfInput.value;
+  const fc = buildCashFlowForecast(state.schedule, asOf);
+  if(!fc){ panel.innerHTML = '<div class="text-gray-500 italic text-sm">No forecast available</div>'; return; }
+  const max = Math.max(...fc.buckets.map(b => b.total), 1);
+  const ccy = currentInstrument()?.currency || '£';
+  const ccySym = ccy === 'USD' ? '$' : ccy === 'EUR' ? '€' : '£';
+  const fmtCcy = n => ccySym + (Math.round(n)).toLocaleString();
+  const rows = fc.buckets.map(b => {
+    const w = (b.total / max) * 100;
+    const segs = [
+      { lab: 'Principal', v: b.principal, c: '#2940f5' },
+      { lab: 'Interest',  v: b.interest,  c: '#0f8a4d' },
+      { lab: 'Fees',      v: b.fees,      c: '#d97706' },
+      { lab: 'EIR Accr',  v: b.eir,       c: '#7c3aed' },
+      { lab: 'Default',   v: b.defaultInt,c: '#dc2626' }
+    ];
+    const total = segs.reduce((a,s)=>a+s.v, 0) || 1;
+    const stacked = segs.filter(s => s.v > 0).map(s =>
+      `<span style="display:inline-block; width:${(s.v/total)*w}%; background:${s.c}; height:18px;" title="${s.lab}: ${fmtCcy(s.v)}"></span>`
+    ).join('');
+    return `<tr>
+      <td class="font-medium">${b.label}</td>
+      <td class="text-right">${fmtCcy(b.principal)}</td>
+      <td class="text-right">${fmtCcy(b.interest)}</td>
+      <td class="text-right">${fmtCcy(b.fees)}</td>
+      <td class="text-right">${b.eir ? fmtCcy(b.eir) : '—'}</td>
+      <td class="text-right">${b.defaultInt ? fmtCcy(b.defaultInt) : '—'}</td>
+      <td class="text-right font-semibold">${fmtCcy(b.total)}</td>
+      <td><div style="background:#eef0f7; height:18px; border-radius:3px; overflow:hidden;">${stacked}</div></td>
+    </tr>`;
+  }).join('');
+  const t = fc.totals;
+  panel.innerHTML = `
+    <div class="text-[12px] text-gray-600 mb-2">Forecast from ${fmtDate(fc.asOf)} forward — IFRS 7 liquidity buckets</div>
+    <table class="w-full text-[13px]">
+      <thead><tr class="text-left text-gray-500 text-[11px] uppercase tracking-wider">
+        <th class="p-2">Bucket</th>
+        <th class="p-2 text-right">Principal</th>
+        <th class="p-2 text-right">Interest</th>
+        <th class="p-2 text-right">Fees</th>
+        <th class="p-2 text-right">EIR Accr.</th>
+        <th class="p-2 text-right">Default Int.</th>
+        <th class="p-2 text-right">Total Cash</th>
+        <th class="p-2" style="width:30%">Distribution</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr class="font-semibold bg-gray-50">
+        <td class="p-2">Total</td>
+        <td class="p-2 text-right">${fmtCcy(t.principal)}</td>
+        <td class="p-2 text-right">${fmtCcy(t.interest)}</td>
+        <td class="p-2 text-right">${fmtCcy(t.fees)}</td>
+        <td class="p-2 text-right">${fmtCcy(t.eirAccretion)}</td>
+        <td class="p-2 text-right">${fmtCcy(t.defaultInterest)}</td>
+        <td class="p-2 text-right">${fmtCcy(t.grandTotal)}</td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+    <div class="mt-2 flex flex-wrap gap-3 text-[11px] text-gray-600">
+      <span><span style="display:inline-block;width:10px;height:10px;background:#2940f5;border-radius:2px;"></span> Principal</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#0f8a4d;border-radius:2px;"></span> Interest</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#d97706;border-radius:2px;"></span> Fees</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#7c3aed;border-radius:2px;"></span> EIR Accretion</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#dc2626;border-radius:2px;"></span> Default Interest</span>
+    </div>`;
+  // Wire date input to re-render
+  asOfInput.onchange = ()=> renderCashFlowForecast();
 }
 function flashStatus(){
   const el = byId('calc-status');
@@ -2932,16 +4147,38 @@ function wire(){
   // Tab buttons
   document.querySelectorAll('.tab-btn').forEach(b => b.onclick = ()=> setTab(b.dataset.tab));
   // Picker cascading
-  // LE / Deal / Position changes act as a filter — narrow the Income Security
-  // dropdown to that path. Selecting a Security directly re-expands the list
-  // and syncs the upper three dropdowns.
-  ['sel-le','sel-deal','sel-position'].forEach(id => byId(id).onchange = ()=>{ repopulateDown(id.slice(4)); onPickerChange(); });
+  // LE / Deal cascade narrows the Position dropdown. Picking a Position
+  // resolves the Security 1:1 (the position dropdown's option values ARE
+  // instrument ids).
+  ['sel-le','sel-deal'].forEach(id => byId(id).onchange = ()=>{
+    repopulateDown(id.slice(4));
+    // After cascade rebuild, the position dropdown's first option is the
+    // resolved instrument — apply it so the schedule + UI follow.
+    state.instrumentId = byId('sel-position').value;
+    const w = defaultWindowFor(currentInstrument());
+    if(w){ state.begin = w.begin; state.end = w.end; state.last = w.last; }
+    loadFormFromInstrument();
+    render();
+    rebuildSecurityDropdown();
+    updateSecurityReadout();
+  });
+  byId('sel-position').onchange = ()=>{
+    // Position → Security 1:1: the dropdown's value IS the instrument id.
+    state.instrumentId = byId('sel-position').value;
+    const w = defaultWindowFor(currentInstrument());
+    if(w){ state.begin = w.begin; state.end = w.end; state.last = w.last; }
+    loadFormFromInstrument();
+    render();
+    rebuildSecurityDropdown();
+    updateSecurityReadout();
+  };
   byId('sel-security').onchange = ()=>{
     onPickerChange();
     // Re-expand the security dropdown to all instruments (in case the cascade
     // narrowed it earlier). Don't rerun the full picker rebuild — that wipes
     // the deal/position values we just synced inside onPickerChange.
     rebuildSecurityDropdown();
+    updateSecurityReadout();
   };
   // Date format
   document.querySelectorAll('[data-date-fmt]').forEach(b => b.onclick = ()=>{ state.dateFormat = b.dataset.dateFmt; render(); });
@@ -3052,6 +4289,8 @@ function wire(){
   };
   byId('opt-in-window')?.addEventListener('change', renderScheduleGrid);
   byId('opt-highlight-events')?.addEventListener('change', renderScheduleGrid);
+  byId('opt-density')?.addEventListener('change', renderScheduleGrid);
+  byId('opt-columns')?.addEventListener('change', renderScheduleGrid);
 
   /* ---------- JSON Import / Export ---------- */
   byId('btn-import-json').onclick = openJsonModal;
@@ -3070,7 +4309,13 @@ function wire(){
   });
   document.addEventListener('keydown', (e)=>{
     if(e.key==='Escape' && byId('json-modal').style.display!=='none') closeJsonModal();
+    if(e.key==='Escape' && byId('add-modal') && byId('add-modal').style.display === 'flex') closeAddInstrumentModal();
   });
+
+  /* ---------- Add Instrument Modal ---------- */
+  document.querySelectorAll('#add-modal [data-close-add="1"]').forEach(el => el.onclick = closeAddInstrumentModal);
+  byId('btn-add-save')?.addEventListener('click', saveAddInstrumentModal);
+  byId('add-refresh-le')?.addEventListener('click', refreshLEsFromInvestran);
 }
 
 /* ---------- JSON Import Modal ---------- */
@@ -3439,6 +4684,9 @@ function exportJson(){
 /* ---------- Boot ---------- */
 document.addEventListener('DOMContentLoaded', ()=>{
   populateTypeDropdown();
+  // Hydrate any user-saved instruments from localStorage BEFORE building pickers,
+  // so they appear in the LE / Deal / Position / Security dropdowns alongside seeds.
+  hydrateUserInstruments();
   populatePickers();
   // Default accrual window = settlement → maturity for the boot instrument,
   // so users see income through to maturity without having to widen the dates.
