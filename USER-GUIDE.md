@@ -71,6 +71,7 @@ The instrument editor. Sub-cards:
 - **Principal Schedule** — drawdown / repayment / capitalisation events with date, type (initial / draw / paydown / repayment), and amount.
 - **Fees · IFRS 9 / 15 Treatment** — the multi-fee table; per-fee classification, mode (percent / flat / margin-linked), base, frequency, payment date, IFRS treatment (IFRS9-EIR / IFRS15-overTime / IFRS15-pointInTime), feeRateSchedule.
 - **SONIA / RFR · Margin Ratchet & ESG** — date-effective margin steps in bps, base SONIA fix, lookback period, ESG adjustment, business-day convention.
+- **Hedge Accounting (IFRS 9 §6)** — hedge type (None / CFH / FVH), notional, fixed/floating leg rates, effectiveness ratio, editable Fair Value Schedule table (date + MTM), and editable Settlement Dates table for CFH reclassification. See §14 for full detail.
 
 ### Schedule tab
 Day-by-day grid. Two density controls:
@@ -424,7 +425,23 @@ Substantial modifications (≥10% PV change) should derecognise the old instrume
 
 ## 14. IFRS 9 hedge accounting
 
-Per IFRS 9 §6 — Cash Flow Hedge or Fair Value Hedge:
+Per IFRS 9 §6 — Cash Flow Hedge (CFH) or Fair Value Hedge (FVH).
+
+### UI controls (Setup tab → Hedge Accounting card)
+
+| Control | Purpose |
+|---|---|
+| Hedge Type | `None` (no hedge — clears the hedge block), `CFH`, or `FVH` |
+| Notional | Hedging instrument notional in instrument currency |
+| Fixed Leg Rate | The pay-fixed leg's rate (decimal, e.g., `0.05` = 5%) |
+| Floating Leg Rate | The receive-floating leg's rate at inception (decimal) |
+| Effectiveness Ratio | Effective portion fraction (e.g., `0.95` = 95%); the engine bisects daily MTM moves by this ratio |
+| **Fair Value Schedule** table | Editable rows of `(Date, MTM)` — the hand-fed hedge fair value at each observation date. **+ Add MTM step** creates a new row 90 days after the last. Delete via the trash icon per row. |
+| **Settlement Dates** table | Editable list of dates (CFH only). On each, the accumulated hedge reserve is reclassified to P&L. **+ Add settlement date** creates a new row 90 days after the last. |
+
+Every input fires a recalculation immediately — change any field and the schedule grid, KPIs, and DIU export refresh. Edits to user-created instruments auto-save to localStorage.
+
+### Data model
 
 ```js
 hedge: {
@@ -432,22 +449,45 @@ hedge: {
   notional: 25_000_000,
   fixedRate: 0.05, floatingRate: 0.0475,
   effectivenessRatio: 0.95,       // 80%-125% range under IAS 39 numerical test (kept as diagnostic)
-  fairValueSchedule: [            // hand-fed MTM (or computed externally)
+  fairValueSchedule: [            // hand-fed MTM (or computed externally — front-office system feed)
     { date: '2024-10-08', mtm: 0 },
-    { date: '2025-06-30', mtm: 250_000 }
+    { date: '2025-06-30', mtm: 250_000 },
+    { date: '2026-06-30', mtm: 600_000 }
   ],
   settlementDates: ['2026-06-30', '2027-06-30']  // CFH only
 }
 ```
 
+### Engine logic
+
 Daily MTM movement (today − yesterday):
 - **CFH** → effective portion = `dMTM × effectivenessRatio` accumulated in `cashFlowHedgeReserve` (OCI). Ineffective = `dMTM × (1 − effectivenessRatio)` to P&L.
 - **FVH** → full `dMTM` to P&L (offsetting the hedged item's FV change).
 
-Reclassification on settlement dates drains the hedge reserve into P&L. JE pairs:
-- OCI movement: `DR/CR 16000 Hedging Instrument / 35000 Cash Flow Hedge Reserve OCI`
+Reclassification on settlement dates drains the hedge reserve into P&L (matches the hedged cashflow as it materialises).
+
+### JE pairs emitted
+
+- OCI movement (CFH): `DR/CR 16000 Hedging Instrument / 35000 Cash Flow Hedge Reserve (OCI)`
 - P&L: `DR/CR 16000 Hedging Instrument / 45100 Hedge Ineffectiveness P&L` (CFH) or `45200 FV Hedge P&L` (FVH)
-- Reclass: `DR 35000 / CR 45100 Hedge Income (Reclass from OCI)`
+- Reclass: `DR 35000 Cash Flow Hedge Reserve / CR 45100 Hedge Income (Reclass from OCI)`
+
+### Worked example — Libra 3
+
+The seed dataset includes **Libra 3** as the canonical hedge-accounting demonstration. It is structurally identical to Libra 2 (same £25M GBP SONIA + ratcheted margin loan, same fees, same IFRS 9 stage 1 ECL) plus a 95%-effective Cash Flow Hedge: pay-fixed (5%) receive-floating (SONIA) IRS with hand-fed fair values from inception (£0) up to £850K in 2027 then back down to £0 at maturity. 14 quarterly settlement dates aligned to interest periods drain the OCI reserve to P&L over the loan's life.
+
+For the 2026 period, Libra 3 produces:
+
+| Line | Amount |
+|---|---:|
+| Hedging Instrument MTM (CFH OCI) | £332,500 (DR 16000) |
+| Cash Flow Hedge Reserve (OCI) | £332,500 (CR 35000) |
+| Hedging Instrument MTM | £17,500 (DR 16000) |
+| Hedge Ineffectiveness P&L | £17,500 (CR 45100) |
+| Cash Flow Hedge Reserve Reclass | £332,500 (DR 35000) |
+| Hedge Income (Reclass from OCI) | £332,500 (CR 45100) |
+
+**Libra 2 deliberately has NO hedge block** so it remains a faithful match of the requirements XLSX. To compare like-for-like, pick Libra 2 first to see the pure loan economics, then switch to Libra 3 to see the same loan with hedge accounting layered on. The only diff is the hedge.
 
 ---
 
@@ -505,7 +545,7 @@ For setup, field maps, error handling, and idempotency rules, see `investran-int
 
 ## 18. Worked examples
 
-Eleven seed instruments demonstrate the full surface:
+Thirteen seed instruments demonstrate the full surface:
 
 | Instrument | LE | What it shows |
 |---|---|---|
@@ -515,7 +555,8 @@ Eleven seed instruments demonstrate the full surface:
 | **Orion Term Loan B (FCP-I £20m secondary)** | FCP-I | Same security as FCP-II's holding — multi-LE syndicate at different cost basis |
 | **Northwind RCF** | FCO-III | Revolver with non-use fee on undrawn, draw / paydown / draw sequence |
 | **Meridian Unitranche** | DL-IV | SOFR + 600 PIK toggle, 1% OID accreted, scheduled amort |
-| **Libra 2 (HSBC Facility B4)** | NWF Sustainable Infrastructure | SONIA + ratcheted margin, ESG -2.5 bps, 1.75% arrangement (IFRS 15 PIT), 35% × margin commitment fee (IFRS 15 OT) |
+| **Libra 2 (HSBC Facility B4)** | NWF Sustainable Infrastructure | SONIA + ratcheted margin, ESG -2.5 bps, 1.75% arrangement (IFRS 15 PIT), 35% × margin commitment fee (IFRS 15 OT). **No hedge — matches the requirements XLSX exactly.** |
+| **Libra 3 (HSBC Facility B4 + CFH)** | NWF Sustainable Infrastructure | Same structure as Libra 2 plus a 95%-effective Cash Flow Hedge IRS. The canonical IFRS 9 §6 hedge-accounting example. |
 | **Volt Financial Guarantee** | NWF Sustainable Infrastructure | £1bn underlying with £800m covered, 0.5% guarantee fee on drawn covered, 35% × guarantee fee NWF commitment fee |
 | **Volt Multi-Loan Guarantee** | NWF Sustainable Infrastructure | Single guarantee covering 2 underlying loans (SONIA + Fixed) with fee-rate ratchet 0.5% → 0.6% from 2031 |
 | **Suffolk Solar Multi-Tranche** | NWF Sustainable Infrastructure | Single facility split into £50m Fixed 6.5% + £50m SONIA + 350 (different day bases) |
@@ -549,7 +590,22 @@ On the Setup tab, scroll to **Fees · IFRS 9 / 15** card → fill in IFRS 9 Clas
 Edit the instrument JSON to add `functionalCurrency: 'GBP'` and `fxRateSchedule: [{date, rate}, ...]`. The Schedule grid's balance column will show in instrument currency; check the Summary tab for FX gain.
 
 ### "I want to model a hedge"
-Add a `hedge: { type: 'CFH', ... }` block on the instrument. Provide the hand-fed `fairValueSchedule` (or compute externally) plus `settlementDates`. The engine bisects MTM moves into OCI / P&L and emits the JE pairs.
+Easiest path: open the **Hedge Accounting** card on the Setup tab. Pick `CFH` or `FVH` from the Hedge Type dropdown, fill in notional / fixed leg / floating leg / effectiveness ratio, then build the Fair Value Schedule (one row per observation — date + MTM in instrument currency) and, for CFH, the Settlement Dates list. Use the **+ Add MTM step** and **+ Add settlement date** buttons to grow each table; trash icons remove rows. Every change recalculates instantly and the new hedge JE pairs flow through to the DIU export.
+
+For a worked example to copy from, switch to **Libra 3** in the picker — it's a clone of Libra 2 with a complete CFH already wired up (9 MTM observations, 14 settlement dates, 95% effectiveness ratio). Compare side-by-side against Libra 2 (no hedge) to see exactly what the hedge accounting adds.
+
+If you'd rather edit JSON directly, the data model is:
+
+```js
+hedge: {
+  type: 'CFH',                     // or 'FVH'
+  notional: 25_000_000,
+  fixedRate: 0.05, floatingRate: 0.0475,
+  effectivenessRatio: 0.95,
+  fairValueSchedule: [{ date: '2024-10-08', mtm: 0 }, ...],
+  settlementDates: ['2026-06-30', '2027-06-30', ...]
+}
+```
 
 ### "I want to record a covenant breach with default interest from a date forward"
 Add to `defaultEvents`: `{ date, defaultRateBps: 200, defaultFeeAmount: 50_000, endDate, reason }`. Default accrual continues until `endDate` (or maturity).
