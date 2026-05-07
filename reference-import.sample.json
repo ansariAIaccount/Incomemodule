@@ -1,0 +1,41 @@
+{
+  "_comment": "Sample 3rd-party reference data — load this via the Reconcile tab → 'Load Reference Data' to compare against the calculator's output. Drop the JSON straight in or upload a .json file. The instrument block (optional) overwrites the active instrument; the scheduleResults array provides the period-by-period numbers to reconcile against.",
+  "_source": "Reference Software X — SP023 Libra 2 Ledger Export",
+
+  "source": "Reference Software X · SP023 Libra 2",
+  "exportedAt": "2026-04-30T16:00:00Z",
+  "exportedBy": "ferhat.ansari@nwf.example",
+  "matchKey": "date",
+  "tolerances": {
+    "balance":  1.00,
+    "interest": 0.10,
+    "fees":     0.10,
+    "totalCash": 0.10,
+    "breakThresholdPct": 0.5
+  },
+
+  "instrument": {
+    "id": "libra2",
+    "legalEntity": "NWF Sustainable Infrastructure",
+    "deal": "Libra 2",
+    "position": "NWF 100% Bilateral Position · Libra 2",
+    "incomeSecurity": "HSBC Facility B4 — Libra 2 (Compounded SONIA + Ratcheted Margin)"
+  },
+
+  "scheduleResults": [
+    { "date": "2024-10-13", "openingBalance":          0, "closingBalance":          0, "interestAccrued":      0, "totalFees":  437500.00, "drawdown":          0, "repayment": 0, "utilisation": 0, "totalFacility": 25000000, "undrawnAmount":        0, "comment": "Arrangement fee paid 13/10/2024 (1.75% × £25M)" },
+    { "date": "2025-01-10", "openingBalance":          0, "closingBalance":          0, "interestAccrued":      0, "totalFees":   88219.18, "drawdown":          0, "repayment": 0, "utilisation": 0, "totalFacility": 25000000, "undrawnAmount": 25000000, "comment": "Q1 commitment fee — 25M × 35% × 4.0% × 92/365" },
+    { "date": "2025-04-10", "openingBalance":          0, "closingBalance":          0, "interestAccrued":      0, "totalFees":   87679.79, "drawdown":          0, "repayment": 0, "utilisation": 0, "totalFacility": 25000000, "undrawnAmount": 25000000, "comment": "Q2 commitment fee — margin steps from 4.00 → 4.25%" },
+    { "date": "2025-07-10", "openingBalance":          0, "closingBalance":          0, "interestAccrued":      0, "totalFees":   92420.38, "drawdown":          0, "repayment": 0, "utilisation": 0, "totalFacility": 25000000, "undrawnAmount": 25000000, "comment": "Q3 commitment fee — margin steps to 4.50%, ESG -25 bps from 22/5" },
+    { "date": "2025-10-10", "openingBalance":          0, "closingBalance":          0, "interestAccrued":      0, "totalFees":   93181.51, "drawdown":          0, "repayment": 0, "utilisation": 0, "totalFacility": 25000000, "undrawnAmount": 25000000, "comment": "Q4 commitment fee — full quarter at 4.475% effective" },
+    { "date": "2026-01-12", "openingBalance":          0, "closingBalance":          0, "interestAccrued":      0, "totalFees":   95207.19, "drawdown":          0, "repayment": 0, "utilisation": 0, "totalFacility": 25000000, "undrawnAmount": 25000000, "comment": "Q5 commitment fee — date adjusted forward (modified following)" },
+    { "date": "2026-04-01", "openingBalance":          0, "closingBalance":  25000000, "interestAccrued":      0, "totalFees":          0, "drawdown":   25000000, "repayment": 0, "utilisation": 1, "totalFacility": 25000000, "undrawnAmount":        0, "comment": "£25M drawdown — single tranche per reference modelling" },
+    { "date": "2026-04-10", "openingBalance":   25000000, "closingBalance":  25000000, "interestAccrued":      0, "totalFees":   80937.50, "drawdown":          0, "repayment": 0, "utilisation": 1, "totalFacility": 25000000, "undrawnAmount":        0, "comment": "Stub commitment fee for partial period 12/01 → 31/03" },
+    { "date": "2026-07-01", "openingBalance":   25000000, "closingBalance":  25000000, "interestAccrued":  499006.92, "totalFees":         0, "drawdown":          0, "repayment": 0, "utilisation": 1, "totalFacility": 25000000, "undrawnAmount":        0, "comment": "First quarterly interest payment post-drawdown" },
+    { "date": "2026-10-01", "openingBalance":   25000000, "closingBalance":  25000000, "interestAccrued":  497482.15, "totalFees":         0, "drawdown":          0, "repayment": 0, "utilisation": 1, "totalFacility": 25000000, "undrawnAmount":        0 },
+    { "date": "2027-01-04", "openingBalance":   25000000, "closingBalance":  25000000, "interestAccrued":  511904.02, "totalFees":         0, "drawdown":          0, "repayment": 0, "utilisation": 1, "totalFacility": 25000000, "undrawnAmount":        0 },
+    { "date": "2027-04-01", "openingBalance":   25000000, "closingBalance":  25000000, "interestAccrued":  469317.48, "totalFees":         0, "drawdown":          0, "repayment": 0, "utilisation": 1, "totalFacility": 25000000, "undrawnAmount":        0 },
+    { "date": "2027-07-01", "openingBalance":   25000000, "closingBalance":  25000000, "interestAccrued":  507740.36, "totalFees":         0, "drawdown":          0, "repayment": 0, "utilisation": 1, "totalFacility": 25000000, "undrawnAmount":        0 },
+    { "date": "2027-10-01", "openingBalance":   25000000, "closingBalance":  25000000, "interestAccrued":  515037.06, "totalFees":         0, "drawdown":          0, "repayment": 0, "utilisation": 1, "totalFacility": 25000000, "undrawnAmount":        0 }
+  ]
+}

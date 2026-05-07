@@ -244,6 +244,7 @@
         <button class="tab-btn" data-tab="schedule"><span class="material-icons-outlined text-[18px] align-middle mr-1">calendar_view_day</span>Schedule</button>
         <button class="tab-btn" data-tab="summary"><span class="material-icons-outlined text-[18px] align-middle mr-1">insights</span>Summary</button>
         <button class="tab-btn" data-tab="diu"><span class="material-icons-outlined text-[18px] align-middle mr-1">upload_file</span>DIU Export</button>
+        <button class="tab-btn" data-tab="reconcile"><span class="material-icons-outlined text-[18px] align-middle mr-1">compare_arrows</span>Reconcile</button>
       </nav>
       <div class="ml-auto flex items-center gap-2">
         <span id="calc-status" class="mat-chip green"><span class="dot" style="background:#0f6b3a"></span>Calculations in sync</span>
@@ -620,17 +621,48 @@
 
       <!-- ============ TAB: DIU ============ -->
       <section class="tab-panel hidden" data-tab="diu">
-        <div class="flex items-center gap-3 mb-3">
+        <div class="flex flex-wrap items-center gap-3 mb-3">
           <h3 class="text-base font-semibold flex items-center gap-2"><span class="material-icons-outlined text-brand-600">upload_file</span>DIU Template Output (N-9)</h3>
           <span class="mat-chip gray">Relational Trans Types (N-6)</span>
-          <div class="ml-auto flex items-center gap-2">
+          <div class="ml-auto flex flex-wrap items-center gap-2">
+            <div class="mat-field !mb-0" style="min-width:240px">
+              <label>Source</label>
+              <select id="opt-diu-source" class="mat-select">
+                <option value="ours" selected>Our calculated data (engine)</option>
+                <option value="reference">PortF Data (loaded on Reconcile tab)</option>
+              </select>
+            </div>
+            <span id="diu-source-status" class="mat-chip gray"></span>
             <button id="btn-diu-csv" class="mat-btn primary"><span class="material-icons-outlined text-[18px]">file_download</span>Download DIU CSV</button>
           </div>
         </div>
         <div id="diu-grid" class="grid-scroll"></div>
         <div class="mt-4 text-[12px] text-gray-500 leading-relaxed">
           Entries group Accrued Interest, PIK capitalization, and per-day adjustments into balanced debit/credit pairs against the client-configured transaction type hierarchy.
-          In production this panel maps fields from the Investran driver reports — here it's driven from the in-app mock data so you can see the shape end-to-end.
+          Switch <strong>Source</strong> to <em>PortF Data</em> to generate JE pairs from the dataset loaded on the Reconcile tab — useful for posting the PortF numbers downstream while you investigate the variances.
+        </div>
+      </section>
+
+      <!-- ============ TAB: RECONCILE ============ -->
+      <section class="tab-panel hidden" data-tab="reconcile">
+        <div class="flex flex-wrap items-center gap-3 mb-3">
+          <h3 class="text-base font-semibold flex items-center gap-2"><span class="material-icons-outlined text-brand-600">compare_arrows</span>Reconciliation vs PortF Data</h3>
+          <span id="recon-status" class="mat-chip gray">No PortF data loaded</span>
+          <div class="ml-auto flex flex-wrap items-center gap-2">
+            <button id="btn-recon-load" class="mat-btn primary"><span class="material-icons-outlined text-[18px]">file_upload</span>Load PortF Data</button>
+            <button id="btn-recon-clear" class="mat-btn outline" style="display:none;"><span class="material-icons-outlined text-[18px]">delete_outline</span>Clear</button>
+            <button id="btn-recon-csv" class="mat-btn outline" style="display:none;"><span class="material-icons-outlined text-[18px]">download</span>Breaks CSV</button>
+          </div>
+        </div>
+        <div id="recon-summary" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4"></div>
+        <div class="flex items-center gap-3 mb-2 text-[12px]">
+          <label class="toggle"><input id="opt-recon-breaksonly" type="checkbox"><span class="track"></span>Show breaks only</label>
+          <span id="recon-source-label" class="text-gray-500"></span>
+        </div>
+        <div id="recon-grid" class="grid-scroll"></div>
+        <div id="recon-empty" class="text-[13px] text-gray-500 italic mt-6">
+          No PortF data loaded for this instrument. Click <strong>Load PortF Data</strong> to paste or upload the JSON export from PortF.
+          See <code>reference-import.sample.json</code> for the template shape.
         </div>
       </section>
 
@@ -724,6 +756,34 @@
   </div>
 
   <!-- ===== JSON Import Modal ===== -->
+  <!-- ===== Load Reference Data Modal ===== -->
+  <div id="recon-modal" class="json-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="recon-modal-title">
+    <div class="json-modal-backdrop" data-close-recon="1"></div>
+    <div class="json-modal-panel" style="width:min(900px, 95vw);">
+      <div class="json-modal-header">
+        <div>
+          <div id="recon-modal-title" class="font-semibold text-[15px]">Load PortF Data</div>
+          <div class="text-[11px] text-gray-500">Paste JSON or upload a .json file. PortF data persists per-instrument in this browser. See <code>reference-import.sample.json</code> for the template shape.</div>
+        </div>
+        <button class="mat-btn outline !py-1 !px-2" data-close-recon="1" aria-label="Close"><span class="material-icons-outlined text-[18px]">close</span></button>
+      </div>
+      <div class="json-modal-body">
+        <div class="flex items-center gap-2 mb-2">
+          <button id="btn-recon-sample" class="mat-btn outline !py-1 !px-2 text-xs">Load Libra 2 sample</button>
+          <input id="recon-file-input" type="file" accept=".json,application/json" style="display:none;"/>
+          <button id="btn-recon-file" class="mat-btn outline !py-1 !px-2 text-xs"><span class="material-icons-outlined text-[14px]">file_upload</span>Upload .json</button>
+          <span id="recon-modal-status" class="mat-chip gray">empty</span>
+        </div>
+        <textarea id="recon-input" spellcheck="false" placeholder='{ "source":"...", "instrument":{...}, "scheduleResults":[{date, interestAccrued, totalFees, ...}] }'></textarea>
+        <div id="recon-modal-errors" class="json-modal-errors" style="display:none;"></div>
+      </div>
+      <div class="json-modal-footer">
+        <button class="mat-btn outline" data-close-recon="1">Cancel</button>
+        <button id="btn-recon-apply" class="mat-btn primary"><span class="material-icons-outlined text-[18px]">check</span>Load &amp; Reconcile</button>
+      </div>
+    </div>
+  </div>
+
   <div id="json-modal" class="json-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="json-modal-title">
     <div class="json-modal-backdrop" data-close="1"></div>
     <div class="json-modal-panel">
@@ -1756,7 +1816,323 @@ function buildCashFlowForecast(rows, asOfISO){
   };
 }
 
+/* ---------- Inline reference sample (SP023 / Libra 2) -----------------
+   Embedded so the "Load sample" button works without a fetch — useful when
+   the calculator is opened from file:// where same-directory JSON fetches
+   may be blocked by the browser.
+*/
+const RECON_SAMPLE_LIBRA2 = {
+  source: 'Reference Software X · SP023 Libra 2',
+  exportedAt: '2026-04-30T16:00:00Z',
+  matchKey: 'date',
+  tolerances: { balance: 1.00, interest: 0.10, fees: 0.10, totalCash: 0.10, breakThresholdPct: 0.5 },
+  instrument: { id: 'libra2', legalEntity: 'NWF Sustainable Infrastructure', deal: 'Libra 2',
+                position: 'NWF 100% Bilateral Position · Libra 2',
+                incomeSecurity: 'HSBC Facility B4 — Libra 2 (Compounded SONIA + Ratcheted Margin)' },
+  scheduleResults: [
+    { date:'2024-10-13', openingBalance:0, closingBalance:0, interestAccrued:0, totalFees: 437500.00, drawdown:0, repayment:0, utilisation:0, totalFacility:25000000, undrawnAmount:0,        comment:'Arrangement fee 1.75% × £25M paid 13/10/2024' },
+    { date:'2025-01-10', openingBalance:0, closingBalance:0, interestAccrued:0, totalFees:  88219.18, drawdown:0, repayment:0, utilisation:0, totalFacility:25000000, undrawnAmount:25000000, comment:'Q1 commitment fee · 25M × 35% × 4.0% × 92/365' },
+    { date:'2025-04-10', openingBalance:0, closingBalance:0, interestAccrued:0, totalFees:  87679.79, drawdown:0, repayment:0, utilisation:0, totalFacility:25000000, undrawnAmount:25000000, comment:'Q2 — margin 4.00% → 4.25% mid-period' },
+    { date:'2025-07-10', openingBalance:0, closingBalance:0, interestAccrued:0, totalFees:  92420.38, drawdown:0, repayment:0, utilisation:0, totalFacility:25000000, undrawnAmount:25000000, comment:'Q3 — margin 4.50%, ESG -25 bps from 22/5' },
+    { date:'2025-10-10', openingBalance:0, closingBalance:0, interestAccrued:0, totalFees:  93181.51, drawdown:0, repayment:0, utilisation:0, totalFacility:25000000, undrawnAmount:25000000, comment:'Q4 — full quarter at 4.475% effective' },
+    { date:'2026-01-12', openingBalance:0, closingBalance:0, interestAccrued:0, totalFees:  95207.19, drawdown:0, repayment:0, utilisation:0, totalFacility:25000000, undrawnAmount:25000000, comment:'Q5 — date adjusted forward (modified following)' },
+    { date:'2026-04-01', openingBalance:0, closingBalance:25000000, interestAccrued:0, totalFees:0, drawdown:25000000, repayment:0, utilisation:1, totalFacility:25000000, undrawnAmount:0, comment:'£25M drawdown · single tranche per reference modelling' },
+    { date:'2026-04-10', openingBalance:25000000, closingBalance:25000000, interestAccrued:0, totalFees:80937.50, drawdown:0, repayment:0, utilisation:1, totalFacility:25000000, undrawnAmount:0, comment:'Stub commitment fee 12/01 → 31/03' },
+    { date:'2026-07-01', openingBalance:25000000, closingBalance:25000000, interestAccrued:499006.92, totalFees:0, drawdown:0, repayment:0, utilisation:1, totalFacility:25000000, undrawnAmount:0, comment:'First quarterly interest post-drawdown' },
+    { date:'2026-10-01', openingBalance:25000000, closingBalance:25000000, interestAccrued:497482.15, totalFees:0, drawdown:0, repayment:0, utilisation:1, totalFacility:25000000, undrawnAmount:0 },
+    { date:'2027-01-04', openingBalance:25000000, closingBalance:25000000, interestAccrued:511904.02, totalFees:0, drawdown:0, repayment:0, utilisation:1, totalFacility:25000000, undrawnAmount:0 },
+    { date:'2027-04-01', openingBalance:25000000, closingBalance:25000000, interestAccrued:469317.48, totalFees:0, drawdown:0, repayment:0, utilisation:1, totalFacility:25000000, undrawnAmount:0 },
+    { date:'2027-07-01', openingBalance:25000000, closingBalance:25000000, interestAccrued:507740.36, totalFees:0, drawdown:0, repayment:0, utilisation:1, totalFacility:25000000, undrawnAmount:0 },
+    { date:'2027-10-01', openingBalance:25000000, closingBalance:25000000, interestAccrued:515037.06, totalFees:0, drawdown:0, repayment:0, utilisation:1, totalFacility:25000000, undrawnAmount:0 }
+  ]
+};
+
+/* ---------- Reconciliation engine -------------------------------------
+   Compare our calculator's daily schedule against PortF reference data's
+   period-by-period results (interest, fees, balance, etc.) and surface
+   per-row diffs with status (tied / within tolerance / break) plus
+   summary KPIs. Tolerances and break thresholds are configurable in the
+   reference JSON; sensible defaults below.
+*/
+const RECON_DEFAULT_TOLERANCES = {
+  balance: 1.00,
+  interest: 0.10,
+  fees: 0.10,
+  totalCash: 0.10,
+  breakThresholdPct: 0.5
+};
+
+function reconcileAgainstReference(rows, referenceData){
+  if(!rows || !rows.length || !referenceData || !Array.isArray(referenceData.scheduleResults)) return null;
+  const tol = Object.assign({}, RECON_DEFAULT_TOLERANCES, referenceData.tolerances || {});
+  // Fast lookup: map calculator rows by date (ISO)
+  const ourByDate = new Map();
+  for(const r of rows) ourByDate.set(r.date, r);
+  // For each reference period, find the matching day in our schedule.
+  // The reference rows are typically end-of-period; we sum our daily flows
+  // since the previous reference date for a period-to-period comparison.
+  const sortedRef = referenceData.scheduleResults.slice()
+    .sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+  let prevDate = null;
+  const compared = [];
+  for(const ref of sortedRef){
+    const ourRow = ourByDate.get(ref.date);
+    // Sum our daily flows from prevDate (exclusive) to ref.date (inclusive)
+    // for period-style comparisons (interest, fees, drawdown, repayment).
+    let ourInterest = 0, ourFees = 0, ourDraw = 0, ourPaydown = 0;
+    if(prevDate){
+      for(const r of rows){
+        if(r.date > prevDate && r.date <= ref.date){
+          ourInterest += r.dailyCash || 0;
+          ourFees     += r.dailyFees || 0;
+          ourDraw     += r.draw || 0;
+          ourPaydown  += r.paydown || 0;
+        }
+      }
+    } else {
+      // First reference row — sum from start through ref.date
+      for(const r of rows){
+        if(r.date <= ref.date){
+          ourInterest += r.dailyCash || 0;
+          ourFees     += r.dailyFees || 0;
+          ourDraw     += r.draw || 0;
+          ourPaydown  += r.paydown || 0;
+        }
+      }
+    }
+    const ourBalance = ourRow ? ourRow.balance : null;
+    const lines = [];
+    const checkLine = (metric, refVal, ourVal, tolerance) => {
+      if(refVal == null && ourVal == null) return;
+      if(refVal == null) refVal = 0;
+      if(ourVal == null) ourVal = 0;
+      const diff = ourVal - refVal;
+      const absDiff = Math.abs(diff);
+      const denom = Math.abs(refVal) || Math.abs(ourVal) || 1;
+      const pct = denom > 0 ? Math.abs(diff)/denom : 0;
+      let status;
+      if(absDiff <= tolerance)                                  status = 'tied';
+      else if(pct * 100 <= tol.breakThresholdPct)               status = 'within';
+      else                                                       status = 'break';
+      lines.push({ metric, ref: refVal, ours: ourVal, diff, pct, status, tolerance });
+    };
+    checkLine('Closing Balance', ref.closingBalance,   ourBalance, tol.balance);
+    checkLine('Interest Accrued', ref.interestAccrued,  ourInterest, tol.interest);
+    checkLine('Total Fees',       ref.totalFees,        ourFees, tol.fees);
+    checkLine('Drawdown',         ref.drawdown,         ourDraw, tol.balance);
+    checkLine('Repayment',        ref.repayment,        ourPaydown, tol.balance);
+    if(ref.feeBreakdown){
+      for(const [k,v] of Object.entries(ref.feeBreakdown)){
+        const ours = (ourRow && ourRow.feeBreakdown && ourRow.feeBreakdown[k]) || 0;
+        checkLine('Fee · ' + k, v, ours, tol.fees);
+      }
+    }
+    compared.push({
+      date: ref.date,
+      hasOurRow: !!ourRow,
+      lines,
+      worstStatus: lines.reduce((acc, l) =>
+        l.status === 'break' ? 'break'
+        : (l.status === 'within' && acc !== 'break') ? 'within'
+        : acc, 'tied'),
+      comment: ref.comment || null
+    });
+    prevDate = ref.date;
+  }
+  // Summary stats
+  const flat = compared.flatMap(p => p.lines);
+  const tied   = flat.filter(l => l.status === 'tied').length;
+  const within = flat.filter(l => l.status === 'within').length;
+  const breaks = flat.filter(l => l.status === 'break').length;
+  const totalDiff = flat.reduce((a,l)=> a + l.diff, 0);
+  const totalAbsDiff = flat.reduce((a,l)=> a + Math.abs(l.diff), 0);
+  return {
+    source: referenceData.source || '—',
+    exportedAt: referenceData.exportedAt || null,
+    tolerances: tol,
+    periods: compared,
+    summary: {
+      periodsCompared: compared.length,
+      linesTotal: flat.length,
+      linesTied: tied,
+      linesWithinTol: within,
+      linesBreak: breaks,
+      tieRatePct: flat.length ? (tied / flat.length * 100) : 100,
+      totalSignedDiff: totalDiff,
+      totalAbsDiff
+    }
+  };
+}
+
+/* ---------- Reference data persistence (per-instrument) ---------- */
+const LS_KEY_RECON_REF = 'pe-loan-calc.reconciliation-references.v1';
+function loadAllReferenceData(){
+  try {
+    const raw = localStorage.getItem(LS_KEY_RECON_REF);
+    if(!raw) return {};
+    return JSON.parse(raw) || {};
+  } catch(e){ return {}; }
+}
+function saveAllReferenceData(map){
+  try { localStorage.setItem(LS_KEY_RECON_REF, JSON.stringify(map || {})); }
+  catch(e){ console.warn('Could not persist reference data:', e); }
+}
+function getReferenceForInstrument(id){ return loadAllReferenceData()[id] || null; }
+function setReferenceForInstrument(id, refData){
+  const all = loadAllReferenceData();
+  all[id] = refData;
+  saveAllReferenceData(all);
+}
+function clearReferenceForInstrument(id){
+  const all = loadAllReferenceData();
+  delete all[id];
+  saveAllReferenceData(all);
+}
+
 /* ---------- DIU generator (N-6 / N-9) ---------- */
+/* ---------- Investran GL chart mapping --------------------------------
+   Maps the calculator's transaction types to the Investran GL accounts
+   from "GL Accounts and tran types.xlsx". Each entry carries:
+     account     — Investran 6-digit GL account code
+     accountName — Investran display name
+     transType   — Investran transaction type (when one cleanly matches)
+     gap         — true when no clean match exists (operator must create)
+     gapNote     — explanation shown in the GL Coverage panel
+*/
+const INVESTRAN_GL = {
+  // ─── Cash ─────────────────────────────────────────────────────
+  cashReceipt:     { account:'111000', accountName:'Cash', transType:'Cash received' },
+  cashDisbursed:   { account:'111000', accountName:'Cash', transType:'Cash disbursed' },
+  // ─── Loan asset (drawdown / repayment / capitalisation) ───────
+  loanDrawdownInitial:    { account:'141000', accountName:'Investments at Cost', transType:'Purchase of investment - Notes - initial drawdown' },
+  loanDrawdownAdditional: { account:'141000', accountName:'Investments at Cost', transType:'Purchase of investment - Notes - additional drawdown' },
+  loanReturnOfCapital:    { account:'141000', accountName:'Investments at Cost', transType:'Sale of investment - Notes - Return of capital' },
+  loanPikCapitalisation:  { account:'141000', accountName:'Investments at Cost', transType:'Purchase of investment - Notes - principal from capitalization' },
+  loanOID:                { account:'141000', accountName:'Investments at Cost', transType:'Investment accretion - Original issue discount' },
+  loanPIKAccretion:       { account:'141000', accountName:'Investments at Cost', transType:'Investment accretion - PIK interest' },
+  // ─── Receivables ──────────────────────────────────────────────
+  interestReceivable:  { account:'113000', accountName:'Accounts Receivable', transType:'Interest receivable' },
+  interestReceived:    { account:'113000', accountName:'Accounts Receivable', transType:'Interest received' },
+  pikReceivable:       { account:'113000', accountName:'Accounts Receivable', transType:'Portfolio PIK interest receivable' },
+  feeReceivable:       { account:'113000', accountName:'Accounts Receivable', transType:'Other receivable',
+                         gap:true, gapNote:'IFRS 15 fee receivables — no specific Investran transaction type. Consider creating "Fee receivable (IFRS 15)" under 113000.' },
+  defaultIntReceivable:{ account:'113000', accountName:'Accounts Receivable', transType:'Other receivable',
+                         gap:true, gapNote:'Default interest receivable — no specific transtype. Suggest "Default interest receivable" under 113000.' },
+  whtReceivable:       { account:'113000', accountName:'Accounts Receivable', transType:'Withholding tax receivable' },
+  // ─── Income ───────────────────────────────────────────────────
+  interestIncomeAccrued: { account:'421000', accountName:'Investment Interest Income', transType:'Income - Investment interest - Accrued' },
+  interestIncomeCash:    { account:'421000', accountName:'Investment Interest Income', transType:'Income - Investment interest - Cash' },
+  interestIncomePIK:     { account:'421000', accountName:'Investment Interest Income', transType:'Income - Investment interest - PIK/Accreted' },
+  feeIncome:             { account:'492000', accountName:'Other Income - Amendments', transType:'Income - Other - Amendment fees',
+                           gap:true, gapNote:'IFRS 15 fee income — using "Amendment fees" as proxy. Consider creating IFRS-15-specific fee income accounts (e.g. 492100 Arrangement Fee Income, 492200 Commitment Fee Income) for cleaner reporting.' },
+  defaultIntIncome:      { account:'421000', accountName:'Investment Interest Income', transType:'Income - Investment interest',
+                           gap:true, gapNote:'Default interest income — using investment interest as proxy. Suggest "Default interest income" sub-account for separate disclosure.' },
+  defaultFeeIncome:      { account:'492000', accountName:'Other Income - Amendments',
+                           gap:true, gapNote:'Default fee income — no specific account. Suggest dedicated "Default fee income" line.' },
+  nonUseFeeIncome:       { account:'492000', accountName:'Other Income - Amendments',
+                           gap:true, gapNote:'Non-use fee on undrawn — Investran chart has it as expense (523000 Unused line fees) but for a lender it is INCOME. Suggest creating "Non-use fee income" line.' },
+  // ─── Gains / losses ───────────────────────────────────────────
+  fxUnrealised:        { account:'450000', accountName:'Unrealized Gain/Loss', transType:'Unrealized gain/(loss) - F/X gain/(loss)' },
+  fxRealised:          { account:'440000', accountName:'Realized Gain/Loss',   transType:'Realized gain/(loss) - Short term - F/X' },
+  modificationGain:    { account:'440000', accountName:'Realized Gain/Loss',
+                         gap:true, gapNote:'IFRS 9 §5.4.3 modification gain/loss — no dedicated account. Suggest creating 442000 Modification Gain/Loss for IFRS-9 derecognition / re-measurement.' },
+  modificationLoss:    { account:'440000', accountName:'Realized Gain/Loss', gap:true, gapNote:'(see Modification Gain — same recommended account)' },
+  // ─── Expenses ─────────────────────────────────────────────────
+  impairmentExpense:   { account:'519000', accountName:'Investment Expenses - Other',
+                         gap:true, gapNote:'IFRS 9 ECL impairment expense — no IFRS-9-specific account. Strongly recommend creating 470000 Impairment / ECL Expense.' },
+  loanLossAllowance:   { account:'141000', accountName:'Investments at Cost',
+                         gap:true, gapNote:'IFRS 9 ECL allowance (contra-asset) — no dedicated account. Suggest creating 145000 Loan Loss Allowance as a contra under 141000.' },
+  // ─── Hedge accounting (IFRS 9 §6) ─────────────────────────────
+  hedgingInstrument:   { account:'141000', accountName:'Investments at Cost',
+                         gap:true, gapNote:'Hedging instrument (IRS / cap / collar fair value) — no derivatives account. Suggest creating 146000 Derivative Assets / Liabilities.' },
+  cfhReserve:          { account:'351000', accountName:'Retained Earnings',
+                         gap:true, gapNote:'IFRS 9 §6.5.11 Cash Flow Hedge Reserve (OCI) — no OCI accumulator account. Strongly recommend creating 360000 Cash Flow Hedge Reserve (OCI) as a separate equity component.' },
+  hedgeIneffectiveness:{ account:'450000', accountName:'Unrealized Gain/Loss',
+                         gap:true, gapNote:'IFRS 9 §6.5.10 hedge ineffectiveness P&L — no dedicated line. Suggest creating 451000 Hedge Ineffectiveness P&L.' },
+  fvHedgePL:           { account:'450000', accountName:'Unrealized Gain/Loss',
+                         gap:true, gapNote:'IFRS 9 §6.5.8 Fair Value Hedge P&L — no dedicated line. Suggest creating 452000 FV Hedge P&L.' },
+  hedgeReclass:        { account:'421000', accountName:'Investment Interest Income',
+                         gap:true, gapNote:'CFH reserve reclassification to P&L on settlement — using "Investment Interest Income" as proxy.' }
+};
+
+// Map our internal placeholder-account-codes / transaction-type strings onto
+// the Investran chart. Called once on each batch of JE entries after the
+// generators run so we don't have to thread the mapping through every add().
+function applyInvestranGLMapping(entries){
+  // Transaction-type keyword → Investran GL key. Order matters: more specific
+  // keywords must be checked before more general ones.
+  const lookup = (tt, ourAcct) => {
+    const t = (tt || '').toLowerCase();
+    // Cash-leg lines (drawdown cash, repayment cash, fee/interest cash receipts)
+    if(/cash receipt/.test(t) || /drawdown — cash/.test(t)) return INVESTRAN_GL.cashReceipt;
+    if(/repayment — cash/.test(t))                          return INVESTRAN_GL.cashDisbursed;
+    // Loan asset legs
+    if(/^loan drawdown\b/.test(t) || /drawdown.*initial/.test(t))   return INVESTRAN_GL.loanDrawdownInitial;
+    if(/^loan repayment\b/.test(t))                                return INVESTRAN_GL.loanReturnOfCapital;
+    if(/pik (investment|capitalization)/.test(t))                  return INVESTRAN_GL.loanPikCapitalisation;
+    if(/discount accretion|premium amort/.test(t))                 return INVESTRAN_GL.loanOID;
+    if(/eir fee accretion/.test(t) && /offset/.test(t))            return INVESTRAN_GL.loanOID;
+    if(/eir fee accretion/.test(t))                                return INVESTRAN_GL.interestIncomeAccrued;
+    // Default interest / default fee
+    if(/default interest receivable/.test(t))                      return INVESTRAN_GL.defaultIntReceivable;
+    if(/default interest income/.test(t))                          return INVESTRAN_GL.defaultIntIncome;
+    if(/default interest cash receipt/.test(t))                    return INVESTRAN_GL.cashReceipt;
+    if(/default interest receivable clear/.test(t))                return INVESTRAN_GL.interestReceived;
+    if(/default fee income/.test(t))                               return INVESTRAN_GL.defaultFeeIncome;
+    if(/default fee receivable clear/.test(t))                     return INVESTRAN_GL.feeReceivable;
+    if(/default fee receivable/.test(t))                           return INVESTRAN_GL.feeReceivable;
+    // Non-use fee
+    if(/non-use fee income/.test(t))                               return INVESTRAN_GL.nonUseFeeIncome;
+    if(/non-use fee receivable clear/.test(t))                     return INVESTRAN_GL.feeReceivable;
+    if(/non-use fee receivable/.test(t))                           return INVESTRAN_GL.feeReceivable;
+    // FX revaluation
+    if(/fx (revaluation )?(gain|loss)/.test(t))                    return INVESTRAN_GL.fxUnrealised;
+    if(/fx revaluation .*loan asset/.test(t))                      return INVESTRAN_GL.loanReturnOfCapital;
+    // Modification gain/loss
+    if(/modification (gain|loss)/.test(t) && !/offset|adjust/.test(t)) {
+      return /gain/.test(t) ? INVESTRAN_GL.modificationGain : INVESTRAN_GL.modificationLoss;
+    }
+    if(/modification.*loan asset/.test(t))                         return INVESTRAN_GL.loanReturnOfCapital;
+    // ECL / Impairment
+    if(/impairment expense|impairment reversal/.test(t))           return INVESTRAN_GL.impairmentExpense;
+    if(/loan loss allowance/.test(t))                              return INVESTRAN_GL.loanLossAllowance;
+    // Hedge accounting
+    if(/cfh oci|cash flow hedge reserve.*ocic|cfh reserve|cash flow hedge reserve/.test(t)) return INVESTRAN_GL.cfhReserve;
+    if(/hedge reserve reclass|hedge income.*reclass/.test(t))      return INVESTRAN_GL.hedgeReclass;
+    if(/hedging instrument/.test(t))                               return INVESTRAN_GL.hedgingInstrument;
+    if(/hedge ineffectiveness/.test(t))                            return INVESTRAN_GL.hedgeIneffectiveness;
+    if(/fair value hedge p&l/.test(t))                             return INVESTRAN_GL.fvHedgePL;
+    // Interest legs
+    if(/interest receivable clear/.test(t))                        return INVESTRAN_GL.interestReceived;
+    if(/interest receivable/.test(t))                              return INVESTRAN_GL.interestReceivable;
+    if(/income.*daily accrued interest/.test(t))                   return INVESTRAN_GL.interestIncomeAccrued;
+    if(/interest cash receipt/.test(t))                            return INVESTRAN_GL.cashReceipt;
+    // IFRS 15 fee legs (per-fee labels — match by suffix)
+    if(/income \(ifrs 15\)|fee income \(ifrs 15\)|income \(portf\)/.test(t)) return INVESTRAN_GL.feeIncome;
+    if(/cash receipt/.test(t))                                     return INVESTRAN_GL.cashReceipt;
+    if(/receivable clear/.test(t))                                 return INVESTRAN_GL.feeReceivable;
+    if(/receivable/.test(t))                                       return INVESTRAN_GL.feeReceivable;
+    if(/fee income/.test(t))                                       return INVESTRAN_GL.feeIncome;
+    return null;
+  };
+  for(const e of entries){
+    const map = lookup(e.transactionType, e.account);
+    if(map){
+      e.account = map.account;
+      e.glAccountName = map.accountName;
+      e.glTransType = map.transType || e.transactionType;
+      e.glGap = !!map.gap;
+      e.glGapNote = map.gapNote || null;
+    } else {
+      // No mapping found — flag as a gap so the GL Coverage panel surfaces it
+      e.glAccountName = '— UNMAPPED —';
+      e.glGap = true;
+      e.glGapNote = `No mapping rule for "${e.transactionType}". Add to INVESTRAN_GL or extend the lookup() rules.`;
+    }
+  }
+  return entries;
+}
+
 function generateDIU(instr, summary){
   if(!summary || !summary.rows.length) return [];
   const ctx = { legal: instr.legalEntity, leid: instr.leid, deal: instr.deal, position: instr.position, sec: instr.incomeSecurity };
@@ -1953,7 +2329,77 @@ function generateDIU(instr, summary){
     add('Non-Use Fee Receivable Clear',      summary.totalNonUseFee, false, '23100', summary.periodEnd, `Non-use fee cash settlement ${summary.periodEnd}`);
     jeIndex++;
   }
-  return entries;
+  return applyInvestranGLMapping(entries);
+}
+
+/* ---------- DIU generator — from PortF Data ---------------
+   Walks the loaded reference's scheduleResults[] (date-indexed period rows)
+   and emits the same DIU JE pair shape that generateDIU() produces from
+   our calculator. Used when the DIU Export tab's Source = "PortF Data".
+*/
+function generateDIUFromReference(instr, referenceData){
+  if(!instr || !referenceData || !Array.isArray(referenceData.scheduleResults)) return [];
+  const ctx = { legal: instr.legalEntity, leid: instr.leid, deal: instr.deal, position: instr.position, sec: instr.incomeSecurity };
+  const entries = [];
+  let jeIndex = 1;
+  const add = (transType, amount, isDebit, account, effDate, comments) => {
+    entries.push({
+      legalEntity: ctx.legal, leid: ctx.leid, batchId: 1, jeIndex: jeIndex, txIndex: isDebit?2:1,
+      glDate: effDate, effectiveDate: effDate,
+      deal: ctx.deal, position: ctx.position, incomeSecurity: ctx.sec,
+      transactionType: transType, account: account, allocationRule: isDebit?'Non-Dominant':'By Commitment and GL Date',
+      batchType: 'Loan Calculator (PortF)',
+      batchComments: `From reference: ${referenceData.source || 'unknown'} · ${effDate}`,
+      transactionComments: comments,
+      originalAmount: isDebit ? amount : amount,
+      amountLE: Math.abs(amount), fx: 1, amountLocal: Math.abs(amount),
+      isDebit, leDomain: 'Investran Global · PortF'
+    });
+  };
+  for(const ref of referenceData.scheduleResults){
+    const eff = ref.date;
+    // Interest accrual pair (+ cash-settlement clear)
+    if((ref.interestAccrued || 0) > 0.005){
+      add('Interest Receivable',           ref.interestAccrued, false, '40100', eff, `Interest accrual (PortF) ${eff}`);
+      add('Income - Daily Accrued Interest', ref.interestAccrued, true,  '23000', eff, `Interest accrual (PortF) ${eff}`);
+      jeIndex++;
+      add('Interest Cash Receipt',     ref.interestAccrued, true,  '10000', eff, `Interest cash settlement (PortF) ${eff}`);
+      add('Interest Receivable Clear', ref.interestAccrued, false, '23000', eff, `Interest cash settlement (PortF) ${eff}`);
+      jeIndex++;
+    }
+    // Fees — by breakdown if provided, else as a single line
+    if(ref.feeBreakdown && Object.keys(ref.feeBreakdown).length){
+      for(const [label, amt] of Object.entries(ref.feeBreakdown)){
+        if(Math.abs(amt) <= 0.005) continue;
+        add(`${label} Income (PortF)`,        amt, false, '40250', eff, `${label} accrual (PortF) ${eff}`);
+        add(`${label} Receivable`,                amt, true,  '23150', eff, `${label} accrual (PortF) ${eff}`);
+        jeIndex++;
+        add(`${label} Cash Receipt`,              amt, true,  '10000', eff, `${label} cash settlement (PortF) ${eff}`);
+        add(`${label} Receivable Clear`,          amt, false, '23150', eff, `${label} cash settlement (PortF) ${eff}`);
+        jeIndex++;
+      }
+    } else if((ref.totalFees || 0) > 0.005){
+      add('Fee Income (PortF)',     ref.totalFees, false, '40250', eff, `Total fees (PortF) ${eff}`);
+      add('Fee Receivable',             ref.totalFees, true,  '23150', eff, `Total fees (PortF) ${eff}`);
+      jeIndex++;
+      add('Fee Cash Receipt',           ref.totalFees, true,  '10000', eff, `Fee cash settlement (PortF) ${eff}`);
+      add('Fee Receivable Clear',       ref.totalFees, false, '23150', eff, `Fee cash settlement (PortF) ${eff}`);
+      jeIndex++;
+    }
+    // Drawdown pair
+    if((ref.drawdown || 0) > 0.005){
+      add('Loan Drawdown',          ref.drawdown, true,  '15000', eff, `Drawdown (PortF) ${eff}`);
+      add('Loan Drawdown — Cash',   ref.drawdown, false, '10000', eff, `Drawdown (PortF) ${eff}`);
+      jeIndex++;
+    }
+    // Repayment pair
+    if((ref.repayment || 0) > 0.005){
+      add('Loan Repayment — Cash',   ref.repayment, true,  '10000', eff, `Repayment (PortF) ${eff}`);
+      add('Loan Repayment',          ref.repayment, false, '15000', eff, `Repayment (PortF) ${eff}`);
+      jeIndex++;
+    }
+  }
+  return applyInvestranGLMapping(entries);
 }
 </script>
 
@@ -3711,26 +4157,32 @@ function renderFeesTable(force){
   ];
   const opt = (arr, sel) => arr.map(v => `<option value="${v}" ${v===sel?'selected':''}>${v}</option>`).join('');
   const optKv = (arr, sel) => arr.map(([v,l]) => `<option value="${v}" ${v===sel?'selected':''}>${l}</option>`).join('');
-  const rows = i.fees.map((f, idx) => `
+  const rows = i.fees.map((f, idx) => {
+    const isMarginLinked = f.mode === 'marginLinked';
+    const isFlat         = f.mode === 'flat';
+    return `
     <tr>
       <td><input type="text"   class="mat-input" data-fee="label"        data-idx="${idx}" value="${f.label||''}" placeholder="Label"/></td>
       <td><select               class="mat-select" data-fee="kind"        data-idx="${idx}">${opt(KIND_OPTS, f.kind)}</select></td>
       <td><select               class="mat-select" data-fee="mode"        data-idx="${idx}">${opt(MODE_OPTS, f.mode)}</select></td>
-      <td><input type="number" step="0.0001" class="mat-input" data-fee="rate"   data-idx="${idx}" value="${f.rate ?? ''}" placeholder="% e.g. 0.0175"/></td>
-      <td><input type="number" step="0.01"   class="mat-input" data-fee="amount" data-idx="${idx}" value="${f.amount ?? ''}" placeholder="flat £"/></td>
+      <td><input type="number" step="0.0001" class="mat-input" data-fee="rate"   data-idx="${idx}" value="${f.rate ?? ''}" placeholder="% e.g. 0.0175" ${isMarginLinked||isFlat ? 'disabled style="opacity:0.4"' : ''}/></td>
+      <td><input type="number" step="0.01"   class="mat-input" data-fee="marginMultiple" data-idx="${idx}" value="${f.marginMultiple ?? ''}" placeholder="${isMarginLinked ? '0.35 = 35% × margin' : '—'}" ${isMarginLinked ? '' : 'disabled style="opacity:0.4"'}/></td>
+      <td><input type="number" step="0.01"   class="mat-input" data-fee="amount" data-idx="${idx}" value="${f.amount ?? ''}" placeholder="flat £" ${isFlat ? '' : 'disabled style="opacity:0.4"'}/></td>
       <td><select               class="mat-select" data-fee="base"        data-idx="${idx}">${opt(BASE_OPTS, f.base || 'undrawn')}</select></td>
       <td><select               class="mat-select" data-fee="frequency"   data-idx="${idx}">${opt(FREQ_OPTS, f.frequency || 'oneOff')}</select></td>
       <td><input type="date"   class="mat-input" data-fee="paymentDate"   data-idx="${idx}" value="${f.paymentDate||''}"/></td>
       <td><select               class="mat-select" data-fee="ifrs"        data-idx="${idx}">${optKv(IFRS_OPTS, f.ifrs || 'IFRS15-overTime')}</select></td>
       <td><button class="mat-btn ghost !py-1 !px-2 text-xs" data-feeDel="${idx}" title="Remove fee"><span class="material-icons-outlined text-[16px]">delete</span></button></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   byId('fees-table').innerHTML = `
     <table class="w-full text-sm">
       <thead><tr class="text-left text-gray-500 text-[11px] uppercase tracking-wider">
         <th class="p-2 font-medium">Label</th>
         <th class="p-2 font-medium">Kind</th>
-        <th class="p-2 font-medium">Mode</th>
-        <th class="p-2 font-medium">Rate (%)</th>
+        <th class="p-2 font-medium" title="percent: rate × base × dcf · marginLinked: multiplier × current margin × base × dcf · flat: fixed £ amount">Mode</th>
+        <th class="p-2 font-medium" title="For percent mode: e.g. 0.0035 = 0.35% per annum">Rate (decimal)</th>
+        <th class="p-2 font-medium" title="For marginLinked mode: e.g. 0.35 = 35% of current margin (UK syndicated convention)">Margin Mult.</th>
         <th class="p-2 font-medium">Flat Amount</th>
         <th class="p-2 font-medium">Base</th>
         <th class="p-2 font-medium">Frequency</th>
@@ -3738,16 +4190,28 @@ function renderFeesTable(force){
         <th class="p-2 font-medium">IFRS Treatment</th>
         <th class="p-2"></th>
       </tr></thead>
-      <tbody>${rows || `<tr><td colspan="10" class="p-4 text-gray-500 italic text-sm">No fees — add an Arrangement Fee, Commitment Fee, etc.</td></tr>`}</tbody>
-    </table>`;
+      <tbody>${rows || `<tr><td colspan="11" class="p-4 text-gray-500 italic text-sm">No fees — add an Arrangement Fee, Commitment Fee, etc.</td></tr>`}</tbody>
+    </table>
+    <div class="text-[11px] text-gray-500 mt-2">
+      <span class="font-semibold">Margin-linked fees</span>: set Mode = <code>marginLinked</code> and Margin Mult. = <code>0.35</code> for the UK 35%-of-margin convention.
+      The fee dynamically tracks the SONIA / RFR margin schedule below (and ESG adjustment) — no need to update the rate when margins step.
+    </div>`;
   byId('fees-table').querySelectorAll('[data-fee]').forEach(el => el.onchange = (e)=>{
     const idx = +e.target.dataset.idx;
     const key = e.target.dataset.fee;
     let v = e.target.value;
-    if(key==='rate' || key==='amount') v = parseFloat(v) || 0;
+    if(key==='rate' || key==='amount' || key==='marginMultiple') v = parseFloat(v) || 0;
     i.fees[idx][key] = v;
     if(key==='kind' && !i.fees[idx].label) i.fees[idx].label =
       ({arrangement:'Arrangement Fee', commitment:'Commitment Fee', guarantee:'Guarantee Fee', other:'Other Fee'})[v] || v;
+    if(key==='mode'){
+      // When user switches a fee to marginLinked, default the multiplier to 0.35 (UK convention).
+      // When switching away from marginLinked, leave the field but the engine ignores it.
+      if(v === 'marginLinked' && i.fees[idx].marginMultiple == null){
+        i.fees[idx].marginMultiple = 0.35;
+      }
+      renderFeesTable(true);  // re-render to enable/disable rate/multiplier inputs
+    }
     render();
   });
   byId('fees-table').querySelectorAll('[data-feeDel]').forEach(el => el.onclick = (e)=>{
@@ -4181,10 +4645,82 @@ function drawCharts(){
 
 /* ---------- DIU grid ---------- */
 function renderDIU(){
-  const entries = state.diu;
+  // Source selector: "ours" (default) or "reference" (load from Reconcile tab's reference data)
+  const source = byId('opt-diu-source')?.value || 'ours';
+  const i = currentInstrument();
+  let entries;
+  const statusEl = byId('diu-source-status');
+  if(source === 'reference'){
+    const refData = i ? getReferenceForInstrument(i.id) : null;
+    if(!refData){
+      if(statusEl){
+        statusEl.className = 'mat-chip red';
+        statusEl.textContent = 'No PortF data loaded — use the Reconcile tab';
+      }
+      byId('diu-grid').innerHTML = '<div class="p-4 italic text-gray-500 left">No PortF data loaded for this instrument. Open the <strong>Reconcile</strong> tab and click <strong>Load PortF Data</strong> first.</div>';
+      state.diuActive = [];
+      return;
+    }
+    entries = generateDIUFromReference(i, refData);
+    state.diuActive = entries;
+    if(statusEl){
+      statusEl.className = 'mat-chip amber';
+      statusEl.textContent = `From: ${refData.source || 'PortF data'} · ${entries.length} JE rows`;
+    }
+  } else {
+    entries = state.diu;
+    state.diuActive = entries;
+    if(statusEl){
+      statusEl.className = 'mat-chip green';
+      statusEl.textContent = `From: Engine calculation · ${entries.length} JE rows`;
+    }
+  }
+
+  // Build a "GL Coverage" panel above the grid showing which transaction
+  // types map to existing Investran accounts vs which need new ones created.
+  const accountsUsed = new Map();
+  for(const e of entries){
+    const key = (e.account || '—') + '|' + (e.transactionType || '—');
+    if(!accountsUsed.has(key)){
+      accountsUsed.set(key, { account: e.account, accountName: e.glAccountName || '—', transType: e.transactionType, gap: !!e.glGap, gapNote: e.glGapNote, count: 0, totalAmount: 0 });
+    }
+    const r = accountsUsed.get(key);
+    r.count++;
+    r.totalAmount += e.amountLE || 0;
+  }
+  const used = [...accountsUsed.values()];
+  const gaps = used.filter(r => r.gap);
+  let coverageHTML = '';
+  if(used.length){
+    const cleanCount = used.length - gaps.length;
+    const coverageColour = gaps.length === 0 ? 'green' : gaps.length <= 3 ? 'amber' : 'red';
+    coverageHTML = `<div class="mb-4 p-3 rounded border ${gaps.length === 0 ? 'bg-green-50 border-green-200' : gaps.length <= 3 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="material-icons-outlined text-[18px]">account_balance</span>
+        <span class="font-semibold text-[13px]">Investran GL Coverage</span>
+        <span class="mat-chip ${coverageColour}">${cleanCount} clean · ${gaps.length} gaps</span>
+        <span class="ml-auto text-[11px] text-gray-500">Mapped against "GL Accounts and tran types.xlsx"</span>
+      </div>`;
+    if(gaps.length){
+      coverageHTML += `<div class="text-[12px] mb-2"><strong>Accounts / transaction types you may need to create in Investran:</strong></div>
+        <table class="w-full text-[12px] mb-2">
+          <thead><tr class="text-left text-gray-500 text-[10px] uppercase tracking-wider"><th class="p-1">Account</th><th class="p-1">Transaction Type</th><th class="p-1 text-right">Used</th><th class="p-1">Gap Note</th></tr></thead>
+          <tbody>${gaps.map(g => `<tr class="bg-white">
+            <td class="p-1 font-mono">${g.account} <span class="text-gray-500">(${g.accountName})</span></td>
+            <td class="p-1">${g.transType || '<em>(none)</em>'}</td>
+            <td class="p-1 text-right">${g.count} JE${g.count>1?'s':''}</td>
+            <td class="p-1 text-gray-700">${g.gapNote || '—'}</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+    } else {
+      coverageHTML += `<div class="text-[12px] text-gray-700">All ${cleanCount} transaction types map cleanly to existing Investran accounts. No new accounts needed for this instrument.</div>`;
+    }
+    coverageHTML += '</div>';
+  }
+
   const headers = ['LE','LEID','Batch','JE','Tx','GL Date','Effective Date','Deal','Position','Security','Transaction Type','Account','Alloc Rule','Batch Type','Comments','Amount LE','FX','Amount Local','Is Debit'];
   const rows = entries.map(e => `
-    <tr>
+    <tr ${e.glGap ? 'class="event"' : ''}>
       <td class="left">${e.legalEntity}</td>
       <td>${e.leid}</td>
       <td>${e.batchId}</td>
@@ -4195,7 +4731,7 @@ function renderDIU(){
       <td class="left">${e.deal}</td>
       <td class="left">${e.position}</td>
       <td class="left">${e.incomeSecurity}</td>
-      <td class="left">${e.transactionType}</td>
+      <td class="left">${e.transactionType}${e.glGap ? ' <span class="mat-chip amber" style="font-size:9px">GAP</span>' : ''}</td>
       <td>${e.account}</td>
       <td class="left">${e.allocationRule}</td>
       <td class="left">${e.batchType}</td>
@@ -4205,7 +4741,8 @@ function renderDIU(){
       <td>${fmtMoney(e.amountLocal)}</td>
       <td>${e.isDebit ? '<span class="mat-chip amber">DR</span>' : '<span class="mat-chip green">CR</span>'}</td>
     </tr>`).join('');
-  byId('diu-grid').innerHTML = `<table><thead><tr>${headers.map((h,idx)=>`<th class="${idx<5?'':'left'}">${h}</th>`).join('')}</tr></thead><tbody>${rows || '<tr><td colspan="19" class="p-4 italic text-gray-500 left">No DIU entries for the current window.</td></tr>'}</tbody></table>`;
+  byId('diu-grid').innerHTML = coverageHTML +
+    `<table><thead><tr>${headers.map((h,idx)=>`<th class="${idx<5?'':'left'}">${h}</th>`).join('')}</tr></thead><tbody>${rows || '<tr><td colspan="19" class="p-4 italic text-gray-500 left">No DIU entries for the current window.</td></tr>'}</tbody></table>`;
 }
 
 /* ---------- Chips / breadcrumb ---------- */
@@ -4255,8 +4792,131 @@ function render(){
   renderDIU();
   renderPresets();
   renderCashFlowForecast();
+  renderReconciliation();
   syncTypeDescription();
   flashStatus();
+}
+
+/* ---------- Reconciliation renderer ---------- */
+function renderReconciliation(){
+  const i = currentInstrument();
+  if(!i) return;
+  const refData = getReferenceForInstrument(i.id);
+  const empty = byId('recon-empty');
+  const grid  = byId('recon-grid');
+  const summary = byId('recon-summary');
+  const status = byId('recon-status');
+  const sourceLabel = byId('recon-source-label');
+  const clearBtn = byId('btn-recon-clear');
+  const csvBtn = byId('btn-recon-csv');
+  if(!refData){
+    if(empty) empty.style.display = '';
+    if(grid)  grid.innerHTML = '';
+    if(summary) summary.innerHTML = '';
+    if(status){ status.className = 'mat-chip gray'; status.textContent = 'No reference loaded'; }
+    if(sourceLabel) sourceLabel.textContent = '';
+    if(clearBtn) clearBtn.style.display = 'none';
+    if(csvBtn) csvBtn.style.display = 'none';
+    return;
+  }
+  const recon = reconcileAgainstReference(state.schedule, refData);
+  if(!recon){ if(empty) empty.style.display = ''; return; }
+  if(empty) empty.style.display = 'none';
+  if(clearBtn) clearBtn.style.display = '';
+  if(csvBtn) csvBtn.style.display = '';
+  if(sourceLabel) sourceLabel.textContent = `Source: ${recon.source}` + (recon.exportedAt ? ` · exported ${recon.exportedAt.slice(0,10)}` : '');
+  // Status chip
+  const tieRate = recon.summary.tieRatePct.toFixed(1);
+  if(recon.summary.linesBreak === 0){
+    status.className = 'mat-chip green'; status.textContent = `${tieRate}% tied — no breaks`;
+  } else if(recon.summary.linesBreak <= 3){
+    status.className = 'mat-chip amber'; status.textContent = `${recon.summary.linesBreak} break${recon.summary.linesBreak>1?'s':''} (${tieRate}% tied)`;
+  } else {
+    status.className = 'mat-chip red';   status.textContent = `${recon.summary.linesBreak} breaks (${tieRate}% tied)`;
+  }
+  // Summary KPIs
+  const fmt = n => n!=null ? '£'+n.toLocaleString('en-GB',{minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+  const fmtPct = n => n!=null ? n.toFixed(1)+'%' : '—';
+  summary.innerHTML = [
+    { label:'Periods compared',   value: recon.summary.periodsCompared },
+    { label:'Lines compared',     value: recon.summary.linesTotal },
+    { label:'Tied',               value: recon.summary.linesTied + ' / ' + recon.summary.linesTotal,
+      sub: fmtPct(recon.summary.tieRatePct) },
+    { label:'Within tolerance',   value: recon.summary.linesWithinTol },
+    { label:'Breaks',             value: recon.summary.linesBreak,
+      sub: 'Total |Δ|: ' + fmt(recon.summary.totalAbsDiff) }
+  ].map(k =>
+    `<div class="kpi"><div class="label">${k.label}</div><div class="value">${k.value}</div><div class="sub">${k.sub||''}</div></div>`
+  ).join('');
+  // Per-line table
+  const breaksOnly = byId('opt-recon-breaksonly')?.checked;
+  const rows = [];
+  for(const p of recon.periods){
+    if(breaksOnly && p.worstStatus !== 'break') continue;
+    for(let li = 0; li < p.lines.length; li++){
+      const l = p.lines[li];
+      if(breaksOnly && l.status !== 'break') continue;
+      const statusChip = l.status === 'tied'   ? '<span class="mat-chip green">Tied</span>'
+                       : l.status === 'within' ? '<span class="mat-chip amber">Within tol.</span>'
+                       :                         '<span class="mat-chip red">BREAK</span>';
+      rows.push(`<tr class="${l.status === 'break' ? 'event' : ''}">
+        ${li === 0 ? `<td class="left" rowspan="${p.lines.length}"><div class="font-medium">${fmtDate(p.date)}</div>${p.comment ? `<div class="text-[10px] text-gray-500 mt-1">${p.comment}</div>` : ''}</td>` : ''}
+        <td>${l.metric}</td>
+        <td class="text-right">${fmt(l.ref)}</td>
+        <td class="text-right">${fmt(l.ours)}</td>
+        <td class="text-right ${l.status==='break'?'text-red-600 font-semibold':''}">${fmt(l.diff)}</td>
+        <td class="text-right">${fmtPct(l.pct*100)}</td>
+        <td>${statusChip}</td>
+      </tr>`);
+    }
+  }
+  grid.innerHTML = `
+    <table>
+      <thead><tr>
+        <th class="left">Period End</th>
+        <th>Metric</th>
+        <th class="text-right">Reference</th>
+        <th class="text-right">Ours</th>
+        <th class="text-right">Δ (ours - ref)</th>
+        <th class="text-right">Δ%</th>
+        <th>Status</th>
+      </tr></thead>
+      <tbody>${rows.join('') || '<tr><td colspan="7" class="p-4 text-gray-500 italic text-sm">No rows match the current filter.</td></tr>'}</tbody>
+    </table>`;
+  // Wire breaks-only toggle
+  const tog = byId('opt-recon-breaksonly');
+  if(tog && !tog._wired){ tog.onchange = ()=> renderReconciliation(); tog._wired = true; }
+}
+
+function openReconModal(){
+  byId('recon-modal').style.display = 'flex';
+  const ta = byId('recon-input');
+  ta.value = '';
+  byId('recon-modal-status').className = 'mat-chip gray';
+  byId('recon-modal-status').textContent = 'empty';
+  byId('recon-modal-errors').style.display = 'none';
+  setTimeout(()=> ta.focus(), 50);
+}
+function closeReconModal(){ byId('recon-modal').style.display = 'none'; }
+
+function applyReconReference(){
+  const text = byId('recon-input').value.trim();
+  const errBox = byId('recon-modal-errors');
+  if(!text){ errBox.innerHTML = 'Empty input'; errBox.style.display = 'block'; return; }
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch(e){ errBox.innerHTML = 'Invalid JSON: ' + e.message; errBox.style.display = 'block'; return; }
+  if(!Array.isArray(parsed.scheduleResults)){
+    errBox.innerHTML = 'Missing required field <code>scheduleResults</code> (array)';
+    errBox.style.display = 'block'; return;
+  }
+  const id = currentInstrument().id;
+  setReferenceForInstrument(id, parsed);
+  closeReconModal();
+  // Switch to the Reconcile tab and re-render
+  setTab('reconcile');
+  renderReconciliation();
+  toast(`Loaded PortF data (${parsed.scheduleResults.length} periods)`);
 }
 
 /* ---------- Cash Flow Forecast renderer ---------- */
@@ -4537,10 +5197,19 @@ function wire(){
     toast('Schedule downloaded ✓');
   };
   byId('btn-diu-csv').onclick = ()=>{
-    const hdrs = ['legalEntity','leid','batchId','jeIndex','txIndex','glDate','effectiveDate','deal','position','incomeSecurity','transactionType','account','allocationRule','batchType','batchComments','transactionComments','originalAmount','amountLE','fx','amountLocal','isDebit','leDomain'];
-    downloadCSV('diu-export.csv', toCSV(state.diu, hdrs));
-    toast('DIU exported ✓');
+    const hdrs = ['legalEntity','leid','batchId','jeIndex','txIndex','glDate','effectiveDate','deal','position','incomeSecurity','transactionType','account','glAccountName','glGap','allocationRule','batchType','batchComments','transactionComments','originalAmount','amountLE','fx','amountLocal','isDebit','leDomain'];
+    const src = byId('opt-diu-source')?.value || 'ours';
+    const data = state.diuActive || (src === 'reference'
+      ? (() => {
+          const ref = getReferenceForInstrument(currentInstrument().id);
+          return ref ? generateDIUFromReference(currentInstrument(), ref) : [];
+        })()
+      : state.diu);
+    const fname = src === 'reference' ? 'diu-export-portf.csv' : 'diu-export.csv';
+    downloadCSV(fname, toCSV(data, hdrs));
+    toast(`DIU exported ✓ (${src === 'reference' ? 'PortF data' : 'our calc'})`);
   };
+  byId('opt-diu-source')?.addEventListener('change', renderDIU);
   byId('opt-in-window')?.addEventListener('change', renderScheduleGrid);
   byId('opt-highlight-events')?.addEventListener('change', renderScheduleGrid);
   byId('opt-density')?.addEventListener('change', renderScheduleGrid);
@@ -4570,6 +5239,56 @@ function wire(){
   document.querySelectorAll('#add-modal [data-close-add="1"]').forEach(el => el.onclick = closeAddInstrumentModal);
   byId('btn-add-save')?.addEventListener('click', saveAddInstrumentModal);
   byId('add-refresh-le')?.addEventListener('click', refreshLEsFromInvestran);
+
+  /* ---------- Reconciliation ---------- */
+  byId('btn-recon-load')?.addEventListener('click', openReconModal);
+  byId('btn-recon-clear')?.addEventListener('click', ()=>{
+    if(!confirm('Clear loaded PortF data for this instrument?')) return;
+    clearReferenceForInstrument(currentInstrument().id);
+    renderReconciliation();
+    toast('PortF data cleared');
+  });
+  byId('btn-recon-csv')?.addEventListener('click', ()=>{
+    const refData = getReferenceForInstrument(currentInstrument().id);
+    if(!refData) return;
+    const recon = reconcileAgainstReference(state.schedule, refData);
+    if(!recon) return;
+    const breaks = recon.periods.flatMap(p => p.lines.filter(l => l.status === 'break').map(l => ({
+      periodEnd: p.date, metric: l.metric, reference: l.ref, ours: l.ours, diff: l.diff, pctDiff: (l.pct*100).toFixed(2)+'%'
+    })));
+    if(!breaks.length){ toast('No breaks to export'); return; }
+    downloadCSV('reconciliation-breaks.csv', toCSV(breaks, ['periodEnd','metric','reference','ours','diff','pctDiff']));
+    toast('Breaks CSV downloaded');
+  });
+  document.querySelectorAll('#recon-modal [data-close-recon="1"]').forEach(el => el.onclick = closeReconModal);
+  byId('btn-recon-apply')?.addEventListener('click', applyReconReference);
+  byId('btn-recon-sample')?.addEventListener('click', ()=>{
+    // Use the inline embedded sample so it works from file:// or any host.
+    byId('recon-input').value = JSON.stringify(RECON_SAMPLE_LIBRA2, null, 2);
+    byId('recon-modal-status').className = 'mat-chip green';
+    byId('recon-modal-status').textContent = 'Libra 2 sample loaded';
+  });
+  byId('btn-recon-file')?.addEventListener('click', ()=> byId('recon-file-input').click());
+  byId('recon-file-input')?.addEventListener('change', (e)=>{
+    const f = e.target.files?.[0]; if(!f) return;
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      byId('recon-input').value = ev.target.result;
+      byId('recon-modal-status').className = 'mat-chip green';
+      byId('recon-modal-status').textContent = 'file loaded · ' + f.name;
+    };
+    reader.readAsText(f);
+  });
+  byId('recon-input')?.addEventListener('input', ()=>{
+    const t = byId('recon-input').value.trim();
+    const st = byId('recon-modal-status');
+    if(!t){ st.className = 'mat-chip gray'; st.textContent = 'empty'; return; }
+    try { JSON.parse(t); st.className = 'mat-chip green'; st.textContent = 'valid JSON'; }
+    catch(e){ st.className = 'mat-chip red'; st.textContent = 'invalid JSON'; }
+  });
+  document.addEventListener('keydown', (e)=>{
+    if(e.key==='Escape' && byId('recon-modal') && byId('recon-modal').style.display === 'flex') closeReconModal();
+  });
 }
 
 /* ---------- JSON Import Modal ---------- */
