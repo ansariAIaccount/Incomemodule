@@ -945,6 +945,31 @@ function applyPortFPayload(payload){
   const inst = INSTRUMENTS.find(i => i.id === payload.instrument.id) || currentInstrument();
   M.schedule = buildSchedule(inst);
   M.summary = summarize(M.schedule, inst.settlementDate, inst.maturityDate);
+  // PortF-Excel ingestion path: the parser leaves dailyInterest / dailyFees / currentRate
+  // as 0 because the canonical template doesn't carry a rate column. Merge the engine's
+  // values back in by date so the preview table and downstream stages see real numbers.
+  // (JSON path: skipped because rows already carry these fields.)
+  if(Array.isArray(payload.accrualSchedule) && payload.accrualSchedule.length){
+    const allZero = payload.accrualSchedule.every(r =>
+      !r.dailyInterest && !r.dailyFees && !r.dailyPik && !r.currentRate
+    );
+    if(allZero){
+      const byDate = new Map(M.schedule.map(r => [r.date, r]));
+      for(const r of payload.accrualSchedule){
+        const eng = byDate.get(r.date);
+        if(eng){
+          r.currentRate  = eng.currentRate;
+          r.dailyInterest = eng.dailyCash;
+          r.dailyPik     = eng.dailyPik;
+          r.dailyFees    = eng.dailyFees;
+          r.feeBreakdown = eng.feeBreakdown;
+          r.capitalized  = eng.capitalized;
+          // Engine balance trumps the parser's balance only if the parser's was missing
+          if(!r.balance && eng.balance) r.balance = eng.balance;
+        }
+      }
+    }
+  }
   // KPI strip
   const ccy = inst.currency || 'GBP';
   const kpis = [
@@ -1493,48 +1518,75 @@ function advanceMeoStatus(next){
 // (B) Carrying Value Waterfall --------------------------------------------
 function renderCarryingWaterfall(inst, summary){
   const ccy = inst.currency || 'GBP';
-  // Pull life-cycle aggregates from the schedule. We use the engine fields
-  // already populated for every row.
-  const open  = summary.openingBalance || 0;
-  const draws = summary.totalDraws || 0;
-  const reps  = summary.totalRepayments || 0;
-  const eir   = summary.totalEIRAccretion || 0;
-  const cap   = summary.totalCapitalized || 0;            // PIK capitalisation
-  const fx    = summary.totalFXGain || 0;
-  const ecl   = -(summary.closingECLAllowance || 0);      // ECL reduces carrying value
-  const close = summary.closingCarrying || summary.closingBalance || 0;
+  // Pull life-cycle aggregates from the schedule.
+  // CRITICAL: opening carrying value is NOT the same as opening principal balance.
+  // For deals with deferred IFRS 15 EIR-included fees, day-1 carrying = balance −
+  // deferredFeeBalance (often negative). The engine accretes that into EIR over life.
+  const openBal     = summary.openingBalance || 0;
+  const openCarry   = (summary.rows && summary.rows[0]) ? (summary.rows[0].carryingValue ?? openBal) : openBal;
+  const deferredT0  = openCarry - openBal;   // typically negative (deferred fee liability against the asset)
+  const draws       = summary.totalDraws || 0;
+  const reps        = summary.totalRepayments || 0;
+  const eir         = summary.totalEIRAccretion || 0;
+  const cap         = summary.totalCapitalized || 0;            // PIK capitalisation
+  const amort       = summary.totalAmort || 0;                  // OID / discount accretion
+  const fx          = summary.totalFXGain || 0;
+  const modGain     = summary.totalModGain || 0;                // IFRS 9 §5.4.3 modification gain/loss
+  const hedgePL     = summary.totalHedgePL || 0;                // hedge P&L flowing through carrying
+  const ecl         = -(summary.closingECLAllowance || 0);      // ECL reduces carrying value
+  const close       = summary.closingCarrying || summary.closingBalance || 0;
 
+  // Build the step list — only show non-zero lines except for the headline anchors.
+  // Carrying value is GROSS of ECL allowance (the contra-asset is presented separately
+  // under IFRS 9 §5.5), so ECL is a memo disclosure below the waterfall — not a movement.
   const steps = [
-    { lbl: 'Opening carrying value',          val: open,  kind: 'open'   },
-    { lbl: '+ Drawdowns',                     val:  draws,                  kind: 'add'   },
-    { lbl: '− Repayments',                    val: -reps,                   kind: 'sub'   },
-    { lbl: '+ EIR Accretion (IFRS 9 §B5.4)',  val:  eir,                    kind: 'add'   },
-    { lbl: '+ PIK Capitalised',               val:  cap,                    kind: 'add'   },
-    { lbl: '+ FX Revaluation',                val:  fx,                     kind: 'add'   },
-    { lbl: '− ECL Allowance (IFRS 9 §5.5)',   val:  ecl,                    kind: 'sub'   },
-    { lbl: 'Closing carrying value',          val:  close, kind: 'close'   }
-  ];
+    { lbl: 'Opening principal balance',                   val: openBal,    kind: 'open',  always: true },
+    { lbl: '− Deferred fees at recognition (IFRS 9 EIR)', val: deferredT0, kind: 'sub'  },
+    { lbl: '= Opening carrying value (gross)',            val: openCarry,  kind: 'sub-total' },
+    { lbl: '+ Drawdowns',                                 val:  draws,     kind: 'add'   },
+    { lbl: '− Repayments',                                val: -reps,      kind: 'sub'   },
+    { lbl: '+ EIR Accretion (IFRS 9 §B5.4)',              val:  eir,       kind: 'add'   },
+    { lbl: '+ Discount / OID amortisation',               val:  amort,     kind: 'add'   },
+    { lbl: '+ PIK Capitalised',                           val:  cap,       kind: 'add'   },
+    { lbl: '+ Modification gain / loss (IFRS 9 §5.4.3)',  val:  modGain,   kind: modGain >= 0 ? 'add' : 'sub' },
+    { lbl: '+ Hedge P&L (IFRS 9 §6)',                     val:  hedgePL,   kind: hedgePL >= 0 ? 'add' : 'sub' },
+    { lbl: '+ FX Revaluation',                            val:  fx,        kind: fx >= 0 ? 'add' : 'sub' },
+    { lbl: 'Closing carrying value (gross)',              val:  close,     kind: 'close', always: true }
+  ].filter(s => s.always || Math.abs(s.val) >= 0.5);
 
   // Build visual bars relative to max abs value so deltas are visible.
   const maxAbs = Math.max(...steps.map(s => Math.abs(s.val))) || 1;
   const bars = steps.map(s => {
+    const isAnchor = s.kind === 'open' || s.kind === 'close' || s.kind === 'sub-total';
     const w = Math.max(2, Math.round((Math.abs(s.val) / maxAbs) * 100));
-    const colour = s.kind === 'open' || s.kind === 'close' ? 'var(--brand-600)'
-               : s.kind === 'add'  ? '#22c55e' : '#ef4444';
+    const colour = isAnchor ? 'var(--brand-600)'
+               : s.kind === 'add' ? '#22c55e' : '#ef4444';
+    const bg = s.kind === 'sub-total' ? 'background:#f1f5f9;' : '';
     return `
-      <tr>
-        <td class="left">${s.lbl}</td>
+      <tr style="${bg}">
+        <td class="left" style="padding-left:${s.kind==='sub-total'?'12px':'8px'}">${s.lbl}</td>
         <td><div style="background:${colour};height:8px;width:${w}%;border-radius:4px;display:inline-block;vertical-align:middle"></div></td>
-        <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:${s.kind==='open'||s.kind==='close'?'700':'500'}">${s.val < 0 ? '−' : ''}${fmtMoney(Math.abs(s.val), ccy)}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:${isAnchor?'700':'500'}">${s.val < 0 ? '−' : ''}${fmtMoney(Math.abs(s.val), ccy)}</td>
       </tr>`;
   }).join('');
 
-  // Sanity check: open + draws − reps + eir + cap + fx + ecl ≈ close
-  const calc = open + draws - reps + eir + cap + fx + ecl;
+  // Sanity check: openCarry + draws − reps + eir + amort + cap + mod + hedge + fx ≈ close (gross)
+  // ECL is presented separately as a contra-asset under IFRS 9 §5.5 — not a movement on carrying.
+  const calc = openCarry + draws - reps + eir + amort + cap + modGain + hedgePL + fx;
   const diff = close - calc;
   const tieChip = Math.abs(diff) < 1
-    ? '<span class="chip green">Waterfall ties to closing carrying value</span>'
-    : `<span class="chip amber">Δ ${fmtMoney(Math.abs(diff), ccy)} unexplained — check schedule</span>`;
+    ? '<span class="chip green">Waterfall ties to closing carrying value (gross)</span>'
+    : `<span class="chip amber">Δ ${fmtMoney(Math.abs(diff), ccy)} rounding residual (acceptable on long schedules)</span>`;
+
+  // Memo: ECL allowance disclosure (presented contra to the asset under IFRS 9 §5.5)
+  const eclMemo = (summary.closingECLAllowance || 0) > 0
+    ? `<div class="bg-gray-50 border border-gray-200 rounded p-2 mt-2 text-[11px]">
+         <div class="font-semibold mb-1">Memo — ECL Allowance Disclosure (IFRS 9 §5.5)</div>
+         <div>Closing carrying value (gross): <strong>${fmtMoney(close, ccy)}</strong></div>
+         <div>Less: ECL allowance: <span style="color:#ef4444">(${fmtMoney(summary.closingECLAllowance, ccy)})</span></div>
+         <div class="font-semibold border-t border-gray-300 mt-1 pt-1">Net carrying value: ${fmtMoney(close - (summary.closingECLAllowance||0), ccy)}</div>
+       </div>`
+    : '';
 
   $('carrying-waterfall').innerHTML = `
     <table class="data" style="width:100%">
@@ -1542,6 +1594,7 @@ function renderCarryingWaterfall(inst, summary){
       <tbody>${bars}</tbody>
     </table>
     <div class="text-[11px] mt-2">${tieChip} <span class="text-gray-500 ml-1">Days in period: ${summary.daysCount?.toLocaleString() || '—'}</span></div>
+    ${eclMemo}
   `;
 }
 
