@@ -2015,44 +2015,47 @@ const INVESTRAN_GL = {
   interestReceived:    { account:'113000', accountName:'Accounts Receivable', transType:'Interest received' },
   pikReceivable:       { account:'113000', accountName:'Accounts Receivable', transType:'Portfolio PIK interest receivable' },
   feeReceivable:       { account:'113000', accountName:'Accounts Receivable', transType:'Other receivable',
-                         gap:true, gapNote:'IFRS 15 fee receivables — no specific Investran transaction type. Consider creating "Fee receivable (IFRS 15)" under 113000.' },
+                         gap:true, gapNote:'IFRS 15 fee receivables — no specific Investran transaction type yet. Consider creating "Fee receivable (IFRS 15)" / "Fee received (IFRS 15)" transtypes under 113000.' },
   defaultIntReceivable:{ account:'113000', accountName:'Accounts Receivable', transType:'Other receivable',
-                         gap:true, gapNote:'Default interest receivable — no specific transtype. Suggest "Default interest receivable" under 113000.' },
+                         gap:true, gapNote:'Default interest receivable — no specific transtype. Suggest "Default interest receivable" / "Default interest received" under 113000.' },
   whtReceivable:       { account:'113000', accountName:'Accounts Receivable', transType:'Withholding tax receivable' },
-  // ─── Income ───────────────────────────────────────────────────
+  // ─── Income — interest ────────────────────────────────────────
   interestIncomeAccrued: { account:'421000', accountName:'Investment Interest Income', transType:'Income - Investment interest - Accrued' },
   interestIncomeCash:    { account:'421000', accountName:'Investment Interest Income', transType:'Income - Investment interest - Cash' },
   interestIncomePIK:     { account:'421000', accountName:'Investment Interest Income', transType:'Income - Investment interest - PIK/Accreted' },
-  feeIncome:             { account:'492000', accountName:'Other Income - Amendments', transType:'Income - Other - Amendment fees',
-                           gap:true, gapNote:'IFRS 15 fee income — using "Amendment fees" as proxy. Consider creating IFRS-15-specific fee income accounts (e.g. 492100 Arrangement Fee Income, 492200 Commitment Fee Income) for cleaner reporting.' },
+  // ─── Income — IFRS 15 fees (NEW dedicated accounts) ───────────
+  feeIncome:                { account:'492000', accountName:'Other Income - Amendments', transType:'Income - Other - Amendment fees' },  // generic fallback
+  arrangementFeeIncome:     { account:'492100', accountName:'Arrangement Fee Income',         transType:'Arrangement fee income – IFRS 15' },
+  commitmentFeeIncome:      { account:'492200', accountName:'Commitment Fee Income',          transType:'Commitment fee income – IFRS 15' },
+  guaranteeFeeIncome:       { account:'492300', accountName:'Guarantee Fee Income',           transType:'Guarantee fee income – IFRS 15' },
+  managementFeeIncomeInv:   { account:'492400', accountName:'Management Fee Income',          transType:'Management fee income – investment period' },
+  managementFeeIncomePost:  { account:'492400', accountName:'Management Fee Income',          transType:'Management fee income – post-investment' },
+  dividendIncome:           { account:'492500', accountName:'Dividend Income (Equity – IFRS 15)', transType:'Dividend income – IFRS 15' },
+  // ─── Default interest / default fees ──────────────────────────
   defaultIntIncome:      { account:'421000', accountName:'Investment Interest Income', transType:'Income - Investment interest',
-                           gap:true, gapNote:'Default interest income — using investment interest as proxy. Suggest "Default interest income" sub-account for separate disclosure.' },
+                           gap:true, gapNote:'Default interest income — no specific transtype yet. Suggest "Default interest income (penalty rate)" under 421000.' },
   defaultFeeIncome:      { account:'492000', accountName:'Other Income - Amendments',
-                           gap:true, gapNote:'Default fee income — no specific account. Suggest dedicated "Default fee income" line.' },
+                           gap:true, gapNote:'Default fee income — no specific transtype yet. Suggest "Default fee income" under 492000.' },
   nonUseFeeIncome:       { account:'492000', accountName:'Other Income - Amendments',
-                           gap:true, gapNote:'Non-use fee on undrawn — Investran chart has it as expense (523000 Unused line fees) but for a lender it is INCOME. Suggest creating "Non-use fee income" line.' },
+                           gap:true, gapNote:'Non-use fee on undrawn — Investran chart still has it as expense only (523000 Unused line fees). Suggest "Non-use fee income (lender)" transtype under 492000.' },
   // ─── Gains / losses ───────────────────────────────────────────
   fxUnrealised:        { account:'450000', accountName:'Unrealized Gain/Loss', transType:'Unrealized gain/(loss) - F/X gain/(loss)' },
   fxRealised:          { account:'440000', accountName:'Realized Gain/Loss',   transType:'Realized gain/(loss) - Short term - F/X' },
-  modificationGain:    { account:'440000', accountName:'Realized Gain/Loss',
-                         gap:true, gapNote:'IFRS 9 §5.4.3 modification gain/loss — no dedicated account. Suggest creating 442000 Modification Gain/Loss for IFRS-9 derecognition / re-measurement.' },
-  modificationLoss:    { account:'440000', accountName:'Realized Gain/Loss', gap:true, gapNote:'(see Modification Gain — same recommended account)' },
-  // ─── Expenses ─────────────────────────────────────────────────
-  impairmentExpense:   { account:'519000', accountName:'Investment Expenses - Other',
-                         gap:true, gapNote:'IFRS 9 ECL impairment expense — no IFRS-9-specific account. Strongly recommend creating 470000 Impairment / ECL Expense.' },
-  loanLossAllowance:   { account:'141000', accountName:'Investments at Cost',
-                         gap:true, gapNote:'IFRS 9 ECL allowance (contra-asset) — no dedicated account. Suggest creating 145000 Loan Loss Allowance as a contra under 141000.' },
+  modificationGain:    { account:'442000', accountName:'Modification Gain / Loss (IFRS 9 §5.4.3)', transType:'Modification gain – IFRS 9' },
+  modificationLoss:    { account:'442000', accountName:'Modification Gain / Loss (IFRS 9 §5.4.3)', transType:'Modification loss – IFRS 9' },
+  // ─── IFRS 9 ECL ───────────────────────────────────────────────
+  impairmentExpense:   { account:'470000', accountName:'Impairment / ECL Expense (IFRS 9 §5.5)', transType:'Impairment expense – IFRS 9 ECL' },
+  loanLossAllowance:   { account:'145000', accountName:'Loan Loss Allowance – IFRS 9 ECL',       transType:'Loan loss allowance – IFRS 9 ECL' },
   // ─── Hedge accounting (IFRS 9 §6) ─────────────────────────────
-  hedgingInstrument:   { account:'141000', accountName:'Investments at Cost',
-                         gap:true, gapNote:'Hedging instrument (IRS / cap / collar fair value) — no derivatives account. Suggest creating 146000 Derivative Assets / Liabilities.' },
-  cfhReserve:          { account:'351000', accountName:'Retained Earnings',
-                         gap:true, gapNote:'IFRS 9 §6.5.11 Cash Flow Hedge Reserve (OCI) — no OCI accumulator account. Strongly recommend creating 360000 Cash Flow Hedge Reserve (OCI) as a separate equity component.' },
-  hedgeIneffectiveness:{ account:'450000', accountName:'Unrealized Gain/Loss',
-                         gap:true, gapNote:'IFRS 9 §6.5.10 hedge ineffectiveness P&L — no dedicated line. Suggest creating 451000 Hedge Ineffectiveness P&L.' },
-  fvHedgePL:           { account:'450000', accountName:'Unrealized Gain/Loss',
-                         gap:true, gapNote:'IFRS 9 §6.5.8 Fair Value Hedge P&L — no dedicated line. Suggest creating 452000 FV Hedge P&L.' },
-  hedgeReclass:        { account:'421000', accountName:'Investment Interest Income',
-                         gap:true, gapNote:'CFH reserve reclassification to P&L on settlement — using "Investment Interest Income" as proxy.' }
+  hedgingInstrument:        { account:'146000', accountName:'Derivative Assets / Liabilities', transType:'Hedging instrument MTM' },
+  hedgingInstrumentCFHEff:  { account:'146000', accountName:'Derivative Assets / Liabilities', transType:'Hedging instrument MTM – CFH effective' },
+  hedgingInstrumentCFHIneff:{ account:'146000', accountName:'Derivative Assets / Liabilities', transType:'Hedging instrument MTM – CFH ineffective' },
+  hedgingInstrumentFVH:     { account:'146000', accountName:'Derivative Assets / Liabilities', transType:'Hedging instrument MTM – FV hedge' },
+  cfhReserve:               { account:'360000', accountName:'Cash Flow Hedge Reserve (OCI)',   transType:'Cash flow hedge reserve – OCI' },
+  cfhReserveReclass:        { account:'360000', accountName:'Cash Flow Hedge Reserve (OCI)',   transType:'Cash flow hedge reserve – reclassification' },
+  hedgeIneffectiveness:     { account:'451000', accountName:'Hedge Ineffectiveness P&L',       transType:'Hedge ineffectiveness P&L' },
+  fvHedgePL:                { account:'452000', accountName:'Fair Value Hedge P&L',            transType:'Fair value hedge P&L' },
+  hedgeReclass:             { account:'421000', accountName:'Investment Interest Income',     transType:'Income - Investment interest' }  // P&L side of CFH reclassification
 };
 
 // Map our internal placeholder-account-codes / transaction-type strings onto
@@ -2096,10 +2099,14 @@ function applyInvestranGLMapping(entries){
     // ECL / Impairment
     if(/impairment expense|impairment reversal/.test(t))           return INVESTRAN_GL.impairmentExpense;
     if(/loan loss allowance/.test(t))                              return INVESTRAN_GL.loanLossAllowance;
-    // Hedge accounting
-    if(/cfh oci|cash flow hedge reserve.*ocic|cfh reserve|cash flow hedge reserve/.test(t)) return INVESTRAN_GL.cfhReserve;
-    if(/hedge reserve reclass|hedge income.*reclass/.test(t))      return INVESTRAN_GL.hedgeReclass;
-    if(/hedging instrument/.test(t))                               return INVESTRAN_GL.hedgingInstrument;
+    // Hedge accounting — CFH OCI side, reclassification, ineffectiveness, FV hedge
+    if(/cash flow hedge reserve.*reclass|hedge reserve reclass/.test(t)) return INVESTRAN_GL.cfhReserveReclass;
+    if(/hedge income.*reclass/.test(t))                            return INVESTRAN_GL.hedgeReclass;
+    if(/cfh oci|cash flow hedge reserve/.test(t))                  return INVESTRAN_GL.cfhReserve;
+    if(/hedging instrument.*cfh oci/.test(t))                      return INVESTRAN_GL.hedgingInstrumentCFHEff;
+    if(/hedging instrument mtm \(cfh/.test(t))                     return INVESTRAN_GL.hedgingInstrumentCFHEff;
+    if(/hedging instrument/.test(t) && /fv|fair value/.test(t))    return INVESTRAN_GL.hedgingInstrumentFVH;
+    if(/hedging instrument/.test(t))                               return INVESTRAN_GL.hedgingInstrumentCFHIneff;
     if(/hedge ineffectiveness/.test(t))                            return INVESTRAN_GL.hedgeIneffectiveness;
     if(/fair value hedge p&l/.test(t))                             return INVESTRAN_GL.fvHedgePL;
     // Interest legs
@@ -2107,7 +2114,15 @@ function applyInvestranGLMapping(entries){
     if(/interest receivable/.test(t))                              return INVESTRAN_GL.interestReceivable;
     if(/income.*daily accrued interest/.test(t))                   return INVESTRAN_GL.interestIncomeAccrued;
     if(/interest cash receipt/.test(t))                            return INVESTRAN_GL.cashReceipt;
-    // IFRS 15 fee legs (per-fee labels — match by suffix)
+    // IFRS 15 fee legs — per-fee-type routing into dedicated accounts (NEW)
+    if(/arrangement fee.*income|arrangement fee \(/.test(t))       return INVESTRAN_GL.arrangementFeeIncome;
+    if(/(commitment fee|nwf commitment fee).*income|(commitment fee|nwf commitment fee) \(/.test(t))
+                                                                    return INVESTRAN_GL.commitmentFeeIncome;
+    if(/guarantee fee.*income|guarantee fee \(/.test(t))           return INVESTRAN_GL.guaranteeFeeIncome;
+    if(/management fee \(investment period\).*income/.test(t))     return INVESTRAN_GL.managementFeeIncomeInv;
+    if(/management fee \(post-investment\).*income/.test(t))       return INVESTRAN_GL.managementFeeIncomePost;
+    if(/dividend income.*income \(ifrs 15\)|dividend.*\(ifrs 15\)/.test(t)) return INVESTRAN_GL.dividendIncome;
+    // Generic IFRS 15 fee / PortF fallback
     if(/income \(ifrs 15\)|fee income \(ifrs 15\)|income \(portf\)/.test(t)) return INVESTRAN_GL.feeIncome;
     if(/cash receipt/.test(t))                                     return INVESTRAN_GL.cashReceipt;
     if(/receivable clear/.test(t))                                 return INVESTRAN_GL.feeReceivable;

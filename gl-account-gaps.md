@@ -1,8 +1,20 @@
 # Investran GL Account & Transaction Type Gaps
 
+> **🟢 Latest status — 2026-05-08 (after `NewReport (4).xlsx` update).** 12 of the 13 historical gap categories are now closed. Across 13 seed instruments and **220 generated JE rows**, only **2 entries** flag as a gap, and they are both the same minor receivable-side transtype (Non-Use Fee Receivable on the Northwind revolver). See the **Remaining gaps** section near the bottom for the residual ask.
+>
+> Smoke test (run from `loan-module-engine.js`):
+> ```
+> SUMMARY: 13 instruments · 220 JE rows · 2 gap entries · 0 unmapped
+> Distinct remaining gap: "Non-Use Fee Receivable" → 113000 (DR-side only)
+> ```
+>
+> The historical gap inventory below is preserved for traceability — every category from #1 through #10 has its closure status flagged where applicable.
+
+---
+
 This document inventories every gap between the calculator's DIU output and the Investran chart of accounts (`GL Accounts and tran types.xlsx`). Run the calculator over its 13 seed instruments and the engine flags every transaction type that doesn't have a clean Investran mapping; this doc consolidates those flags and tells your Investran administrator exactly what to create.
 
-The gaps fall into **8 distinct categories**. The calculator currently posts to the closest available Investran account as a placeholder; once your administrator creates the recommended new accounts/transaction types, update `INVESTRAN_GL` in `income-calculator.html` to point at them and the gap chips disappear.
+The gaps fall into **10 distinct categories**. The calculator currently posts to the closest available Investran account as a placeholder; once your administrator creates the recommended new accounts/transaction types, update `INVESTRAN_GL` in `loan-module-engine.js` to point at them and the gap chips disappear.
 
 ---
 
@@ -255,6 +267,32 @@ Useful when distressed-asset modifications start happening regularly. For now it
 | 492000 Other Income - Amendments | `Default fee income` |
 
 Default interest and default fees are typically disclosed separately for credit risk reporting (especially Stage 2/3 exposures). Reusing existing accounts is fine, just need the transaction types so reports can split them out.
+
+---
+
+## Remaining gaps after `NewReport (4).xlsx` (2026-05-08)
+
+Across all 13 seed instruments and 220 generated JE rows, the engine flags **only 2 gap entries**, both on the same kind of receivable:
+
+| Calculator label | Currently posts to | Investran account | Why it's still flagged |
+|---|---|---|---|
+| `Non-Use Fee Receivable` (DR side) | 113000 / `Other receivable` | 113000 Accounts Receivable | The income side (`Non-use fee income (lender)` under 492000) is mapped cleanly. The DR-side accrual transtype isn't in the chart yet — falls back to the generic `Other receivable`. |
+| `Non-Use Fee Receivable Clear` (CR side at cash settlement) | 113000 / `Other receivable` | 113000 Accounts Receivable | Same — pairs with the DR-side. |
+
+**Optional ask:** add a single new transaction type `Non-use fee receivable` under 113000 to clean this up. The same pattern would apply if you ever want explicit transtypes for `Default interest receivable` and `Default fee receivable` — currently those route to `Other receivable` too, but neither is exercised by any seed instrument.
+
+The previously-flagged categories that are now closed:
+
+| Category | What changed in NewReport(4) |
+|---|---|
+| 1. IFRS 15 fee income (Arrangement / Commitment / Guarantee / Management / Dividend) | New accounts 492100–492500 with dedicated transtypes — engine routes per fee type |
+| 2. IFRS 15 fee receivables (per fee type) | New transtypes added under 113000: `Fee receivable – Arrangement / Commitment / Guarantee / Management / Dividend (Equity)` plus matching `Fee received – ...` for cash settlement |
+| 3. IFRS 9 ECL — impairment expense | New 470000 + transtype `Impairment expense – IFRS 9 ECL` |
+| 4. IFRS 9 ECL — loan loss allowance contra | New 145000 + transtype `Loan loss allowance – IFRS 9 ECL` |
+| 5–7. Hedge accounting (derivative MTM, CFH OCI, ineffectiveness, FV hedge) | New 146000 / 360000 / 451000 / 452000 with all four MTM variants |
+| 8. Non-use fee income | New transtype `Non-use fee income (lender)` under 492000 |
+| 9. Modification gain / loss | New 442000 with `Modification gain – IFRS 9` and `Modification loss – IFRS 9` |
+| 10. Default interest / default fee income | New transtypes `Default interest income (penalty rate)` under 421000 and `Default fee income` under 492000 |
 
 ---
 
