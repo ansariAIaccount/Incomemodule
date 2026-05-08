@@ -1103,18 +1103,44 @@ const DIU_HEADERS = [
   'legalEntity','leid','deal','position','incomeSecurity',
   'batchId','batchType','batchComments','transactionComments','jeIndex','txIndex','leDomain'
 ];
-function csvEscape(v){
+// Numeric fields that represent money — rounded to 2 dp on CSV export.
+// (jeIndex / txIndex / leid stay as-is; fx is ratio with 4–6 dp tolerated.)
+const CSV_MONEY_FIELDS = new Set(['amountLE','amountLocal','originalAmount']);
+// CSV downloads must work in legacy Excel + downstream ETL tools that assume ASCII.
+// Replace common typographic Unicode with portable ASCII so that en-dashes / section
+// symbols / middle-dots don't corrupt to garbage when read in cp1252 contexts.
+function sanitiseForCSV(s){
+  if(s == null) return '';
+  return String(s)
+    .replace(/[‐-―−]/g, '-')   // hyphen variants, en-dash, em-dash, minus
+    .replace(/[·•‧]/g, '-')    // middle-dot, bullet, hyphenation point
+    .replace(/§/g, '')                   // section symbol (used in IFRS refs) — strip
+    .replace(/[‘’]/g, "'")          // curly single quotes
+    .replace(/[“”]/g, '"')          // curly double quotes
+    .replace(/…/g, '...')                // horizontal ellipsis
+    .replace(/ /g, ' ')                  // non-breaking space
+    .replace(/[£€¥]/g, m => ({'£':'GBP ','€':'EUR ','¥':'JPY '}[m]))  // £/€/¥ → ASCII tag
+    .replace(/[^\x20-\x7E]/g, '')             // strip any remaining non-printable / non-ASCII
+    .replace(/\s{2,}/g, ' ')                  // collapse runs of spaces left by stripped chars
+    .trim();
+}
+function csvEscape(v, fieldName){
   if(v == null) return '';
-  const s = String(v).replace(/"/g, '""');
+  if(typeof v === 'number' && CSV_MONEY_FIELDS.has(fieldName)){
+    v = v.toFixed(2);                          // 2-dp money fields
+  }
+  const s = sanitiseForCSV(v).replace(/"/g, '""');
   return /[",\n]/.test(s) ? `"${s}"` : s;
 }
-function rowsToCSV(rows){
-  return [DIU_HEADERS.join(',')].concat(
-    rows.map(r => DIU_HEADERS.map(h => csvEscape(r[h])).join(','))
+function rowsToCSV(rows, headers){
+  const hdrs = headers || DIU_HEADERS;
+  // Prepend UTF-8 BOM so Excel opens the file correctly even on Windows defaults.
+  return '﻿' + [hdrs.join(',')].concat(
+    rows.map(r => hdrs.map(h => csvEscape(r[h], h)).join(','))
   ).join('\n');
 }
 function downloadFile(name, content, mime){
-  const blob = new Blob([content], {type: mime || 'text/csv'});
+  const blob = new Blob([content], {type: (mime || 'text/csv') + ';charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name; a.click();
   URL.revokeObjectURL(a.href);
@@ -1893,19 +1919,11 @@ function pushToWorkday(){
 }
 function downloadWorkdayCSV(){
   if(!M.acctJournals.length) return;
-  const hdrs = ['effectiveDate','transactionType','account','glAccountName','glTransType','amountLE','isDebit','legalEntity','deal','position','batchType','transactionComments'];
-  const csv = [hdrs.join(',')].concat(
-    M.acctJournals.map(j => hdrs.map(h => {
-      const v = j[h]; if(v == null) return '';
-      const s = String(v).replace(/"/g, '""');
-      return /[",\n]/.test(s) ? `"${s}"` : s;
-    }).join(','))
-  ).join('\n');
-  const blob = new Blob([csv], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `workday-diu-${currentInstrument().id}-${new Date().toISOString().slice(0,10)}.csv`;
-  a.click(); URL.revokeObjectURL(a.href);
+  // Slim view of the DIU columns — same sanitisation + 2-dp rounding via rowsToCSV.
+  const hdrs = ['effectiveDate','transactionType','account','glAccountName','glTransType',
+                'amountLE','isDebit','legalEntity','deal','position','batchType','transactionComments'];
+  const csv = rowsToCSV(M.acctJournals, hdrs);
+  downloadFile(`workday-diu-${currentInstrument().id}-${new Date().toISOString().slice(0,10)}.csv`, csv);
   toast('DIU CSV downloaded');
 }
 
