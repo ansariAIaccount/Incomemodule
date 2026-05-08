@@ -285,6 +285,61 @@
           </select>
         </div>
       </div>
+
+      <!-- Modification events injector — lets the operator add a test modification
+           inline so the capability card turns green and the engine posts to 442000 -->
+      <div class="mt-3 pt-3 border-t border-indigo-100">
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="text-[11px] font-bold text-indigo-900">Modification events on this deal</span>
+          <span id="mod-events-count" class="chip gray text-[10px]">none</span>
+          <div class="ml-auto flex gap-2">
+            <button id="btn-mod-add-nonsub" class="mat-btn outline !py-1 !px-2 text-[11px]" title="Inject a non-substantial modification at mid-life with £10k gain — covenant amendment">
+              <span class="material-icons-outlined text-[14px]">add</span>Non-substantial mod
+            </button>
+            <button id="btn-mod-add-sub" class="mat-btn outline !py-1 !px-2 text-[11px]" title="Inject a substantial modification (≥10% PV change) at mid-life with new coupon">
+              <span class="material-icons-outlined text-[14px]">add_circle</span>Substantial mod
+            </button>
+            <button id="btn-mod-clear" class="mat-btn outline !py-1 !px-2 text-[11px]" title="Remove all test modification events from the active deal">
+              <span class="material-icons-outlined text-[14px]">clear</span>Clear
+            </button>
+          </div>
+        </div>
+        <div id="mod-events-list" class="text-[11px]"></div>
+      </div>
+
+      <!-- ─── PIK Override — contractual data, not accounting policy ─── -->
+      <!-- Normally PIK terms come from PortF in Stage 1. This panel lets the
+           operator tweak them inline for testing / scenario analysis. -->
+      <div class="mt-3 pt-3 border-t border-indigo-100">
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="text-[11px] font-bold text-indigo-900">PIK Interest (contractual override)</span>
+          <span id="pik-status-chip" class="chip gray text-[10px]">disabled</span>
+          <span class="ml-auto text-[10px] text-gray-500 italic">Edits flow into the engine on next Run Accounting</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">PIK enabled</label>
+            <select id="opt-pik-enabled" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+              <option value="false">No — cash-only coupon</option>
+              <option value="true">Yes — capitalises into balance</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">PIK rate (annual)</label>
+            <input id="opt-pik-rate" type="number" step="0.0001" min="0" max="0.5" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white" placeholder="e.g. 0.02 = 2%"/>
+          </div>
+          <div>
+            <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Capitalisation frequency</label>
+            <select id="opt-pik-freq" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+              <option value="Monthly">Monthly</option>
+              <option value="Quarterly">Quarterly</option>
+              <option value="SemiAnnual">Semi-annual</option>
+              <option value="Annual">Annual</option>
+            </select>
+          </div>
+        </div>
+        <div class="text-[11px] text-gray-500 mt-2">When enabled, daily PIK accrues at the chosen rate and capitalises into <code>141000 Investments at Cost</code> on the chosen frequency, posted as <em>Investment accretion - PIK interest</em>.</div>
+      </div>
     </div>
 
     <!-- ─── Tax & Other ─── -->
@@ -472,6 +527,32 @@
       <div id="modification-history" class="mt-3"></div>
     </details>
   </div>
+
+  <!-- Daily schedule view — rebuilt on every Run Accounting / treatment change.
+       Reflects every override (PIK, mod events, ECL stage, fees, etc.) -->
+  <details id="acct-schedule-section" class="hidden">
+    <summary class="text-[12px] mb-2 cursor-pointer">View daily schedule (engine output that drives every JE)</summary>
+    <div class="flex items-center gap-2 mb-2 flex-wrap">
+      <span id="schedule-row-count" class="chip blue text-[11px]">0 rows</span>
+      <div class="flex items-center gap-1 text-[11px]">
+        <label class="text-gray-600">Show:</label>
+        <select id="schedule-filter" class="border border-gray-300 rounded px-1 py-0.5 text-[11px] bg-white">
+          <option value="events">Material events only (draws · paydowns · fees · PIK · mod · ECL)</option>
+          <option value="all">All days</option>
+          <option value="month-end">Month-end days only</option>
+        </select>
+      </div>
+      <div class="ml-auto flex gap-1">
+        <button id="btn-schedule-csv" class="mat-btn outline !py-1 !px-2 text-[11px]" title="Download every column the engine produces (CSV)">
+          <span class="material-icons-outlined text-[14px]">download</span>Download Full CSV
+        </button>
+        <button id="btn-schedule-json" class="mat-btn outline !py-1 !px-2 text-[11px]" title="Download the schedule as JSON for downstream tools">
+          <span class="material-icons-outlined text-[14px]">data_object</span>JSON
+        </button>
+      </div>
+    </div>
+    <div class="scrolled" id="acct-schedule-table" style="max-height:480px"></div>
+  </details>
 
   <details id="acct-journal-section" class="hidden">
     <summary class="text-[12px] mb-2">View generated journal entries (mapped to Investran chart)</summary>
@@ -729,6 +810,7 @@ function resetPipeline(){
   $('portf-summary').classList.add('hidden'); $('portf-details').classList.add('hidden');
   $('btn-acct-run').disabled = true; $('acct-status').className = 'chip gray self-center'; $('acct-status').textContent = 'Awaiting Stage 1';
   $('acct-kpis').classList.add('hidden'); $('acct-journal-section').classList.add('hidden');
+  $('acct-schedule-section')?.classList.add('hidden');
   $('evidence-pack').classList.add('hidden');
   M.acctRunMeta = null;
   ['ifrs-classification','ifrs-recognition','ifrs-eir','ifrs-eir-note','ifrs-fv','ifrs-fv-note'].forEach(id => $(id).textContent = '—');
@@ -946,28 +1028,23 @@ function applyPortFPayload(payload){
   M.schedule = buildSchedule(inst);
   M.summary = summarize(M.schedule, inst.settlementDate, inst.maturityDate);
   // PortF-Excel ingestion path: the parser leaves dailyInterest / dailyFees / currentRate
-  // as 0 because the canonical template doesn't carry a rate column. Merge the engine's
-  // values back in by date so the preview table and downstream stages see real numbers.
-  // (JSON path: skipped because rows already carry these fields.)
+  // as 0 because the canonical template doesn't carry rate columns. Merge engine values
+  // back in PER ROW (not all-or-nothing) so a partially-populated PortF Excel doesn't
+  // skip the merge for empty rows. JSON path is unaffected — its rows carry these fields.
   if(Array.isArray(payload.accrualSchedule) && payload.accrualSchedule.length){
-    const allZero = payload.accrualSchedule.every(r =>
-      !r.dailyInterest && !r.dailyFees && !r.dailyPik && !r.currentRate
-    );
-    if(allZero){
-      const byDate = new Map(M.schedule.map(r => [r.date, r]));
-      for(const r of payload.accrualSchedule){
-        const eng = byDate.get(r.date);
-        if(eng){
-          r.currentRate  = eng.currentRate;
-          r.dailyInterest = eng.dailyCash;
-          r.dailyPik     = eng.dailyPik;
-          r.dailyFees    = eng.dailyFees;
-          r.feeBreakdown = eng.feeBreakdown;
-          r.capitalized  = eng.capitalized;
-          // Engine balance trumps the parser's balance only if the parser's was missing
-          if(!r.balance && eng.balance) r.balance = eng.balance;
-        }
-      }
+    const byDate = new Map(M.schedule.map(r => [r.date, r]));
+    for(const r of payload.accrualSchedule){
+      const eng = byDate.get(r.date);
+      if(!eng) continue;
+      // Only fill a field if the row's value is missing/zero AND the engine has a non-zero figure.
+      // Preserves any explicit values the operator/PortF supplied in the Excel.
+      if(!r.currentRate    && eng.currentRate)   r.currentRate    = eng.currentRate;
+      if(!r.dailyInterest  && eng.dailyCash)     r.dailyInterest  = eng.dailyCash;
+      if(!r.dailyPik       && eng.dailyPik)      r.dailyPik       = eng.dailyPik;
+      if(!r.dailyFees      && eng.dailyFees)     r.dailyFees      = eng.dailyFees;
+      if(!r.capitalized    && eng.capitalized)   r.capitalized    = eng.capitalized;
+      if(!r.feeBreakdown   && eng.feeBreakdown)  r.feeBreakdown   = eng.feeBreakdown;
+      if(!r.balance        && eng.balance)       r.balance        = eng.balance;
     }
   }
   // KPI strip
@@ -1050,10 +1127,32 @@ function buildCapabilityCards(inst){
       desc:'Non-functional currency loans revalue daily against an FX schedule. Realised FX on settlement; unrealised FX on opening balance.',
       status: hasFx ? 'green' : 'gray',
       detail: hasFx ? `${inst.fxRateSchedule.length} FX fixings · functional ${inst.functionalCurrency || 'GBP'}` : 'No FX schedule on this deal — single-currency' },
-    { icon:'leaderboard', title:'Fair value: hierarchy, sensitivities',
-      desc:'IFRS 13 — Level 1 / 2 / 3 hierarchy tagging on FVTPL / FVOCI items. Level 3 carries valuation sensitivities for disclosure.',
-      status: cls === 'AmortisedCost' ? 'gray' : 'green',
-      detail: cls === 'AmortisedCost' ? 'AmortisedCost — FV disclosed in notes only' : `${fvLevel || 'FVTPL'} · ${fvLevel === 'Level 3' ? 'unobservable inputs' : 'mark-to-market'}` },
+    (() => {
+      // FV capability — always live: AmortisedCost still needs Level tagging for IFRS 7 §25
+      // disclosure note. Card lights amber when the operator has overridden the FV Level
+      // vs the deal default (treatmentDirty) so it's visually obvious that the policy
+      // has changed and a re-run is needed.
+      const def = M.treatmentDefaults[inst?.id]?.ifrs?.fairValueLevel;
+      const overridden = inst && fvLevel !== (def || undefined);
+      const onBalanceSheet = cls !== 'AmortisedCost';
+      let status = 'gray', detail;
+      if(!fvLevel){
+        status = onBalanceSheet ? 'amber' : 'gray';
+        detail = onBalanceSheet
+          ? `${cls} on balance sheet — FV Level NOT SET (required by IFRS 13 §72)`
+          : 'AmortisedCost — set FV Level for IFRS 7 §25 disclosure note';
+      } else {
+        status = overridden && M.treatmentDirty[inst?.id] ? 'amber' : 'green';
+        const inputDescr = fvLevel === 'Level 1' ? 'Quoted price in active market'
+                         : fvLevel === 'Level 2' ? 'Observable inputs (curves, comparable transactions)'
+                         : 'Unobservable inputs (DCF + sensitivities required)';
+        const usage = onBalanceSheet ? 'on balance sheet' : 'disclosure-only (IFRS 7 §25)';
+        detail = `${fvLevel} · ${usage} · ${inputDescr}${overridden ? ' · overridden' : ''}`;
+      }
+      return { icon:'leaderboard', title:'Fair value: hierarchy, sensitivities',
+        desc:'IFRS 13 — Level 1 / 2 / 3 hierarchy tagging. Level 3 requires unobservable-input disclosure + sensitivities. Disclosed in notes for amortised-cost items (IFRS 7 §25).',
+        status, detail };
+    })(),
     { icon:'health_and_safety', title:'IFRS 9 staging: 12-mo vs lifetime, Stage 3',
       desc:'§5.5 — Stage 1 (12-month ECL), Stage 2 (lifetime ECL on performing), Stage 3 (lifetime ECL on credit-impaired with interest on net carrying).',
       status: inst?.ifrs?.pdAnnual ? 'green' : 'gray',
@@ -1179,7 +1278,9 @@ function snapshotTreatmentDefaults(inst){
   if(!inst || M.treatmentDefaults[inst.id]) return;
   M.treatmentDefaults[inst.id] = {
     ifrs: JSON.parse(JSON.stringify(inst.ifrs || {})),
-    fees: (inst.fees || []).map(f => ({ id: f.id, ifrs: f.ifrs }))
+    fees: (inst.fees || []).map(f => ({ id: f.id, ifrs: f.ifrs })),
+    pik:  JSON.parse(JSON.stringify(inst.pik  || {})),   // contractual override snapshot
+    modificationEvents: JSON.parse(JSON.stringify(inst.modificationEvents || []))
   };
 }
 
@@ -1222,18 +1323,39 @@ function applyTreatmentFromForm(){
   inst.ifrs.tax.whtRecoverability = $('opt-wht-recoverable').value;
   inst.ifrs.tax.deferredTax        = $('opt-deferred-tax').value === 'true';
   inst.ifrs.fxRevaluationCadence   = $('opt-fx-cadence').value;
+  // ─── PIK Override (contractual — written directly onto the instrument) ───
+  inst.pik = inst.pik || {};
+  inst.pik.enabled = $('opt-pik-enabled').value === 'true';
+  const pikRate = parseFloat($('opt-pik-rate').value);
+  if(!isNaN(pikRate)) inst.pik.rate = pikRate; else inst.pik.rate = 0;
+  inst.pik.capitalizationFrequency = $('opt-pik-freq').value;
+  // Refresh the inline PIK chip without waiting for re-render
+  $('pik-status-chip').className = inst.pik.enabled ? 'chip green text-[10px]' : 'chip gray text-[10px]';
+  $('pik-status-chip').textContent = inst.pik.enabled
+    ? `enabled · ${(inst.pik.rate*100).toFixed(2)}% · ${inst.pik.capitalizationFrequency}`
+    : 'disabled';
   // Per-fee IFRS treatment
   const feeRows = document.querySelectorAll('[data-fee-treatment]');
   feeRows.forEach(el => {
     const idx = parseInt(el.getAttribute('data-fee-idx'), 10);
     if(inst.fees && inst.fees[idx]) inst.fees[idx].ifrs = el.value;
   });
-  // Mark dirty if differs from defaults
+  // Mark dirty if differs from defaults (IFRS policy, fees, PIK, modification events)
   const def = M.treatmentDefaults[inst.id];
   let dirty = false;
   if(def){
-    const cur = JSON.stringify({ifrs: inst.ifrs, fees: (inst.fees || []).map(f => ({id:f.id, ifrs:f.ifrs}))});
-    const orig= JSON.stringify(def);
+    const cur = JSON.stringify({
+      ifrs: inst.ifrs,
+      fees: (inst.fees || []).map(f => ({id:f.id, ifrs:f.ifrs})),
+      pik:  inst.pik || {},
+      mods: inst.modificationEvents || []
+    });
+    const orig= JSON.stringify({
+      ifrs: def.ifrs,
+      fees: def.fees,
+      pik:  def.pik || {},
+      mods: def.modificationEvents || []
+    });
     dirty = cur !== orig;
   }
   M.treatmentDirty[inst.id] = dirty;
@@ -1271,6 +1393,14 @@ function loadTreatmentForm(){
   $('opt-wht-recoverable').value  = inst.ifrs?.tax?.whtRecoverability || 'recoverable';
   $('opt-deferred-tax').value     = String(inst.ifrs?.tax?.deferredTax === true);
   $('opt-fx-cadence').value       = inst.ifrs?.fxRevaluationCadence || 'daily';
+  // PIK override — pull from the contract block on the instrument
+  $('opt-pik-enabled').value      = String(inst.pik?.enabled === true);
+  $('opt-pik-rate').value         = inst.pik?.rate ?? '';
+  $('opt-pik-freq').value         = inst.pik?.capitalizationFrequency || 'Monthly';
+  $('pik-status-chip').className  = inst.pik?.enabled ? 'chip green text-[10px]' : 'chip gray text-[10px]';
+  $('pik-status-chip').textContent = inst.pik?.enabled
+    ? `enabled · ${((inst.pik.rate||0)*100).toFixed(2)}% · ${inst.pik.capitalizationFrequency || 'Monthly'}`
+    : 'disabled';
   // Per-fee treatment
   if(inst.fees && inst.fees.length){
     const opts = [
@@ -1294,6 +1424,148 @@ function loadTreatmentForm(){
     $('fee-treatment-section').classList.add('hidden');
   }
   $('treatment-modified-chip').classList.toggle('hidden', !M.treatmentDirty[inst.id]);
+  renderModEventsList();
+}
+
+// ----- Modification event injector ------------------------------------
+// Surfaces current modificationEvents[] on the active deal and lets the
+// operator add a test event (so the capability card lights green, the
+// engine posts to 442000, and the Modification History panel logs it).
+function renderModEventsList(){
+  const inst = currentInstrument();
+  const list = inst?.modificationEvents || [];
+  const count = list.length;
+  $('mod-events-count').className = count ? 'chip green text-[10px]' : 'chip gray text-[10px]';
+  $('mod-events-count').textContent = count + (count === 1 ? ' event' : ' events');
+  if(!count){
+    $('mod-events-list').innerHTML = '<div class="text-gray-500 italic">No modification events. Click a button above to inject a test event — the capability card will turn green.</div>';
+    return;
+  }
+  // Editable table — every cell except the row index is inline-editable.
+  // On change/blur the array entry is updated and the engine re-runs.
+  const ccy = inst.currency || 'GBP';
+  const ccySym = ccy === 'USD' ? '$' : ccy === 'EUR' ? '€' : '£';
+  $('mod-events-list').innerHTML = `<table class="data" style="width:100%">
+    <thead><tr><th class="left" style="width:120px">Date</th><th class="left" style="width:140px">Type</th><th style="width:140px">Gain / (Loss) (${ccy})</th><th class="left">Reason</th><th style="width:36px"></th></tr></thead>
+    <tbody>${list.map((m, i) => `<tr>
+      <td class="left">
+        <input type="date" data-mod-field="date" data-mod-idx="${i}" value="${m.date || ''}" min="${inst.settlementDate || ''}" max="${inst.maturityDate || ''}"
+               class="border border-gray-300 rounded px-1 py-0.5 text-[11px] bg-white w-full"/>
+      </td>
+      <td class="left">
+        <select data-mod-field="modType" data-mod-idx="${i}" class="border border-gray-300 rounded px-1 py-0.5 text-[11px] bg-white w-full">
+          <option value="non-substantial" ${m.modType !== 'substantial' ? 'selected' : ''}>Non-substantial</option>
+          <option value="substantial" ${m.modType === 'substantial' ? 'selected' : ''}>Substantial</option>
+        </select>
+      </td>
+      <td>
+        <div class="flex items-center gap-1" style="justify-content:flex-end">
+          <span class="text-[11px] text-gray-500">${ccySym}</span>
+          <input type="number" step="any" data-mod-field="gainLoss" data-mod-idx="${i}" value="${m.gainLoss ?? 0}"
+                 class="border border-gray-300 rounded px-1 py-0.5 text-[11px] bg-white text-right" style="width:120px"/>
+        </div>
+      </td>
+      <td class="left">
+        <input type="text" data-mod-field="reason" data-mod-idx="${i}" value="${(m.reason || '').replace(/"/g,'&quot;')}"
+               placeholder="e.g. covenant amendment, spread step-up..."
+               class="border border-gray-300 rounded px-1 py-0.5 text-[11px] bg-white w-full"/>
+      </td>
+      <td><button class="mat-btn outline !py-0.5 !px-1.5 text-[10px]" data-mod-remove="${i}" title="Remove this event"><span class="material-icons-outlined text-[12px]">close</span></button></td>
+    </tr>`).join('')}</tbody></table>
+    <div class="text-[10px] text-gray-500 mt-1">Edit any cell — the engine re-runs automatically. Type 'substantial' to derecognise + reset EIR; non-substantial books gain/loss to 442000 and adjusts carrying value.</div>`;
+
+  // Wire up cell-edit handlers.
+  document.querySelectorAll('[data-mod-field]').forEach(el => {
+    el.onchange = () => {
+      const i = parseInt(el.getAttribute('data-mod-idx'), 10);
+      const field = el.getAttribute('data-mod-field');
+      const inst = currentInstrument();
+      if(!inst?.modificationEvents?.[i]) return;
+      const ev = inst.modificationEvents[i];
+      if(field === 'gainLoss'){
+        ev.gainLoss = parseFloat(el.value) || 0;
+      } else if(field === 'date'){
+        ev.date = el.value;
+      } else if(field === 'modType'){
+        ev.modType = el.value;
+      } else {
+        ev[field] = el.value;
+      }
+      M.treatmentDirty[inst.id] = true;
+      // Refresh the chip and re-run the engine.
+      $('mod-events-count').className = 'chip amber text-[10px]';
+      $('mod-events-count').textContent = inst.modificationEvents.length + ' event' + (inst.modificationEvents.length === 1 ? '' : 's') + ' · edited';
+      onTreatmentChange();
+    };
+  });
+  document.querySelectorAll('[data-mod-remove]').forEach(btn => {
+    btn.onclick = () => {
+      const i = parseInt(btn.getAttribute('data-mod-remove'), 10);
+      const inst = currentInstrument();
+      if(inst?.modificationEvents) inst.modificationEvents.splice(i, 1);
+      M.treatmentDirty[inst.id] = true;
+      renderModEventsList();
+      onTreatmentChange();
+    };
+  });
+}
+
+// Pick a date roughly 1/3 into the deal life (avoids day-1 / maturity edges).
+function midLifeDateISO(inst){
+  const start = new Date(inst.settlementDate).getTime();
+  const end   = new Date(inst.maturityDate).getTime();
+  const mid   = new Date(start + (end - start) / 3);
+  return mid.toISOString().slice(0, 10);
+}
+
+function addNonSubstantialMod(){
+  const inst = currentInstrument();
+  if(!inst){ toast('No active deal'); return; }
+  const ccy = inst.currency || 'GBP';
+  const notional = inst.faceValue || inst.commitment || 1_000_000;
+  inst.modificationEvents = inst.modificationEvents || [];
+  inst.modificationEvents.push({
+    date: midLifeDateISO(inst),
+    modType: 'non-substantial',
+    gainLoss: Math.round(notional * 0.0004),     // 4 bps of notional — small P&L gain
+    reason: 'Covenant amendment — leverage step-up',
+    pvDelta: 0.03                                // 3% PV change → non-substantial
+  });
+  M.treatmentDirty[inst.id] = true;
+  renderModEventsList();
+  toast('Added non-substantial modification — re-running');
+  onTreatmentChange();
+}
+
+function addSubstantialMod(){
+  const inst = currentInstrument();
+  if(!inst){ toast('No active deal'); return; }
+  const notional = inst.faceValue || inst.commitment || 1_000_000;
+  inst.modificationEvents = inst.modificationEvents || [];
+  inst.modificationEvents.push({
+    date: midLifeDateISO(inst),
+    modType: 'substantial',
+    gainLoss: Math.round(notional * -0.0125),    // -1.25% of notional — derecognition loss
+    reason: 'Spread increase from +250bps to +325bps — substantial mod',
+    pvDelta: 0.13,                               // 13% PV change → substantial
+    newCoupon: { spread: (inst.coupon?.spread ?? 0) + 0.0075 }
+  });
+  M.treatmentDirty[inst.id] = true;
+  renderModEventsList();
+  toast('Added substantial modification — re-running with new spread');
+  onTreatmentChange();
+}
+
+function clearMods(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  if(inst.modificationEvents && inst.modificationEvents.length){
+    inst.modificationEvents = [];
+    M.treatmentDirty[inst.id] = true;
+    renderModEventsList();
+    toast('Cleared all modification events');
+    onTreatmentChange();
+  }
 }
 
 // Treatment changed — apply, recalculate everything downstream
@@ -1343,6 +1615,8 @@ function resetTreatmentToDefaults(){
   const def = M.treatmentDefaults[inst.id];
   if(!def){ return; }
   inst.ifrs = JSON.parse(JSON.stringify(def.ifrs));
+  if(def.pik) inst.pik = JSON.parse(JSON.stringify(def.pik));
+  inst.modificationEvents = JSON.parse(JSON.stringify(def.modificationEvents || []));
   if(inst.fees){
     for(let i = 0; i < inst.fees.length; i++){
       if(def.fees[i]) inst.fees[i].ifrs = def.fees[i].ifrs;
@@ -1351,12 +1625,29 @@ function resetTreatmentToDefaults(){
   M.treatmentDirty[inst.id] = false;
   loadTreatmentForm();
   if(M.portfData) runAccounting();
-  toast('Reset accounting treatment to deal defaults');
+  toast('Reset accounting treatment + contractual overrides to deal defaults');
 }
 
 function runAccounting(){
   if(!M.portfData){ toast('Load PortF data first'); return; }
-  const inst = currentInstrument();
+  // Use the deal that PortF data was loaded for — NOT the dropdown selection.
+  // This matters when the user loads an Excel that resolves to a different
+  // instrument than what's selected in the active-deal picker.
+  const inst = INSTRUMENTS.find(i => i.id === M.portfData.instrument?.id) || currentInstrument();
+  // Keep the dropdown + Treatment panel in sync so capability cards, FV display,
+  // ECL settings and mod events reflect the deal we're actually accounting for.
+  if(inst.id !== M.instrumentId){
+    M.instrumentId = inst.id;
+    if($('active-deal')) $('active-deal').value = inst.id;
+    snapshotTreatmentDefaults(inst);   // ensure defaults are captured before any form-driven mutations
+    loadTreatmentForm();               // repopulate the 24 controls with the new deal's values
+  }
+  // Rebuild schedule + summary from the CURRENT instrument state. Any treatment
+  // or contractual override (PIK, modification events, ECL stage, FV level,
+  // fee treatment) since the last run must flow into the schedule before the
+  // engine generates journals — otherwise the KPIs / JE rows are stale.
+  M.schedule = buildSchedule(inst);
+  M.summary = summarize(M.schedule, inst.settlementDate, inst.maturityDate);
   // Refresh capability cards now that the deal has been processed
   renderCapabilityCards(inst);
   renderChangeHandlingPanel(inst);
@@ -1375,14 +1666,31 @@ function runAccounting(){
     $('ifrs-eir').textContent = fmtPct(eir.couponRate, 4) + ' (coupon, no amort)';
     $('ifrs-eir-note').textContent = eir.note || 'Drawn at par — EIR = coupon';
   }
-  // Fair value
+  // Fair value — for AmortisedCost the asset isn't carried at FV on balance sheet,
+  // but IFRS 7 §25 still requires FV disclosure with a Level tag in the notes.
+  // For FVOCI/FVTPL the asset IS carried at FV (IFRS 13 §72) — Level tag is mandatory.
   const fvLevel = inst.ifrs?.fairValueLevel;
+  const inputDescr = (lvl) =>
+      lvl === 'Level 1' ? 'Quoted price in active market'
+    : lvl === 'Level 2' ? 'Observable inputs (curves, comparable transactions)'
+    : lvl === 'Level 3' ? 'Unobservable inputs · DCF + sensitivities required'
+    : null;
   if(cls === 'AmortisedCost'){
-    $('ifrs-fv').textContent = 'Not measured at FV';
-    $('ifrs-fv-note').textContent = 'Amortised cost — disclose FV in notes only';
+    if(fvLevel){
+      $('ifrs-fv').textContent = `Disclosure-only · ${fvLevel}`;
+      $('ifrs-fv-note').textContent = `Amortised cost on balance sheet · IFRS 7 §25 FV note tagged ${fvLevel} (${inputDescr(fvLevel)})`;
+    } else {
+      $('ifrs-fv').textContent = 'Disclosure-only — Level not set';
+      $('ifrs-fv-note').textContent = 'Amortised cost on balance sheet · set a Level in the Treatment panel for the IFRS 7 §25 FV note';
+    }
   } else {
-    $('ifrs-fv').textContent = fvLevel || 'FVTPL';
-    $('ifrs-fv-note').textContent = fvLevel === 'Level 3' ? 'Unobservable inputs · sensitivity analysis required' : 'Mark to market';
+    if(fvLevel){
+      $('ifrs-fv').textContent = `${cls} · ${fvLevel}`;
+      $('ifrs-fv-note').textContent = `On balance sheet at FV · ${inputDescr(fvLevel)}`;
+    } else {
+      $('ifrs-fv').textContent = `${cls} · Level NOT SET`;
+      $('ifrs-fv-note').textContent = `On balance sheet at FV — IFRS 13 §72 requires a Level tag · set in Treatment panel`;
+    }
   }
   // Generate journals via existing engine + Investran GL mapping
   M.acctJournals = generateDIU(inst, M.summary);
@@ -1424,6 +1732,9 @@ function runAccounting(){
       <td>${j.isDebit ? '<span class="chip amber">DR</span>' : '<span class="chip green">CR</span>'}</td>
     </tr>`).join('')}</tbody></table>`;
   $('acct-journal-section').classList.remove('hidden');
+  // Daily schedule view (rebuilt every run; mirrors current treatment + overrides)
+  renderScheduleTable();
+  $('acct-schedule-section').classList.remove('hidden');
   // Stamp the run with audit metadata + log to history (NWF month-end close).
   stampAcctRun(inst, /*status=*/'Draft');
   // Render the 6-panel Accounting Evidence Pack (NWF agenda).
@@ -1485,20 +1796,182 @@ function renderEvidencePack(inst, summary){
   renderModificationHistory(inst, summary);
 }
 
+// ----- Daily Schedule view + CSV / JSON download ---------------------------
+// The engine produces a per-day row for every day from settlement → maturity.
+// This panel surfaces those rows so the operator can verify the impact of any
+// treatment change (PIK on/off, mod event, ECL stage, fee policy) immediately.
+const SCHEDULE_PREVIEW_LIMIT = 500;            // rows shown in-page; CSV exports all
+const SCHEDULE_DISPLAY_COLS = [
+  ['date',           'Date'],
+  ['balance',        'Balance'],
+  ['drawnBalance',   'Drawn'],
+  ['draw',           'Draw'],
+  ['paydown',        'Repay'],
+  ['currentRate',    'Rate'],
+  ['dailyCash',      'Daily Interest'],
+  ['dailyPik',       'Daily PIK'],
+  ['capitalized',    'PIK Capit.'],
+  ['dailyFees',      'Daily Fees'],
+  ['dailyEIRAccretion','EIR Accret.'],
+  ['carryingValue',  'Carrying'],
+  ['eclAllowance',   'ECL Alw.'],
+  ['dailyECLChange', 'ECL Δ'],
+  ['dailyModGain',   'Mod G/L'],
+  ['dailyFXGain',    'FX'],
+  ['dailyHedgePL',   'Hedge P&L']
+];
+const SCHEDULE_FULL_COLS = [
+  'date','balance','drawnBalance','carryingValue','draw','paydown',
+  'couponRate','floatingRate','currentRate',
+  'dailyCash','cumInterestAccrued','cumInterestEarned',
+  'capitalized','interestAdjustments','cashInterestPayment',
+  'pikRate','dailyPik','cumPikAccrued','cumPikEarned','pikInterestAdjustments','pikPaydown',
+  'amortDaily','cumAmort',
+  'nonUseFee','cumNonUseFee',
+  'dailyFees',
+  'dailyEIRAccretion','cumEIRAccretion',
+  'dailyDefaultInterest','dailyDefaultFee','cumDefaultInterest','cumDefaultFee',
+  'dailyECLChange','eclAllowance','cumECLChange',
+  'dailyModGain','modEventDescription','cumModGain',
+  'fxRate','dailyFXGain','cumFXGain','balanceFC',
+  'dailyHedgeOCI','dailyHedgePL','dailyHedgeReclass',
+  'cashFlowHedgeReserve','cumHedgeOCI','cumHedgePL','cumHedgeReclass','hedgeEffectiveness',
+  'hasEvent'
+];
+
+function isMaterialEvent(r){
+  return (r.draw && r.draw !== 0)
+      || (r.paydown && r.paydown !== 0)
+      || (r.capitalized && r.capitalized !== 0)
+      || (r.dailyFees && Math.abs(r.dailyFees) > 0.005)
+      || (r.dailyPik && Math.abs(r.dailyPik) > 0.005)
+      || (r.dailyECLChange && Math.abs(r.dailyECLChange) > 0.005)
+      || (r.dailyModGain && Math.abs(r.dailyModGain) > 0.005)
+      || (r.dailyHedgePL && Math.abs(r.dailyHedgePL) > 0.005)
+      || r.modEventDescription
+      || r.hasEvent;
+}
+function isMonthEnd(r){
+  if(!r.date) return false;
+  const next = new Date(r.date); next.setUTCDate(next.getUTCDate() + 1);
+  return next.getUTCDate() === 1;     // last day of month if next-day rolls into 1st
+}
+function filterScheduleRows(rows, mode){
+  if(mode === 'events')    return rows.filter(isMaterialEvent);
+  if(mode === 'month-end') return rows.filter(isMonthEnd);
+  return rows;
+}
+
+function renderScheduleTable(){
+  if(!M.schedule || !M.schedule.length){ $('acct-schedule-section').classList.add('hidden'); return; }
+  const inst = INSTRUMENTS.find(i => i.id === M.portfData?.instrument?.id) || currentInstrument();
+  const ccy = inst?.currency || 'GBP';
+  const mode = $('schedule-filter').value || 'events';
+  const filtered = filterScheduleRows(M.schedule, mode);
+  const slice = filtered.slice(0, SCHEDULE_PREVIEW_LIMIT);
+  const truncated = filtered.length > SCHEDULE_PREVIEW_LIMIT;
+
+  $('schedule-row-count').textContent =
+    `${filtered.length.toLocaleString()} of ${M.schedule.length.toLocaleString()} rows`
+    + (truncated ? ` · showing first ${SCHEDULE_PREVIEW_LIMIT.toLocaleString()}` : '');
+
+  const fmtN = (v) => v == null || v === 0 ? '—'
+    : (typeof v === 'number' ? Math.round(v).toLocaleString('en-GB') : v);
+  const fmtR = (v) => v == null ? '—' : (typeof v === 'number' ? (v * 100).toFixed(4) + '%' : v);
+
+  const headerRow = SCHEDULE_DISPLAY_COLS.map(([_, label]) =>
+    `<th class="${label === 'Date' ? 'left' : ''}">${label}</th>`
+  ).join('');
+  const rowsHtml = slice.map(r => {
+    const event = isMaterialEvent(r);
+    return `<tr ${event ? 'class="event"' : ''}>` + SCHEDULE_DISPLAY_COLS.map(([key, label]) => {
+      const v = r[key];
+      if(key === 'date') return `<td class="left">${fmtDate(v)}</td>`;
+      if(key === 'currentRate' || key === 'couponRate' || key === 'floatingRate') return `<td>${fmtR(v)}</td>`;
+      return `<td>${fmtN(v)}</td>`;
+    }).join('') + '</tr>';
+  }).join('');
+
+  $('acct-schedule-table').innerHTML = `<table class="data" style="width:100%;font-size:11px">
+    <thead><tr>${headerRow}</tr></thead>
+    <tbody>${rowsHtml || '<tr><td colspan="' + SCHEDULE_DISPLAY_COLS.length + '" class="text-[11px] text-gray-500" style="text-align:center;padding:10px">No rows match the filter.</td></tr>'}</tbody>
+  </table>${truncated ? `<div class="text-[11px] text-gray-500 mt-1">Preview truncated at ${SCHEDULE_PREVIEW_LIMIT.toLocaleString()} rows. Click <strong>Download Full CSV</strong> to export every row (${M.schedule.length.toLocaleString()} total).</div>` : ''}`;
+}
+
+function downloadScheduleCSV(){
+  if(!M.schedule || !M.schedule.length){ toast('Run accounting first'); return; }
+  const inst = INSTRUMENTS.find(i => i.id === M.portfData?.instrument?.id) || currentInstrument();
+  const dealId = inst?.id || 'schedule';
+  // Use the same sanitiser/BOM helpers as the DIU CSV path so Excel opens correctly.
+  const csv = rowsToCSV(M.schedule, SCHEDULE_FULL_COLS);
+  downloadFile(`schedule-${dealId}-${new Date().toISOString().slice(0,10)}.csv`, csv);
+  toast(`Downloaded full schedule — ${M.schedule.length.toLocaleString()} daily rows`);
+}
+
+function downloadScheduleJSON(){
+  if(!M.schedule || !M.schedule.length){ toast('Run accounting first'); return; }
+  const inst = INSTRUMENTS.find(i => i.id === M.portfData?.instrument?.id) || currentInstrument();
+  const dealId = inst?.id || 'schedule';
+  const payload = {
+    deal: { id: inst?.id, name: inst?.deal, position: inst?.position, currency: inst?.currency || 'GBP' },
+    runMeta: M.acctRunMeta || null,
+    summary: M.summary || null,
+    schedule: M.schedule
+  };
+  downloadFile(`schedule-${dealId}-${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(payload, null, 2), 'application/json');
+  toast(`Downloaded schedule JSON — ${M.schedule.length.toLocaleString()} rows + summary`);
+}
+
 // (A) Month-End Close + Run Metadata --------------------------------------
 function renderMonthEndPanel(inst){
   const meta = M.acctRunMeta || {};
   const stages = ['Draft','Reviewed','Approved','Posted'];
   const idx = stages.indexOf(meta.status || 'Draft');
+  const isPosted = idx === stages.length - 1;   // Posted is terminal — all chips green
+
   const stepHtml = stages.map((s, i) => {
-    const cls = i < idx ? 'green' : i === idx ? 'blue' : 'gray';
-    const ic  = i < idx ? 'check_circle' : i === idx ? 'pending' : 'radio_button_unchecked';
+    let cls, ic;
+    if(isPosted){
+      cls = 'green'; ic = 'check_circle';                    // every chip green when locked
+    } else if(i < idx){
+      cls = 'green'; ic = 'check_circle';
+    } else if(i === idx){
+      cls = 'blue';  ic = 'pending';                         // current step, in progress
+    } else {
+      cls = 'gray';  ic = 'radio_button_unchecked';
+    }
     return `<div class="flex items-center gap-1"><span class="chip ${cls}" style="display:inline-flex;align-items:center;gap:4px"><span class="material-icons-outlined" style="font-size:12px">${ic}</span>${s}</span></div>`;
   }).join('<span class="material-icons-outlined text-[14px] text-gray-400">east</span>');
 
   const dirty = meta.treatmentDirty
     ? '<span class="chip amber">Treatment overridden — re-run before approval</span>'
     : '<span class="chip green">Treatment matches default policy</span>';
+
+  // Action panel — buttons enable based on current status (segregation of duties).
+  // Once Posted, period is locked and only Unlock or starting a new run is available.
+  const reviewDisabled  = idx >= 1 || isPosted;
+  const approveDisabled = idx < 1  || idx >= 2 || isPosted;
+  const postDisabled    = idx < 2  || isPosted;
+
+  const actionsHtml = isPosted
+    ? `<div class="bg-green-50 border border-green-200 rounded p-3 mb-2 text-[12px]">
+         <div class="font-semibold text-green-800 mb-1">
+           <span class="material-icons-outlined text-[14px] align-middle">lock</span>
+           Period Locked — Posted to GL
+         </div>
+         <div class="text-gray-700">All 4 close gates passed (Draft → Reviewed → Approved → Posted). Period entries are immutable in the GL. To post a correction, unlock and start a new versioned run.</div>
+       </div>
+       <div class="flex flex-wrap gap-2">
+         <button id="btn-meo-unlock" class="mat-btn"><span class="material-icons-outlined text-[14px]">lock_open</span>Unlock period (reverts to Approved)</button>
+         <button id="btn-meo-newrun" class="mat-btn primary"><span class="material-icons-outlined text-[14px]">add</span>Start new versioned run</button>
+       </div>`
+    : `<div class="flex flex-wrap gap-2">
+         <button id="btn-meo-review"  class="mat-btn" ${reviewDisabled  ? 'disabled' : ''}><span class="material-icons-outlined text-[14px]">rate_review</span>Reviewer sign-off</button>
+         <button id="btn-meo-approve" class="mat-btn" ${approveDisabled ? 'disabled' : ''}><span class="material-icons-outlined text-[14px]">verified_user</span>Approve</button>
+         <button id="btn-meo-post"    class="mat-btn primary" ${postDisabled ? 'disabled' : ''}><span class="material-icons-outlined text-[14px]">cloud_upload</span>Post (lock period)</button>
+         <button id="btn-meo-rerun"   class="mat-btn"><span class="material-icons-outlined text-[14px]">refresh</span>Re-run with current treatment</button>
+       </div>
+       <div class="text-[11px] text-gray-500 mt-2">Steps must complete in order. In production each step requires a different user (segregation of duties).</div>`;
 
   $('month-end-panel').innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
@@ -1509,24 +1982,24 @@ function renderMonthEndPanel(inst){
       <div class="kpi"><div class="label">User</div><div class="value text-[12px]">${meta.user || '—'}</div></div>
       <div class="kpi"><div class="label">Period</div><div class="value text-[11px]">${fmtDate(meta.periodStart)} → ${fmtDate(meta.periodEnd)}</div></div>
       <div class="kpi"><div class="label">JE Rows</div><div class="value text-[14px]">${(meta.jeRows||0).toLocaleString()}</div></div>
-      <div class="kpi"><div class="label">Status</div><div class="value text-[12px]"><span class="chip ${idx>=3?'green':idx>=2?'blue':'amber'}">${meta.status || 'Draft'}</span></div></div>
+      <div class="kpi"><div class="label">Status</div><div class="value text-[12px]"><span class="chip ${isPosted?'green':idx>=2?'blue':'amber'}">${meta.status || 'Draft'}${isPosted?' · Locked':''}</span></div></div>
     </div>
 
     <div class="text-[11px] mb-2 flex items-center gap-2 flex-wrap">${stepHtml}</div>
     <div class="mb-3">${dirty}</div>
 
-    <div class="flex flex-wrap gap-2">
-      <button id="btn-meo-review"  class="mat-btn"><span class="material-icons-outlined text-[14px]">rate_review</span>Reviewer sign-off</button>
-      <button id="btn-meo-approve" class="mat-btn"><span class="material-icons-outlined text-[14px]">verified_user</span>Approve</button>
-      <button id="btn-meo-post"    class="mat-btn primary"><span class="material-icons-outlined text-[14px]">cloud_upload</span>Post (lock period)</button>
-      <button id="btn-meo-rerun"   class="mat-btn"><span class="material-icons-outlined text-[14px]">refresh</span>Re-run with current treatment</button>
-    </div>
-    <div class="text-[11px] text-gray-500 mt-2">In production these buttons would gate Workday push (Stage 3) on Reviewed + Approved sign-offs by separate users (segregation of duties).</div>
+    ${actionsHtml}
   `;
-  $('btn-meo-review').onclick  = () => advanceMeoStatus('Reviewed');
-  $('btn-meo-approve').onclick = () => advanceMeoStatus('Approved');
-  $('btn-meo-post').onclick    = () => advanceMeoStatus('Posted');
-  $('btn-meo-rerun').onclick   = () => runAccounting();
+  // Wire up the right button set depending on whether period is posted.
+  if(isPosted){
+    $('btn-meo-unlock').onclick = () => advanceMeoStatus('Approved');
+    $('btn-meo-newrun').onclick = () => runAccounting();
+  } else {
+    if(!reviewDisabled)  $('btn-meo-review').onclick  = () => advanceMeoStatus('Reviewed');
+    if(!approveDisabled) $('btn-meo-approve').onclick = () => advanceMeoStatus('Approved');
+    if(!postDisabled)    $('btn-meo-post').onclick    = () => advanceMeoStatus('Posted');
+    $('btn-meo-rerun').onclick = () => runAccounting();
+  }
 }
 
 function advanceMeoStatus(next){
@@ -1538,7 +2011,7 @@ function advanceMeoStatus(next){
   }
   renderMonthEndPanel(currentInstrument());
   renderModificationHistory(currentInstrument(), M.summary);
-  toast('Run ' + next.toLowerCase());
+  toast(next === 'Posted' ? 'Period locked — Posted to GL' : ('Run ' + next.toLowerCase()));
 }
 
 // (B) Carrying Value Waterfall --------------------------------------------
@@ -1677,51 +2150,154 @@ function renderPoPVariance(inst, summary){
 }
 
 // (D) Fair Value Sensitivities (IFRS 13 §93) ------------------------------
+// Sensitivity set differs by Level:
+//   Level 1 — quoted price; only price-volatility ladder shown for context
+//   Level 2 — observable inputs; standard ±50/100 bps rate + ±50 bps spread shocks
+//   Level 3 — unobservable inputs; bigger ±150 bps shocks + key unobservable inputs disclosure
+const FV_LEVEL_CONFIG = {
+  'Level 1': {
+    headline: 'Quoted price in active market for identical asset (IFRS 13 §76)',
+    subtitle: 'No valuation sensitivities required — fair value is observable. Disclose price source + market depth.',
+    shocks: [
+      { lbl: '+10% market price shock',       bpsRate: 0,   priceShock:  0.10 },
+      { lbl: '−10% market price shock',       bpsRate: 0,   priceShock: -0.10 },
+      { lbl: '+25% market price shock (tail)', bpsRate: 0,  priceShock:  0.25 },
+      { lbl: '−25% market price shock (tail)', bpsRate: 0,  priceShock: -0.25 }
+    ],
+    inputsTable: [
+      ['Quoted price source',  'e.g. Bloomberg / TraceCompete'],
+      ['Bid-ask spread',       '<10 bps for active market'],
+      ['Market depth',          'Daily traded volume threshold']
+    ]
+  },
+  'Level 2': {
+    headline: 'Observable inputs other than quoted prices (IFRS 13 §81)',
+    subtitle: 'Inputs corroborated by market data. Standard rate + credit spread sensitivities.',
+    shocks: [
+      { lbl: '+100 bps parallel rate shift',     bpsRate:  100, spreadBps:    0 },
+      { lbl: '+50 bps parallel rate shift',      bpsRate:   50, spreadBps:    0 },
+      { lbl: '−50 bps parallel rate shift',      bpsRate:  -50, spreadBps:    0 },
+      { lbl: '−100 bps parallel rate shift',     bpsRate: -100, spreadBps:    0 },
+      { lbl: '+50 bps credit spread widening',   bpsRate:    0, spreadBps:   50 },
+      { lbl: '−50 bps credit spread tightening', bpsRate:    0, spreadBps:  -50 }
+    ],
+    inputsTable: [
+      ['Reference yield curve', 'SONIA / SOFR observable curve'],
+      ['Credit spread',         'Comparable peer-spread basket'],
+      ['FX rate',                'Spot + forward curve']
+    ]
+  },
+  'Level 3': {
+    headline: 'Unobservable inputs — Level 3 (IFRS 13 §86)',
+    subtitle: 'Valuation requires DCF / model-based pricing. IFRS 13 §93(d) requires sensitivity to each significant unobservable input.',
+    shocks: [
+      { lbl: '+150 bps parallel rate shift (stress)', bpsRate:  150, spreadBps:    0 },
+      { lbl: '−150 bps parallel rate shift (stress)', bpsRate: -150, spreadBps:    0 },
+      { lbl: '+100 bps credit spread widening',       bpsRate:    0, spreadBps:  100 },
+      { lbl: '−100 bps credit spread tightening',     bpsRate:    0, spreadBps: -100 },
+      { lbl: '+200 bps illiquidity premium add-on',   bpsRate:    0, spreadBps:  200 },
+      { lbl: '−5% recovery rate (LGD up 5%)',         bpsRate:    0, spreadBps:    0, recovery: -0.05 },
+      { lbl: '+5% recovery rate (LGD down 5%)',        bpsRate:    0, spreadBps:    0, recovery:  0.05 }
+    ],
+    inputsTable: [
+      ['Discount rate',          'PD-adjusted risk-free + spread + illiquidity premium'],
+      ['Probability of default',  inst => `${((inst?.ifrs?.pdAnnual||0)*100).toFixed(2)}% annual (currently)`],
+      ['Loss given default',      inst => `${((inst?.ifrs?.lgd||0)*100).toFixed(0)}% (currently)`],
+      ['Illiquidity premium',     'Estimated 100-300 bps for Level 3 private credit'],
+      ['Volatility of cashflows', 'Forward curve + scenario weighted']
+    ]
+  }
+};
+
 function renderFVSensitivities(inst, summary){
   const ccy = inst.currency || 'GBP';
   const cls = inst.ifrs?.ifrs9Classification || 'AmortisedCost';
-  if(cls === 'AmortisedCost'){
-    $('fv-sensitivities').innerHTML = `
-      <div class="text-[12px] text-gray-700">This deal is at <strong>Amortised Cost</strong>. IFRS 13 sensitivity disclosure is <em>not required on the balance sheet</em>, but the same approximation is shown here for the FV note disclosure (IFRS 7 §25).</div>
-      <div class="mt-2">${fvSensitivityTable(inst, summary, ccy)}</div>
-    `;
+  const fvLevel = inst.ifrs?.fairValueLevel || (cls === 'AmortisedCost' ? null : 'Level 2');
+  const onBalanceSheet = cls !== 'AmortisedCost';
+
+  // Header — different message based on classification + level
+  let banner;
+  if(!fvLevel){
+    banner = `<div class="bg-amber-50 border border-amber-200 rounded p-3 text-[12px]">
+      <strong>Fair Value Level not set.</strong> Set a level in the Treatment panel above (Level 1 / 2 / 3) to render sensitivities.
+      ${onBalanceSheet
+        ? ' Required for IFRS 13 §72 disclosure when carrying the asset at FV.'
+        : ' Recommended for IFRS 7 §25 disclosure note (FV-of-amortised-cost).'}
+    </div>`;
+    $('fv-sensitivities').innerHTML = banner;
     return;
   }
-  $('fv-sensitivities').innerHTML = `
-    <div class="text-[12px] mb-2">Held at <strong>${cls}</strong> (${inst.ifrs?.fairValueLevel || 'Level 2'}). Sensitivities below feed the IFRS 13 §93 disclosure note.</div>
-    ${fvSensitivityTable(inst, summary, ccy)}
-  `;
+
+  const config = FV_LEVEL_CONFIG[fvLevel];
+  banner = `<div class="bg-indigo-50 border border-indigo-200 rounded p-3 mb-3 text-[12px]">
+    <div class="font-semibold mb-1">${fvLevel} — ${config.headline}</div>
+    <div class="text-gray-700">${config.subtitle}</div>
+    <div class="text-[11px] text-gray-500 mt-1">
+      ${onBalanceSheet
+        ? 'Asset is on balance sheet at FV — sensitivities feed IFRS 13 §93 disclosure note.'
+        : 'Asset is at amortised cost — same approximation feeds IFRS 7 §25 FV note disclosure.'}
+    </div>
+  </div>`;
+
+  $('fv-sensitivities').innerHTML = banner + fvSensitivityTable(inst, summary, ccy, fvLevel) + fvKeyInputsTable(inst, fvLevel);
 }
-function fvSensitivityTable(inst, summary, ccy){
-  // Approximate duration from average life of cashflows (in years).
+
+function fvSensitivityTable(inst, summary, ccy, fvLevel){
+  const config = FV_LEVEL_CONFIG[fvLevel];
+  // Linear modified-duration approximation — fine for Level 1/2.
+  // For Level 3 we'd swap in a full DCF; the placeholder still shows magnitude.
   const startMs = new Date(inst.settlementDate).getTime();
   const endMs   = new Date(inst.maturityDate).getTime();
   const lifeYears = Math.max(0.25, (endMs - startMs) / (365.25 * 86400 * 1000));
-  // Modified duration heuristic for a roughly bullet loan with periodic interest:
-  // For a coupon bond with WAL ≈ life/2, modified duration ≈ life * 0.6.
   const modDuration = lifeYears * 0.6;
   const carrying = summary.closingCarrying || summary.closingBalance || 0;
-  const sens = (bps) => -modDuration * (bps/10000) * carrying;
-  const spreadSens = (bps) => -modDuration * (bps/10000) * carrying * 1.0;
-  const rows = [
-    { lbl: '+100 bps parallel rate shift',  val: sens(100)  },
-    { lbl: '+50 bps parallel rate shift',   val: sens(50)   },
-    { lbl: '−50 bps parallel rate shift',   val: sens(-50)  },
-    { lbl: '−100 bps parallel rate shift',  val: sens(-100) },
-    { lbl: '+50 bps credit spread widening', val: spreadSens(50) },
-    { lbl: '−50 bps credit spread tightening', val: spreadSens(-50) }
-  ];
+
+  const computeShock = (s) => {
+    if(s.priceShock != null)  return carrying * s.priceShock;
+    const rate   = -modDuration * (s.bpsRate    / 10000) * carrying;
+    const spread = -modDuration * (s.spreadBps  / 10000) * carrying;
+    const recov  = (s.recovery || 0) * carrying;
+    return rate + spread + recov;
+  };
+
   const fmt = v => (v < 0 ? '−' : '+') + fmtMoney(Math.abs(v), ccy);
+  const rows = config.shocks.map(s => {
+    const v = computeShock(s);
+    return `<tr>
+      <td class="left">${s.lbl}</td>
+      <td>${fmt(v)}</td>
+      <td>${carrying ? fmtPct(v/carrying, 4) : '—'}</td>
+    </tr>`;
+  }).join('');
+
   return `
     <table class="data" style="width:100%">
       <thead><tr><th class="left">Scenario</th><th>ΔFV (${ccy})</th><th>ΔFV % of carrying</th></tr></thead>
-      <tbody>${rows.map(r => `<tr>
-        <td class="left">${r.lbl}</td>
-        <td>${fmt(r.val)}</td>
-        <td>${carrying ? fmtPct(r.val/carrying, 4) : '—'}</td>
-      </tr>`).join('')}</tbody>
+      <tbody>${rows}</tbody>
     </table>
-    <div class="text-[11px] text-gray-500 mt-2">Linear duration approximation: ΔFV ≈ −Modified Duration × Δyield × Carrying. Modified duration ≈ ${modDuration.toFixed(2)}y based on ${lifeYears.toFixed(1)}y life. For Level 3, replace with a full DCF + Monte Carlo once the calibration model is wired.</div>
+    <div class="text-[11px] text-gray-500 mt-2">
+      Modified duration ≈ ${modDuration.toFixed(2)}y based on ${lifeYears.toFixed(1)}y life · carrying ${fmtMoney(carrying, ccy)}.
+      ${fvLevel === 'Level 3'
+        ? 'Replace with full DCF + Monte Carlo once the calibration model is wired. Recovery shocks shown as direct gross-up.'
+        : 'Linear approximation: ΔFV ≈ −Modified Duration × Δyield × Carrying.'}
+    </div>
+  `;
+}
+
+function fvKeyInputsTable(inst, fvLevel){
+  const config = FV_LEVEL_CONFIG[fvLevel];
+  if(!config.inputsTable || !config.inputsTable.length) return '';
+  const heading = fvLevel === 'Level 3' ? 'Significant unobservable inputs (IFRS 13 §93(d))' : 'Key inputs disclosure';
+  const rows = config.inputsTable.map(([k, v]) => `<tr>
+    <td class="left">${k}</td>
+    <td class="left">${typeof v === 'function' ? v(inst) : v}</td>
+  </tr>`).join('');
+  return `
+    <div class="text-[12px] font-semibold mt-3 mb-1">${heading}</div>
+    <table class="data" style="width:100%">
+      <thead><tr><th class="left">Input</th><th class="left">Source / Current Value</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
   `;
 }
 
@@ -1996,6 +2572,7 @@ function synthesiseWorkdayActuals(){
 // ============================================================
 function runReconciliation(){
   if(!M.workdayActuals){ toast('Load Workday actuals first'); return; }
+  if(!M.acctJournals || !M.acctJournals.length){ toast('No PCS journals to reconcile — run accounting in Stage 2'); return; }
   const ccy = currentInstrument().currency || 'GBP';
   const tolerance = 1.00;       // £1 tolerance
   const breakPct = 0.5 / 100;   // 0.5% break threshold
@@ -2194,12 +2771,21 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // Modification Policy
     'opt-mod-threshold','opt-mod-reir','opt-mod-default','opt-continuing',
     // Tax & Other
-    'opt-wht-rate','opt-wht-recoverable','opt-deferred-tax','opt-fx-cadence'
+    'opt-wht-rate','opt-wht-recoverable','opt-deferred-tax','opt-fx-cadence',
+    // PIK contractual override
+    'opt-pik-enabled','opt-pik-rate','opt-pik-freq'
   ];
   TREATMENT_IDS.forEach(id => $(id)?.addEventListener('change', onTreatmentChange));
-  ['opt-pd','opt-lgd','opt-ccf','opt-dpd-stage2','opt-dpd-stage3','opt-macro-weight','opt-mod-threshold','opt-wht-rate']
+  ['opt-pd','opt-lgd','opt-ccf','opt-dpd-stage2','opt-dpd-stage3','opt-macro-weight','opt-mod-threshold','opt-wht-rate','opt-pik-rate']
     .forEach(id => $(id)?.addEventListener('input', onTreatmentChange));
   $('btn-treatment-reset')?.addEventListener('click', resetTreatmentToDefaults);
+  $('btn-mod-add-nonsub')?.addEventListener('click', addNonSubstantialMod);
+  $('btn-mod-add-sub')?.addEventListener('click', addSubstantialMod);
+  $('btn-mod-clear')?.addEventListener('click', clearMods);
+  // Daily schedule view
+  $('schedule-filter')?.addEventListener('change', renderScheduleTable);
+  $('btn-schedule-csv')?.addEventListener('click', downloadScheduleCSV);
+  $('btn-schedule-json')?.addEventListener('click', downloadScheduleJSON);
   // Stage 1
   $('btn-portf-load').onclick = ()=> openJsonModal({
     title: 'Load PortF Cashflow Payload',

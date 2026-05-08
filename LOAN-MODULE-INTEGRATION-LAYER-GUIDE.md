@@ -1,8 +1,31 @@
 # Loan Module Integration Layer — User Guide
 
-**Version:** 2026-05-08
+**Version:** 2026-05-08 (revised)
 **File:** `loan-module-integration-layer.html`
 **Audience:** PCS / Investran operators, Finance Ops users on the PortF deal team, internal audit, and reviewers from PwC and Workday teams
+
+---
+
+## What's new in this revision
+
+This revision adds live treatment-driven recalculation, a daily-schedule view, contractual override editors, and a corrected month-end close workflow. Highlights:
+
+- **Stage 2 now rebuilds the engine schedule on every Run Accounting** — every treatment or contractual change (PIK, mod events, ECL stage, FV level, fee policy) flows immediately into the journals, KPIs, and Daily Schedule view.
+- **New Daily Schedule panel** in Stage 2 shows the engine's per-day output (balance, draw, paydown, rate, interest, PIK, fees, EIR accretion, ECL change, mod gain, FX, hedge P&L). Filterable to "events only", "all days", or "month-end days only". Downloadable as 47-column CSV or as a JSON envelope.
+- **Inline modification-events editor** under the Modification Policy section — every cell (date, type, gain/loss, reason) is inline-editable. Buttons inject sample non-substantial / substantial events at mid-life of the deal.
+- **Inline PIK editor** (enabled / rate / capitalisation frequency) — overrides the contractual PIK on the active deal. The engine immediately re-computes daily PIK accruals + capitalisation events.
+- **Fair Value capability card now lives** — it always reflects the FV Level you choose (Level 1 / 2 / 3), even on amortised-cost deals where FV is a notes-only disclosure (IFRS 7 §25). Lights amber when overridden.
+- **FV Sensitivities panel** branches on Level: Level 1 shows price-volatility shocks and disclosure of price source; Level 2 shows ±50 / ±100 bps rate + ±50 bps spread; Level 3 shows stress shocks (±150 bps), illiquidity premium, recovery rate, plus a "significant unobservable inputs" table (IFRS 13 §93(d)).
+- **Carrying Value Waterfall** corrected: anchors on opening **carrying value** (not principal balance), itemises deferred IFRS 15 fees at recognition, OID amortisation, modification gain/loss, hedge P&L, FX. ECL is now a memo disclosure block below the waterfall (gross → less ECL → net), reflecting IFRS 9 §5.5 contra-asset presentation.
+- **CSV downloads sanitised** — en-dash, em-dash, middle-dot, section-symbol replaced with ASCII; currency symbols swapped for 3-letter codes; UTF-8 BOM prepended; money fields rounded to 2 dp.
+- **Month-End workflow "Posted" is terminal** — all four chips turn green, action buttons are replaced with **Unlock period** and **Start new versioned run**.
+- **EIR computation fixed** for SONIA / SOFR / RFR-driven deals (Libra 2/3, Volt) and for multi-tranche / multi-underlying wrappers (Suffolk Solar, Volt Multi-Loan). EIR previously displayed 0% for these; now displays a face-weighted aggregate plus a breakdown ("SONIA 4.7500% + margin 4.5000% = 9.2500%").
+- **Stage 1 PortF Excel ingestion** now merges engine-computed rate / interest / fee values into the parser's rows on a per-row basis (the Excel template doesn't carry these columns). Previously skipped entirely if any row had a non-zero value; now fills only the missing-or-zero fields and respects explicit Excel values.
+- **Daily-cell sync** — when a PortF Excel maps to a different deal than the dropdown, Run Accounting auto-synces the dropdown, snapshots defaults, and reloads the Treatment panel so the controls reflect the resolved deal.
+- **Reset to defaults** now also restores `modificationEvents` and `pik` (not just `ifrs` / `fees`). Snapshot taken on first deal access; dirty-check covers the full set so the "treatment overridden" chip is accurate.
+- **Investran chart updated** — `NewReport (4).xlsx` brought in dedicated transaction types per fee category (Arrangement / Commitment / Guarantee / Management / Dividend Equity), default interest income, default fee income, and non-use fee income. Previously 9 gap categories; now only one optional gap remains (`Non-use fee receivable` transtype on the Northwind revolver).
+
+The remainder of the guide is unchanged in structure — the sections below have been updated where relevant.
 
 ---
 
@@ -138,6 +161,10 @@ The PortF Summary panel populates with:
 
 A green chip "Loaded · 2,559 days · £25,000,000 facility" appears in the status bar. The Stage 2 **Run Accounting** button enables.
 
+**PortF Excel merge behaviour** — the canonical PortF Excel template doesn't carry rate / interest / fee / PIK columns; it only has Date, Initial Purchase, Drawdown, Principal Payment, Day Count, and Amount (Balance). On import, the parser writes those rows and then merges in the engine's daily values (rate, dailyInterest, dailyFees, dailyPik, capitalised) on a per-row basis — only filling missing-or-zero fields, never overwriting any explicit values the Excel does provide. So when PortF starts populating richer columns in future, those values take precedence and the merge becomes a no-op.
+
+**Auto-sync to the resolved deal** — if the Excel maps to a different deal than the active-deal dropdown selection (e.g. you load `Volt - Guarantee` while Libra 2 is selected in the dropdown), Stage 2's Run Accounting auto-syncs the dropdown, snapshots the new deal's defaults for the Reset button, and reloads the Treatment panel so the 24+ controls reflect the resolved deal. You'll see the dropdown flip from "Libra 2" to "Volt" without intervention.
+
 ### 4.5 Working example — Libra 2
 
 Click **Use Active Deal as Sample** while Libra 2 is selected. You should see:
@@ -194,13 +221,13 @@ When you click **Run Accounting**, the engine runs through, in this order:
 
 ### 5.3 The editable Accounting Treatment panel
 
-The panel groups 24 controls into four sections so you can change policy and re-run without touching code.
+The panel groups controls into seven sections covering both accounting policy and contractual overrides. Every control change auto-triggers an engine re-run if PortF data is loaded — the journals, KPIs, Daily Schedule, capability cards, and Evidence Pack panels all refresh in place. The "Reset to defaults" button reverts every control plus any injected modification events plus PIK overrides back to the deal's original record.
 
 #### A. Core Classification
 - IFRS 9 Classification (AmortisedCost / FVOCI / FVTPL)
 - SPPI test (passes / fails — fails forces FVTPL)
 - Business model (HoldToCollect / HoldToCollectAndSell / Other)
-- Fair Value Level (1 / 2 / 3)
+- **Fair Value Level (1 / 2 / 3)** — applies to both balance-sheet FV (FVTPL/FVOCI per IFRS 13 §72) and disclosure-only FV on amortised-cost holdings (per IFRS 7 §25). The FV display in Stage 2 and the FV capability card both honour the chosen Level
 - ECL Stage (1 / 2 / 3 / POCI)
 
 #### B. Credit Risk & ECL Detail (IFRS 9 §5.5)
@@ -219,6 +246,33 @@ The panel groups 24 controls into four sections so you can change policy and re-
 - Default treatment (Auto / Always-Substantial / Always-Non-Substantial)
 - Continuing involvement (for partial derecognition)
 
+#### C-bis. Modification Events (inline editor) — NEW
+
+Below the policy controls is an event-list editor. The deal's existing modification events appear as table rows; every cell is inline editable:
+
+| Cell | Editor type | Effect |
+|---|---|---|
+| Date | `<input type="date">` bounded by settle → maturity | Engine pinpoints the modification day |
+| Type | Dropdown | Substantial = derecognise + re-EIR; non-substantial = adjust carrying value, post P&L |
+| Gain / (Loss) | Number with currency prefix | Posts to 442000 Modification G/L (CR if positive, DR if negative) |
+| Reason | Free text | Carries through to JE comments + PortF feedback payload |
+
+Three action buttons:
+- **+ Non-substantial mod** injects a sample event at 1/3 of deal life with a £10k gain and reason "Covenant amendment — leverage step-up"
+- **+ Substantial mod** injects a derecognition loss equal to −1.25% of notional with the spread bumped +75bps from the modification date forward (changes EIR going forward)
+- **Clear** removes all events
+
+When the editor is non-empty the "Modifications: gain/loss, new EIR, derecognition" capability card lights green; the Modification History panel in the Evidence Pack logs the run as treatment-dirty.
+
+#### C-tris. PIK Interest (contractual override) — NEW
+
+Three controls under the modification editor let you override the deal's PIK terms inline:
+- **PIK enabled** — Yes / No
+- **PIK rate (annual)** — decimal (e.g. `0.03` = 3%)
+- **Capitalisation frequency** — Monthly / Quarterly / Semi-annual / Annual
+
+Strictly this is contractual data (it lives on `instrument.pik`, not in the IFRS block), but the inline editor is convenient for testing scenarios. A live chip next to the heading shows the current state ("disabled" or "enabled · 3.00% · Quarterly"). When enabled, the engine accrues daily PIK on the drawn balance and posts capitalisation events to **141000 Investments at Cost** as `Investment accretion - PIK interest` on each period boundary. The KPIs strip's "Total PIK (life)" updates immediately.
+
 #### D. Tax & Other Policy
 - Withholding tax rate
 - WHT recoverability (Recoverable / Not recoverable)
@@ -228,7 +282,15 @@ The panel groups 24 controls into four sections so you can change policy and re-
 #### E. Per-fee IFRS 15 treatment
 For each fee in the deal, choose over-time / point-in-time / EIR-included. The engine re-routes each fee's recognition pattern accordingly.
 
-After any change, click **Re-run with current treatment** to see the impact. The capability grid amber-highlights the cards affected by the override, and the Modification History panel logs the run with a treatment-overridden flag.
+#### Behaviour after a change
+
+Every control change auto-runs the engine when PortF data is loaded:
+1. `M.schedule = buildSchedule(inst)` rebuilds the daily grid with the new policy
+2. `M.summary = summarize(...)` aggregates the period totals
+3. `M.acctJournals = generateDIU(...)` regenerates the JE rows
+4. The Daily Schedule view, KPIs, capability grid, journal table, and Evidence Pack all re-render
+5. Stage 3-5 are invalidated (Workday batch cleared, recon cleared) because the journals changed
+6. The Modification History audit-trail entry for the new run is flagged "override" if the controls differ from the deal defaults
 
 ### 5.4 The 18 journal rows for Libra 2
 
@@ -257,28 +319,96 @@ Running accounting on Libra 2 produces 18 journal rows (period-end summarisation
 
 Total DR = Total CR = £39.41m. The balance check passes; the green "balanced" chip lights up.
 
+### 5.4-bis Daily Schedule view — NEW
+
+Between the journal table and the Evidence Pack is a collapsible "Daily Schedule" panel that surfaces the engine's per-day output. It re-renders on every Run Accounting (i.e. on every treatment change) so it always reflects current state.
+
+**Header strip:**
+- A row-count chip — e.g. "631 of 2,559 rows · showing first 500"
+- A filter dropdown:
+  - **Material events only** (default) — drawdowns, repayments, capitalisations, fees, PIK, ECL movements, modification events
+  - **All days** — every day from settlement → maturity
+  - **Month-end days only** — useful for monthly accrual review
+- **Download Full CSV** — exports all 47 engine columns
+- **JSON** — exports `{deal, runMeta, summary, schedule}` envelope
+
+**Preview table** (max 500 rows) shows 17 columns: Date · Balance · Drawn · Draw · Repay · Rate · Daily Interest · Daily PIK · PIK Capit. · Daily Fees · EIR Accret. · Carrying · ECL Alw. · ECL Δ · Mod G/L · FX · Hedge P&L. Material event rows highlight in blue; zero values render as `—` for readability.
+
+**The 47-column CSV export** contains every field the engine produces:
+
+```
+date, balance, drawnBalance, carryingValue, draw, paydown,
+couponRate, floatingRate, currentRate,
+dailyCash, cumInterestAccrued, cumInterestEarned,
+capitalized, interestAdjustments, cashInterestPayment,
+pikRate, dailyPik, cumPikAccrued, cumPikEarned, pikInterestAdjustments, pikPaydown,
+amortDaily, cumAmort,
+nonUseFee, cumNonUseFee,
+dailyFees,
+dailyEIRAccretion, cumEIRAccretion,
+dailyDefaultInterest, dailyDefaultFee, cumDefaultInterest, cumDefaultFee,
+dailyECLChange, eclAllowance, cumECLChange,
+dailyModGain, modEventDescription, cumModGain,
+fxRate, dailyFXGain, cumFXGain, balanceFC,
+dailyHedgeOCI, dailyHedgePL, dailyHedgeReclass,
+cashFlowHedgeReserve, cumHedgeOCI, cumHedgePL, cumHedgeReclass, hedgeEffectiveness,
+hasEvent
+```
+
+The CSV uses the same sanitiser pipeline as the DIU CSV (en-dash → hyphen, section symbol stripped, currency symbol → 3-letter code, money fields rounded to 2 dp, UTF-8 BOM prepended), so it opens cleanly in Excel.
+
 ### 5.5 The 6 Accounting Evidence Pack panels
 
 Below the journal table, six collapsible panels cover the NWF accounting agenda end-to-end:
 
 #### A. Month-End Close + Run Metadata
-A run identifier (e.g. `PCS-20260508-LIBRA2-9b3f2a1c`), version number, effective date, run timestamp, user, current period dates, and a status workflow chip: **Draft → Reviewed → Approved → Posted**. Buttons let a reviewer sign off, an approver approve, and an operator post (locking the period). In production, Stage 3 push to Workday would gate on Reviewed + Approved, with separate users for segregation of duties. A coloured chip flags whether the run used the deal's default policy or an override.
+A run identifier (e.g. `PCS-20260508-LIBRA2-9b3f2a1c`), version number, effective date, run timestamp, user, current period dates, and a status workflow chip: **Draft → Reviewed → Approved → Posted**. The four-step gate enforces sequential progression — the Reviewer button is enabled only at Draft, Approve only at Reviewed, Post only at Approved. In production each step requires a different user (segregation of duties), and Stage 3 push to Workday would gate on Reviewed + Approved.
 
-#### B. Carrying Value Waterfall (IAS 1 §54)
-The opening carrying value rolls through every IFRS 9 movement to the closing carrying value:
+When the period reaches **Posted**, the panel switches into a locked-period view: all four chips turn green with check icons, the action buttons are replaced with **Unlock period** (reverts to Approved) and **Start new versioned run**, and a green "Period Locked — Posted to GL" banner appears. Re-runs always remain available — they create a new versioned Draft entry in the audit history.
+
+A coloured chip flags whether the run used the deal's default policy or an override (any change to the IFRS block, fee treatments, PIK, or modification events triggers the override flag).
+
+#### B. Carrying Value Waterfall (IAS 1 §54) — corrected anchor
+
+The waterfall anchors on **opening carrying value** (not opening principal balance). For deals with upfront IFRS 15 EIR-included fees, day-1 carrying value is *negative* — the fee is held as a contra to the asset and accreted into income over life via `dailyEIRAccretion`. The waterfall now itemises this via a "Deferred fees at recognition" line.
+
+For Libra 2 (drawn at par, no upfront EIR fee):
 
 ```
-Opening carrying value           £0
-+ Drawdowns                      £25,000,000
-− Repayments                     (£25,000,000)
-+ EIR Accretion (IFRS 9 §B5.4)   £0  (drawn at par)
-+ PIK Capitalised                £0
-+ FX Revaluation                 £0  (single-currency deal)
-− ECL Allowance (IFRS 9 §5.5)    (£42,500)
-= Closing carrying value         (£42,500)
+Opening principal balance              £0
+− Deferred fees at recognition (IFRS 9 EIR)   £0
+= Opening carrying value (gross)       £0
++ Drawdowns                            £25,000,000
+− Repayments                           (£25,000,000)
++ EIR Accretion (IFRS 9 §B5.4)         £0  (drawn at par)
++ Discount / OID amortisation          £0
++ PIK Capitalised                      £0
++ Modification gain / loss             £0
++ Hedge P&L                            £0
++ FX Revaluation                       £0
+= Closing carrying value (gross)       £0
+
+Memo — ECL Allowance Disclosure (IFRS 9 §5.5)
+  Closing carrying value (gross): £0
+  Less: ECL allowance:            (£42,500)
+  Net carrying value:             (£42,500)
 ```
 
-A tie-out check confirms the waterfall sums to the closing carrying value on the schedule. If they don't tie within £1, an amber chip flags the unexplained delta for investigation.
+For Volt (£1.92m of upfront arrangement fee deferred at signing):
+
+```
+Opening principal balance              £0
+− Deferred fees at recognition (IFRS 9 EIR)   (£1,919,562)
+= Opening carrying value (gross)       (£1,919,562)
++ Drawdowns                            £800,000,000
+− Repayments                           (£755,555,555)
++ EIR Accretion (IFRS 9 §B5.4)         £1,920,438
+= Closing carrying value (gross)       £44,444,883
+```
+
+**ECL is now a memo block, not a movement** — under IFRS 9 §5.5 the allowance is presented as a separate contra-asset, so the waterfall ties to gross carrying. The memo block shows gross → less ECL → net for the disclosure note.
+
+A tie-out chip is green when the waterfall sums to closing carrying value within £1; amber when there's a rounding residual (typical on multi-thousand-day daily schedules — under £500 on Volt's 4,383 days is acceptable).
 
 #### C. Period-on-Period Variance Walk (PoP)
 Decomposes ΔInterest between two halves of the schedule into Rate × Balance × Days × Modification × Cross/mix residual. Useful when leadership asks "why did interest income jump £400k between Q3 and Q4?" — the panel attributes the change to specific drivers.
@@ -290,10 +420,29 @@ For Libra 2, the panel splits the schedule mid-life and computes:
 - Modification effect ≈ Σ daily mod gain in B − Σ in A
 - Residual = total ΔInterest minus the sum of the named effects
 
-#### D. Fair Value Sensitivities (IFRS 13 §93)
-For FVOCI / FVTPL deals, computes ΔFV under ±50 / ±100 bps parallel rate shifts and ±50 bps credit spread shifts using a linear modified-duration approximation. The panel uses Modified Duration ≈ life × 0.6 as a heuristic suitable for bullet-style loans; for Level-3 instruments the calibration model would replace this with a full Monte Carlo.
+#### C. Period-on-Period Variance Walk (PoP)
+Decomposes ΔInterest between two halves of the schedule into Rate × Balance × Days × Modification × Cross/mix residual. Useful when leadership asks "why did interest income jump £400k between Q3 and Q4?" — the panel attributes the change to specific drivers.
 
-For amortised-cost deals (most NWF positions) the panel still shows the disclosure-only sensitivity because IFRS 7 §25 requires it in the notes.
+For Libra 2, the panel splits the schedule mid-life and computes:
+- Rate effect ≈ (rate_B − rate_A) × bal_A × days_A / 365
+- Balance effect ≈ rate_A × (bal_B − bal_A) × days_A / 365
+- Day-count effect ≈ rate_A × bal_A × (days_B − days_A) / 365
+- Modification effect ≈ Σ daily mod gain in B − Σ in A
+- Residual = total ΔInterest minus the sum of the named effects
+
+#### D. Fair Value Sensitivities (IFRS 13 §93) — branches by Level
+
+The sensitivity set displayed depends on the FV Level chosen in the Treatment panel. If no Level is set, an amber alert prompts you to set one (with the right citation: IFRS 13 §72 if on balance sheet, IFRS 7 §25 for amortised-cost disclosure).
+
+| Level | Sensitivities shown | Inputs disclosure |
+|---|---|---|
+| **Level 1** — quoted price | ±10% / ±25% market price shocks (no rate/spread sensitivity needed; price is observable) | Quoted price source · bid-ask spread · market depth |
+| **Level 2** — observable inputs | ±50 / ±100 bps parallel rate shifts + ±50 bps credit spread | Reference yield curve · credit spread (peer basket) · FX rate |
+| **Level 3** — unobservable inputs | ±150 bps stress rate shifts, ±100 bps spread, ±200 bps illiquidity premium, ±5% recovery rate | **Significant unobservable inputs (IFRS 13 §93(d))** — discount rate, PD (live from instrument), LGD (live), illiquidity premium, cashflow volatility |
+
+Methodology — linear modified-duration approximation: ΔFV ≈ −Modified Duration × Δyield × Carrying. Modified Duration ≈ life × 0.6 as a heuristic for bullet-style loans. For Level 3, the placeholder still computes magnitude correctly; in production you'd swap in a full DCF + Monte Carlo using the unobservable inputs surfaced in the disclosure table.
+
+For amortised-cost deals (most NWF positions) the panel still shows the disclosure-only sensitivity because IFRS 7 §25 requires it in the notes — the same Level you pick drives both balance-sheet measurement (where applicable) and the disclosure note.
 
 #### E. IFRS 9 ECL Journal Templates
 Six template entries showing the canonical DR/CR pattern for:
@@ -358,6 +507,12 @@ Before issuing a batch ID, the layer sums DR vs CR across all rows. If they bala
 - **Download CSV** (operator path) — dumps a 24-column CSV matching the Investran DIU spreadsheet template (`legalEntity`, `leid`, `batchId`, `jeIndex`, `txIndex`, `glDate`, `effectiveDate`, `deal`, `position`, `incomeSecurity`, `transactionType`, `account`, `allocationRule`, `batchType`, `batchComments`, `transactionComments`, `originalAmount`, `amountLE`, `fx`, `amountLocal`, `isDebit`, `leDomain`, `glAccountName`, `glTransType`).
 
 You can also click **DIU Template (blank)** in Stage 2 to download an empty 24-column DIU template for any other use.
+
+**CSV sanitisation** (applies to both DIU CSVs and the Daily Schedule CSV)
+- Typographic Unicode is replaced with portable ASCII so legacy Excel and downstream ETL tools read the file cleanly: en-dash `–` / em-dash `—` → `-`, middle-dot `·` → `-`, section symbol `§` → stripped, curly quotes → straight, ellipsis `…` → `...`, non-breaking spaces → spaces.
+- Currency symbols are swapped for 3-letter codes — `£` → `GBP `, `€` → `EUR `, `¥` → `JPY `.
+- Money fields (`amountLE`, `amountLocal`, `originalAmount`) are rounded to 2 decimal places. The `fx` ratio keeps full precision.
+- A UTF-8 BOM is prepended so Windows Excel opens the file with the correct encoding by default.
 
 ### 6.5 Working example — Libra 2
 
@@ -599,7 +754,16 @@ A: The Month-End Close panel in Stage 2 has a Draft → Reviewed → Approved �
 A: Add a new control to the editable treatment panel HTML, wire it into `applyTreatmentFromForm()` to write to `inst.ifrs.<newField>`, and update `loan-module-engine.js` so the engine reads `<newField>` in the relevant treatment block. The capability grid card in Stage 2 should be updated to surface whether the new policy is active for the loaded deal.
 
 **Q: Why does the carrying value waterfall sometimes show an amber Δ?**
-A: The waterfall sums opening + drawdowns − repayments + EIR + PIK + FX − ECL. If the schedule's closing carrying value differs by more than £1, that signals one of: (i) an additional movement the waterfall doesn't yet itemise (e.g. modification accounting gain), (ii) a rounding accumulation across thousands of daily rows, or (iii) a bug. Investigate by checking the schedule for unexpected events.
+A: The waterfall sums opening carrying + drawdowns − repayments + EIR + OID amort + PIK + modification + hedge P&L + FX. ECL is presented as a memo (contra-asset disclosure), not a movement. The amber chip appears when the calculated total differs from `closingCarrying` by more than £1 — typical residual on multi-thousand-day schedules is sub-£500 from accumulated rounding. Larger residuals signal either (i) a missing movement category not itemised, (ii) a bug in the engine, or (iii) a modification event that the engine logged but the waterfall hasn't yet matched.
+
+**Q: Total Interest (life) is £0 on Volt — is that wrong?**
+A: No, that's correct. Volt is a financial guarantee — NWF is the guarantor, not the lender. The borrower pays loan interest to Bank of America (the underlying lender), not to NWF. NWF's only income from this deal is the **guarantee fee** (£26.48m over the deal life), recognised over time under IFRS 15 and posted to 492300. A guarantee is a contingent obligation, not a financial asset that earns coupon interest, so "Total Interest (life) = £0" is the correct accounting answer for any guarantee instrument (Volt, Volt Multi-Loan).
+
+**Q: I changed PIK / a treatment field but the JEs and KPIs didn't update.**
+A: This was a bug in earlier revisions. As of this revision, every Run Accounting click — and every auto-rerun triggered by changing a Treatment-panel control — rebuilds `M.schedule` and `M.summary` from the current instrument state at the top of the function, before generating journals. Make sure you've refreshed the page since the fix shipped. If you're still seeing stale numbers, check the browser console for errors — and confirm you've loaded PortF data in Stage 1 (the **Run Accounting** button should be enabled with a "Loaded · N days" chip in Stage 1).
+
+**Q: Why is the EIR showing 9.25% on Libra 2 when the spread is 0% in the deal record?**
+A: For SONIA / SOFR / RFR-driven deals, the spread isn't on `coupon.spread` — it's in `marginSchedule[].marginBps`. The base rate is in `rfr.baseRate`. The new `computeEIR` reads both: `rfr.baseRate (4.75%) + margin from marginSchedule (4.50%) = 9.25%`. The breakdown appears in the EIR note line. For multi-tranche deals (Suffolk Solar) and multi-underlying guarantees (Volt Multi-Loan), the function recurses into the children and returns a face-weighted aggregate.
 
 ---
 
@@ -608,16 +772,17 @@ A: The waterfall sums opening + drawdowns − repayments + EIR + PIK + FX − EC
 | File | Role |
 |---|---|
 | `loan-module-integration-layer.html` | The integration layer UI (this guide's subject) |
-| `loan-module-engine.js` | Shared engine — `buildSchedule`, `summarize`, `generateDIU`, `INVESTRAN_GL`, `applyInvestranGLMapping`, `computeEIR` |
+| `loan-module-engine.js` | Shared engine — `buildSchedule`, `summarize`, `generateDIU`, `INVESTRAN_GL`, `applyInvestranGLMapping`, `computeEIR` (with RFR + multi-tranche aggregation) |
 | `loan-module-instruments.js` | 13 seed instruments shared with the original Loan Module |
 | `income-calculator.html` | Original Loan Module — preserved as the full-featured calculator |
 | `INTEGRATION-LAYER-README.md` | Concise architecture overview (the architect's view) |
 | `LOAN-MODULE-INTEGRATION-LAYER-GUIDE.md` | This user guide (the operator's view) |
-| `gl-account-gaps.md` | Investran GL gap inventory + closure status |
-| `investran-gl-chart-NewReport4.md` | Snapshot of the current Investran chart of accounts |
+| `gl-account-gaps.md` | Investran GL gap inventory + closure status (post-NewReport(4)) |
+| `investran-gl-chart-NewReport4.md` | Readable snapshot of the current Investran chart (67 GL accounts, 266 active transtypes) |
 | `legal-entities-deals-securities.xlsx` | Master register of LEs, deals, positions, securities |
 | `portf-cashflow-sample.xlsx` | Sample PortF Excel format (downloadable from Stage 1) |
 | `USER-GUIDE-2026-05-07.md` | Original Loan Module user guide |
+| Generated downloads | `investran-diu-template-blank.csv`, `investran-diu-{deal-id}-{date}.csv`, `workday-diu-{deal-id}-{date}.csv`, `schedule-{deal-id}-{date}.csv`, `schedule-{deal-id}-{date}.json`, `portf-feedback-{deal-id}-{date}.json` (all sanitised + UTF-8 BOM) |
 
 ---
 
@@ -641,6 +806,11 @@ A: The waterfall sums opening + drawdowns − repayments + EIR + PIK + FX − EC
 | **SPPI** | Solely Payments of Principal and Interest. The IFRS 9 §4.1.2 cashflow test. |
 | **NWF** | National Wealth Fund. The user organisation. |
 | **NWFE** | NWF Renewable Equity (one of the LEs in the seed dataset). |
+| **RFR** | Risk-Free Rate. The reference rate (SONIA, SOFR, ESTR, EURIBOR, FED, TONA) read from `rfr.baseRate`. |
+| **PIK** | Payment in Kind. Interest that capitalises into the loan balance instead of paying in cash. The Treatment panel's PIK editor lets you toggle and parameterise it inline. |
+| **Modification event** | A change to deal terms during life. Tracked in `instrument.modificationEvents[]`; the Treatment panel exposes an inline editor + sample injectors. |
+| **Per-row Excel merge** | Stage 1 enrichment that fills missing rate / interest / fee / PIK fields from the engine when the PortF Excel template doesn't supply them. Per-row, never overwrites explicit values. |
+| **Carrying value waterfall (gross)** | The IAS 1 §54 movement reconciliation from opening to closing carrying value, presented gross of ECL allowance per IFRS 9 §5.5. ECL appears as a memo disclosure block below. |
 
 ---
 

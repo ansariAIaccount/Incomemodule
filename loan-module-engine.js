@@ -106,8 +106,65 @@ function solveYield(targetNPV, cashflows){
      note            - human-readable explanation.
    All yields are decimals (0.12 = 12%).
 -------------------------------------------------------------- */
+// Face-weighted aggregate EIR across tranches[] / underlyingLoans[].
+// Returns null if no children resolved a non-zero coupon — caller handles fallback.
+function aggregateChildEIRs(childResults, childRecords, kind){
+  if(!childResults.length) return null;
+  let totalFace = 0, weightedCoupon = 0, weightedYield = 0, withYield = 0;
+  for(let i = 0; i < childResults.length; i++){
+    const r = childResults[i];
+    const f = (childRecords[i] && childRecords[i].faceValue) || 0;
+    if(f <= 0) continue;
+    totalFace += f;
+    weightedCoupon += (r.couponRate || 0) * f;
+    if(r.effectiveYield != null){
+      weightedYield += r.effectiveYield * f;
+      withYield += f;
+    }
+  }
+  if(totalFace <= 0) return null;
+  const couponRate = weightedCoupon / totalFace;
+  const effectiveYield = withYield > 0 ? weightedYield / withYield : null;
+  return {
+    method: 'aggregated',
+    couponRate,
+    annualCoupon: totalFace * couponRate,
+    effectiveYield,
+    impliedYTM: null,
+    cashYield: null,
+    totalReturn: null,
+    yearsToMat: childResults[0].yearsToMat,
+    dayBasis: childResults[0].dayBasis,
+    source: 'children',
+    note: `Face-weighted across ${childResults.length} ${kind}${childResults.length === 1 ? '' : 's'} — coupon ${(couponRate*100).toFixed(4)}%`
+  };
+}
+
 function computeEIR(instr){
   if(!instr) return null;
+
+  // ---- Multi-tranche / guarantee wrapper handling ----------------------
+  // For loans split into tranches[] (e.g. Suffolk Solar) compute a face-weighted
+  // EIR across the children. For guarantees with underlyingLoans[] (Volt
+  // Multi-Loan), do the same. The top-level coupon on these wrappers is
+  // typically all zeros — the real rate lives on each child.
+  if(Array.isArray(instr.tranches) && instr.tranches.length){
+    const child = instr.tranches.map(t => {
+      const merged = Object.assign({}, instr, t);
+      delete merged.tranches; delete merged.underlyingLoans;   // prevent infinite recursion
+      return computeEIR(merged);
+    }).filter(x => x);
+    return aggregateChildEIRs(child, instr.tranches, 'tranche');
+  }
+  if(Array.isArray(instr.underlyingLoans) && instr.underlyingLoans.length){
+    const child = instr.underlyingLoans.map(u => {
+      const merged = Object.assign({}, instr, u);
+      delete merged.tranches; delete merged.underlyingLoans;
+      return computeEIR(merged);
+    }).filter(x => x);
+    return aggregateChildEIRs(child, instr.underlyingLoans, 'underlying');
+  }
+
   const settle   = parseISO(instr.settlementDate);
   const maturity = parseISO(instr.maturityDate);
   if(!settle || !maturity || maturity <= settle) return null;
@@ -121,15 +178,46 @@ function computeEIR(instr){
   const price = instr.purchasePrice || face;
   const amort = instr.amortization || { method:'none' };
 
-  // Current coupon rate (Fixed or Floating w/ cap/floor)
+  // ---- Current coupon rate -----------------------------------------------
+  // Three coupon families:
+  //   • Fixed                — uses coupon.fixedRate
+  //   • Floating             — uses coupon.floatingRate + coupon.spread (legacy SOFR-style)
+  //   • SONIA / SOFR / EURIBOR / FED / etc — RFR-driven, uses:
+  //         rfr.baseRate                                     (the observed index level)
+  //       + coupon.spread  OR  current marginSchedule entry  (the contractual margin)
+  //       + ESG adjustment if enabled
   const c = instr.coupon || { type:'Fixed', fixedRate:0 };
+  const RFR_TYPES = new Set(['SONIA','SOFR','ESTR','EURIBOR','TONA','FED']);
   let couponRate = 0;
-  if(c.type === 'Fixed') couponRate = c.fixedRate || 0;
-  else {
+  let rateBreakdown = '';
+  if(c.type === 'Fixed'){
+    couponRate = c.fixedRate || 0;
+    rateBreakdown = `Fixed coupon ${(couponRate*100).toFixed(4)}%`;
+  } else if(RFR_TYPES.has(c.type) || instr.rfr){
+    const baseRate = instr.rfr?.baseRate ?? c.floatingRate ?? 0;
+    let margin = c.spread ?? 0;
+    // marginSchedule[] takes precedence if present (Libra 3, Volt, Suffolk)
+    if(Array.isArray(instr.marginSchedule) && instr.marginSchedule.length){
+      const todayISO = toISO(new Date());
+      const inWindow = instr.marginSchedule.find(s =>
+        (!s.from || s.from <= todayISO) && (!s.to || s.to >= todayISO)
+      ) || instr.marginSchedule[0];
+      if(inWindow){
+        margin = (inWindow.marginBps != null) ? inWindow.marginBps / 10000 : (inWindow.spread || margin);
+      }
+    }
+    let raw = baseRate + margin;
+    if(c.floor != null) raw = Math.max(raw, c.floor);
+    if(c.cap   != null) raw = Math.min(raw, c.cap);
+    couponRate = raw;
+    rateBreakdown = `${c.type || 'RFR'} ${(baseRate*100).toFixed(4)}% + margin ${(margin*100).toFixed(4)}% = ${(couponRate*100).toFixed(4)}%`;
+  } else {
+    // Legacy 'Floating' (SOFR-style) — explicit floatingRate + spread on coupon
     let raw = (c.floatingRate || 0) + (c.spread || 0);
     if(c.floor != null) raw = Math.max(raw, c.floor);
     if(c.cap   != null) raw = Math.min(raw, c.cap);
     couponRate = raw;
+    rateBreakdown = `Floating ${((c.floatingRate||0)*100).toFixed(4)}% + spread ${((c.spread||0)*100).toFixed(4)}% = ${(couponRate*100).toFixed(4)}%`;
   }
   const annualCoupon = face * couponRate;
 
@@ -174,11 +262,13 @@ function computeEIR(instr){
   const totalReturn = (price > 0 && yearsToMat > 0)
     ? ((face + totalCoupon - price) / price) / yearsToMat : null;
 
+  // Prepend the rate breakdown to the note so the FV / EIR display shows base + margin.
+  const fullNote = rateBreakdown ? `${rateBreakdown}${note ? ' · ' + note : ''}` : note;
   return {
     method: amort.method || 'none',
     couponRate, annualCoupon,
     effectiveYield, impliedYTM, cashYield, totalReturn,
-    yearsToMat, dayBasis: basis, source, note
+    yearsToMat, dayBasis: basis, source, note: fullNote, rateBreakdown
   };
 }
 
