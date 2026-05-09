@@ -72,7 +72,13 @@
         <div class="text-[11px] text-gray-500">PortF (System of Record) → PCS / Investran (Accounting) → Workday GL → Reconciliation → PortF Feedback</div>
       </div>
     </div>
-    <div class="ml-auto flex items-center gap-3">
+    <div class="ml-auto flex items-center gap-3 flex-wrap">
+      <button id="btn-session-save" class="mat-btn outline text-xs" title="Save current pipeline state — usable from any stage">
+        <span class="material-icons-outlined text-[16px]">save</span>Save Session
+      </button>
+      <button id="btn-session-load" class="mat-btn outline text-xs" title="Load a previously-saved session">
+        <span class="material-icons-outlined text-[16px]">folder_open</span>Load Session
+      </button>
       <label class="text-[11px] text-gray-500 font-semibold uppercase tracking-wider">Active Deal</label>
       <select id="sel-instrument" class="border border-gray-300 rounded-md px-2 py-1.5 text-sm" style="min-width:280px"></select>
       <a href="income-calculator.html" class="mat-btn outline text-xs" title="Open the legacy Loan Module">
@@ -105,6 +111,19 @@
     </div>
   </div>
   <div id="portf-summary" class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3 hidden"></div>
+
+  <!-- Loaded Setup Info — every key/value the parser pulled from the top of the Excel -->
+  <details id="portf-setup-section" class="hidden mb-3">
+    <summary class="text-[12px] mb-2 cursor-pointer font-semibold">View loaded setup info</summary>
+    <div id="portf-setup-table"></div>
+  </details>
+
+  <!-- Loaded Fees — every fee the parser pulled from the column blocks -->
+  <details id="portf-fees-section" class="hidden mb-3">
+    <summary class="text-[12px] mb-2 cursor-pointer font-semibold">View loaded fees <span id="portf-fees-count" class="chip blue text-[10px]">0</span></summary>
+    <div id="portf-fees-table"></div>
+  </details>
+
   <details id="portf-details" class="hidden">
     <summary class="text-[12px] mb-2">View loaded PortF cashflow schedule</summary>
     <div class="scrolled" id="portf-cashflow-table"></div>
@@ -121,10 +140,17 @@
       <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">account_balance</span>PCS / Investran — IFRS-Aligned Accounting Engine</h2>
       <p class="text-[12px] text-gray-600 mt-1">Translates PortF cashflows into IFRS-compliant accounting: classification, initial recognition, EIR, fair value, IFRS 15 fees, ECL staging, modifications, hedge accounting, FX. Outputs balanced double-entry journals on the Investran chart and a DIU-ready batch.</p>
     </div>
-    <div class="flex flex-wrap gap-2">
+    <div class="flex flex-wrap gap-2 items-center">
       <button id="btn-acct-run" class="mat-btn primary" disabled><span class="material-icons-outlined text-[16px]">play_arrow</span>Run Accounting</button>
       <button id="btn-diu-template" class="mat-btn outline"><span class="material-icons-outlined text-[16px]">download</span>DIU Template (blank)</button>
       <button id="btn-diu-filled" class="mat-btn outline" disabled><span class="material-icons-outlined text-[16px]">file_download</span>Filled DIU CSV</button>
+      <div class="flex items-center gap-1 border border-gray-300 rounded px-2 py-1 bg-white" title="Date this JE batch is posted to the GL. Leave blank for AUTO mode (glDate = effectiveDate per row). Set a date to override every row to that close date.">
+        <span class="material-icons-outlined text-[14px] text-gray-500">event</span>
+        <label for="opt-gl-date" class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">GL Posting Date</label>
+        <input id="opt-gl-date" type="date" class="border-0 px-1 py-0 text-[12px] bg-white" placeholder="auto" />
+        <button id="btn-gl-date-auto" class="text-[10px] text-indigo-700 hover:underline" title="Clear override — glDate auto-matches effectiveDate per row">auto</button>
+        <span id="gl-date-mode" class="chip green text-[10px]" style="font-size:9.5px">AUTO</span>
+      </div>
       <span id="acct-status" class="chip gray self-center">Awaiting Stage 1</span>
     </div>
   </div>
@@ -554,6 +580,12 @@
     <div class="scrolled" id="acct-schedule-table" style="max-height:480px"></div>
   </details>
 
+  <!-- Fee Specifications — full per-fee detail with engine-computed totals -->
+  <details id="acct-fees-section" class="hidden">
+    <summary class="text-[12px] mb-2 cursor-pointer">View fee specifications + engine-computed totals (<span id="acct-fees-count" class="chip blue text-[10px]">0</span>)</summary>
+    <div id="acct-fees-table"></div>
+  </details>
+
   <details id="acct-journal-section" class="hidden">
     <summary class="text-[12px] mb-2">View generated journal entries (mapped to Investran chart)</summary>
     <div id="acct-journal-coverage" class="mb-2"></div>
@@ -602,6 +634,17 @@
       <button id="btn-workday-actuals-sample" class="mat-btn outline"><span class="material-icons-outlined text-[16px]">data_object</span>Synthesise Sample (with variances)</button>
       <span id="workday-in-status" class="chip gray self-center">Not loaded</span>
     </div>
+  </div>
+  <!-- Multi-period batch list. Each load appends a new batch tagged with its
+       period (e.g. "Q1 2026"). The currently-selected batch is shown in the
+       table below; reconciliation in Stage 5 runs per batch. -->
+  <div id="actuals-batches" class="hidden mb-3">
+    <div class="flex items-center gap-2 mb-2 flex-wrap">
+      <span class="text-[11px] font-bold text-gray-700">Loaded periods</span>
+      <span id="actuals-batches-count" class="chip blue text-[10px]">0</span>
+      <span class="text-[10px] text-gray-500 ml-1">Click a row to view its actuals; reconciliation in Stage 5 runs against the selected batch.</span>
+    </div>
+    <div id="actuals-batches-list"></div>
   </div>
   <details id="workday-actuals-section" class="hidden">
     <summary class="text-[12px] mb-2">View Workday actual-cash entries</summary>
@@ -678,6 +721,28 @@
 <div id="toast" class="toast"></div>
 
 <!-- ===== Generic JSON modal ===== -->
+<!-- ===== Session Save/Load modal ===== -->
+<div id="session-modal" class="json-modal" style="display:none">
+  <div class="json-modal-bd" data-close-session="1"></div>
+  <div class="json-modal-pn">
+    <div class="json-modal-h">
+      <div>
+        <div id="session-modal-title" class="font-semibold text-[14px]">Save Session</div>
+        <div id="session-modal-sub" class="text-[11px] text-gray-500"></div>
+      </div>
+      <button class="mat-btn outline !py-1 !px-2" data-close-session="1"><span class="material-icons-outlined text-[16px]">close</span></button>
+    </div>
+    <div class="json-modal-b" id="session-modal-body"></div>
+    <div class="json-modal-f">
+      <button class="mat-btn outline" data-close-session="1">Cancel</button>
+      <button id="btn-session-export" class="mat-btn outline" style="display:none"><span class="material-icons-outlined text-[16px]">download</span>Export to file</button>
+      <button id="btn-session-import" class="mat-btn outline" style="display:none"><span class="material-icons-outlined text-[16px]">file_upload</span>Import from file</button>
+      <input id="session-import-file" type="file" accept=".json,application/json" style="display:none"/>
+      <button id="btn-session-confirm" class="mat-btn primary"><span class="material-icons-outlined text-[16px]">check</span>Save</button>
+    </div>
+  </div>
+</div>
+
 <div id="json-modal" class="json-modal" style="display:none">
   <div class="json-modal-bd" data-close="1"></div>
   <div class="json-modal-pn">
@@ -805,12 +870,16 @@ function currentInstrument(){
 function resetPipeline(){
   M.portfData = null; M.schedule = []; M.summary = null;
   M.acctJournals = []; M.workdayBatch = null; M.workdayActuals = null;
+  M.actualsBatches = []; M.activeBatchKey = null; M.reconciliations = [];
   M.reconciliation = null; M.portfFeedback = null;
   $('portf-status').className = 'chip gray self-center'; $('portf-status').textContent = 'Not loaded';
   $('portf-summary').classList.add('hidden'); $('portf-details').classList.add('hidden');
   $('btn-acct-run').disabled = true; $('acct-status').className = 'chip gray self-center'; $('acct-status').textContent = 'Awaiting Stage 1';
   $('acct-kpis').classList.add('hidden'); $('acct-journal-section').classList.add('hidden');
   $('acct-schedule-section')?.classList.add('hidden');
+  $('acct-fees-section')?.classList.add('hidden');
+  $('portf-setup-section')?.classList.add('hidden');
+  $('portf-fees-section')?.classList.add('hidden');
   $('evidence-pack').classList.add('hidden');
   M.acctRunMeta = null;
   ['ifrs-classification','ifrs-recognition','ifrs-eir','ifrs-eir-note','ifrs-fv','ifrs-fv-note'].forEach(id => $(id).textContent = '—');
@@ -819,6 +888,7 @@ function resetPipeline(){
   $('workday-batch-info').classList.add('hidden');
   $('workday-in-status').className = 'chip gray self-center'; $('workday-in-status').textContent = 'Not loaded';
   $('workday-actuals-section').classList.add('hidden');
+  $('actuals-batches')?.classList.add('hidden');
   $('btn-recon-run').disabled = true; $('btn-portf-feedback').disabled = true;
   $('recon-status').className = 'chip gray self-center'; $('recon-status').textContent = 'Awaiting Stage 4';
   $('recon-kpis').classList.add('hidden'); $('recon-section').classList.add('hidden');
@@ -895,42 +965,168 @@ function loadPortFFromActiveDeal(){
 //                Principal Payment, Day count, Principal Balance, ...)
 //   Row 13+    : data rows
 // We parse one sheet → cashflow payload that the rest of the pipeline can consume.
+// Helper — coerce an Excel cell that might be a Date object, an Excel serial date,
+// or an ISO string into ISO YYYY-MM-DD format, returning null if unparseable.
+function toIsoOrNull(v){
+  if(v == null || v === '') return null;
+  if(v instanceof Date) return v.toISOString().slice(0, 10);
+  if(typeof v === 'number'){
+    // Excel serial date: days since 1899-12-30
+    const ms = (v - 25569) * 86400 * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
+// Map PortF "Calculation Basis" labels onto the engine's fee-basis enumeration.
+function mapCalcBasis(label){
+  const s = (label || '').toString().toLowerCase();
+  if(/unfunded|undrawn/.test(s))   return 'unfunded';
+  if(/commitment/.test(s))          return 'commitment';
+  if(/principal|outstanding/.test(s)) return 'drawn';
+  if(/covered/.test(s))             return 'covered';
+  return label || 'drawn';
+}
+function mapFreq(label){
+  const s = (label || '').toString().toLowerCase();
+  if(/quarter/.test(s))     return 'Quarterly';
+  if(/semi/.test(s))        return 'SemiAnnual';
+  if(/annual|yearly/.test(s)) return 'Annual';
+  if(/month/.test(s))       return 'Monthly';
+  if(/one.?off|once/.test(s)) return 'OneOff';
+  return label || '';
+}
+function mapKind(name){
+  const s = (name || '').toString().toLowerCase();
+  if(/guarantee/.test(s))    return 'guarantee';
+  if(/commitment|non.?use|undrawn|unused/.test(s)) return 'commitment';
+  if(/arrangement|origination|upfront/.test(s)) return 'arrangement';
+  if(/management/.test(s))   return 'management';
+  if(/dividend/.test(s))     return 'dividend';
+  if(/underlying|interest/.test(s)) return 'interest';
+  return 'fee';
+}
+// Default IFRS treatment by fee kind (operator can re-tag in Stage 2)
+function defaultIFRSTreatment(kind){
+  if(kind === 'arrangement')              return 'IFRS9-EIR';
+  if(kind === 'commitment' || kind === 'guarantee' || kind === 'management') return 'IFRS15-overTime';
+  if(kind === 'dividend')                 return 'IFRS15-pointInTime';
+  return 'IFRS9-EIR';
+}
+
 function parsePortFExcelSheet(ws, sheetName){
   const sheet = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
-  // Pull metadata from key/value rows in the top header (column A=label, column B=value)
-  const meta = {};
-  for(let r = 0; r < Math.min(10, sheet.length); r++){
-    const row = sheet[r] || [];
-    const k = (row[0] || '').toString().trim();
-    const v = row[1];
-    if(!k) continue;
-    meta[k] = v;
-  }
-  // Find the data-table header row — looking for "Date" in column A within rows 10-15
+  // ── Block B (locate first) · Find the data-table header row ─────────
+  // Scan up to row 30 — the new template puts the data table at row 17,
+  // the legacy PortF format at row 13. Look for "Date" in column A.
   let headerRow = -1;
-  for(let r = 9; r < Math.min(20, sheet.length); r++){
+  for(let r = 5; r < Math.min(30, sheet.length); r++){
     const row = sheet[r] || [];
     if((row[0] || '').toString().trim().toLowerCase() === 'date'){ headerRow = r; break; }
   }
   if(headerRow < 0) throw new Error('Could not find data table header row (column A = "Date") on sheet ' + sheetName);
+
+  // ── Block A · Top-of-sheet metadata (column A=label, column B=value) ──
+  // Read every row before the data-table header, so the new template's larger
+  // setup block (rows 1-15) is fully captured. Stop at any row whose column-A
+  // cell collides with a label we already have (i.e. a duplicate from the
+  // section/data-table area), and ignore blank-label rows.
+  const meta = {};
+  for(let r = 0; r < headerRow; r++){
+    const row = sheet[r] || [];
+    const k = (row[0] || '').toString().trim();
+    const v = row[1];
+    if(!k) continue;
+    if(k.toLowerCase() === 'date') break;            // safety
+    meta[k] = v;
+  }
+  // Total Commitment lookup — first try the metadata block, then legacy E1.
+  const totalCommitment = meta['Total Commitment'] != null ? Number(meta['Total Commitment'])
+                         : (sheet[0]?.[4] != null ? Number(sheet[0][4]) : null);
   const colNames = sheet[headerRow].map(h => (h || '').toString().trim());
   const colIdx = (name) => colNames.findIndex(c => c.toLowerCase() === name.toLowerCase());
   const cDate    = colIdx('Date');
   const cInitial = colIdx('Initial Purchase');
   const cDraw    = colIdx('Drawdown');
   const cPay     = colIdx('Principal Payment');
-  const cDayCount= colIdx('Day count');
   const cBalance = colIdx('Amount');                 // first 'Amount' = Principal Balance
-  // Cashflow events
+
+  // ── Block C · Per-fee setup blocks (columns past F) ─────────────────
+  // The PortF Excel layout puts each fee in its OWN column. Row 1 has "Name",
+  // and columns past F contain the fee name (e.g. "Guarantee Fee", "Commitment
+  // Fee", "Arrangement Fee", "Underlying Debt"). Rows 1-9 below the name carry
+  // posting type, calculation basis, rate structure, rate, accrual frequency,
+  // settlement frequency, settlement type, first settlement date.
+  // Skip column AL (index 37) which is the LABEL column — its value in row 1 is
+  // literally "Name", not a fee name.
+  const fees = [];
+  const SETUP_KEYS = ['name','postingType','calcBasis','rateStructure','rate','accrualFreq','settlementFreq','settlementType','firstSettleDate'];
+  // Look for fee blocks across columns 7..120 (covers up to ~DA)
+  for(let col = 7; col < 120; col++){
+    const cellRow1 = sheet[0]?.[col];
+    if(!cellRow1) continue;
+    const name = String(cellRow1).trim();
+    // Skip pure label / metadata headers
+    if(!name || /^name$|^date$|^total commitment$|^fee cash$|^fee totals$|^totals$|^balance basis$/i.test(name)) continue;
+    // Read 9 rows of setup info from rows 0-8
+    const setup = {};
+    for(let i = 0; i < 9; i++){
+      const v = sheet[i]?.[col];
+      if(v == null || v === '') continue;
+      setup[SETUP_KEYS[i]] = v;
+    }
+    // Heuristic: a fee block has at least name + (posting type OR rate)
+    if(!setup.postingType && !setup.rate) continue;
+    // The fee name is in row 1 of THAT column (we just read it as setup.name)
+    const feeName = setup.name || name;
+    const kind = mapKind(feeName);
+    const rate = typeof setup.rate === 'number' ? setup.rate : Number(setup.rate) || 0;
+    // Find the daily Amount column for this fee in row 13 (the table header).
+    // A fee's Amount column typically sits 1 column to the right of its Rate column.
+    let dailyAmountCol = -1;
+    if((sheet[headerRow]?.[col] || '').toString().toLowerCase() === 'rate'
+       && (sheet[headerRow]?.[col + 1] || '').toString().toLowerCase() === 'amount'){
+      dailyAmountCol = col + 1;
+    } else if((sheet[headerRow]?.[col] || '').toString().toLowerCase() === 'amount'){
+      dailyAmountCol = col;
+    }
+    // Sum the daily amounts across the data rows (rows headerRow+1 .. end)
+    let totalAccrued = 0;
+    if(dailyAmountCol >= 0){
+      for(let r = headerRow + 1; r < sheet.length; r++){
+        const v = sheet[r]?.[dailyAmountCol];
+        if(typeof v === 'number') totalAccrued += v;
+      }
+    }
+    fees.push({
+      id: `excel-${kind}-${fees.length + 1}`,
+      kind,
+      label: feeName,
+      mode: 'periodic',
+      postingType:    setup.postingType   || null,
+      calcBasis:      mapCalcBasis(setup.calcBasis),
+      rateStructure:  setup.rateStructure || null,
+      rate,
+      accrualFrequency:    mapFreq(setup.accrualFreq),
+      settlementFrequency: mapFreq(setup.settlementFreq),
+      settlementType:      setup.settlementType || null,
+      firstSettlementDate: toIsoOrNull(setup.firstSettleDate),
+      basis: mapCalcBasis(setup.calcBasis),
+      ifrs: defaultIFRSTreatment(kind),
+      totalAccruedFromExcel: totalAccrued,
+      sourceColumn: col, dailyAmountCol
+    });
+  }
+
+  // ── Block D · Cashflow events + accrual rows ─────────────────────────
   const cashflows = [];
   const accrual = [];
   for(let r = headerRow + 1; r < sheet.length; r++){
     const row = sheet[r] || [];
     const dateCell = row[cDate];
     if(!dateCell) continue;
-    const dateISO = (dateCell instanceof Date)
-      ? dateCell.toISOString().slice(0,10)
-      : new Date(dateCell).toISOString().slice(0,10);
+    const dateISO = toIsoOrNull(dateCell);
+    if(!dateISO) continue;
     const initial = +(row[cInitial] || 0);
     const draw    = +(row[cDraw] || 0);
     const payment = +(row[cPay] || 0);
@@ -938,10 +1134,18 @@ function parsePortFExcelSheet(ws, sheetName){
     if(initial || draw || payment){
       cashflows.push({
         date: dateISO,
-        // PortF uses negative drawdown to represent a draw event (reducing unfunded), positive payment for repayment
+        // PortF convention: negative drawdown = draw event, positive payment = repayment
         type: draw < 0 ? 'draw' : (payment > 0 ? 'paydown' : 'initial'),
         amount: Math.abs(draw) || payment || initial
       });
+    }
+    // Sum Excel-supplied daily fees from each fee's Amount column (if found)
+    let dailyFeesFromExcel = 0;
+    for(const f of fees){
+      if(f.dailyAmountCol >= 0){
+        const v = row[f.dailyAmountCol];
+        if(typeof v === 'number') dailyFeesFromExcel += v;
+      }
     }
     accrual.push({
       date: dateISO,
@@ -949,23 +1153,45 @@ function parsePortFExcelSheet(ws, sheetName){
       drawnBalance: balance,
       draw: draw < 0 ? Math.abs(draw) : 0,
       paydown: payment,
-      currentRate: 0,    // rate column not consistently populated in this template
+      currentRate: 0,    // resolved at engine-merge time
       dailyInterest: 0,
       dailyPik: 0,
-      dailyFees: 0,
+      dailyFees: dailyFeesFromExcel,
       capitalized: 0
     });
   }
+  // Optional metadata fields — PortF Excel currently doesn't carry these, but if it
+  // ever adds rows like "Legal Entity", "Position", "LEID", "Income Security" the
+  // parser picks them up automatically (case-insensitive lookup with synonyms).
+  const lookupMeta = (...aliases) => {
+    for(const a of aliases){
+      for(const [k, v] of Object.entries(meta)){
+        if(k.toLowerCase().trim() === a.toLowerCase()) return v;
+      }
+    }
+    return null;
+  };
   return {
     sheetName,
     company: meta['Company'] || sheetName,
     debtType: meta['Debt Type'] || '',
-    loanStartDate: meta['Loan Start Date'] || null,
-    loanEndDate:   meta['Loan End Date']   || null,
+    loanStartDate: toIsoOrNull(meta['Loan Start Date']),
+    loanEndDate:   toIsoOrNull(meta['Loan End Date']),
     dayCountConvention: meta['Day Count Convention'] || null,
     interestAccrues: meta['Interest Accrues'] || null,
+    legalEntity: lookupMeta('Legal Entity','LE','Legal Entity Name'),
+    leid:        lookupMeta('LEID','LE ID','Legal Entity Id'),
+    position:    lookupMeta('Position','Position Name'),
+    positionId:  lookupMeta('Position ID','PositionId'),
+    incomeSecurity: lookupMeta('Income Security','Security','Security Name'),
+    securityId:  lookupMeta('Security ID','SecurityId'),
+    counterparty: lookupMeta('Counterparty','CP'),
+    currency:    lookupMeta('Currency','CCY'),
+    totalCommitment,
+    fees,                 // ← parsed fee setup blocks
     cashflows,
-    accrual
+    accrual,
+    rawMeta: meta         // ← every key/value pair from rows 1-9 (for the Phase 1 setup panel)
   };
 }
 
@@ -978,47 +1204,147 @@ function applyPortFExcel(file){
       const sheetName = wb.SheetNames.find(n => n.toLowerCase() !== 'summary') || wb.SheetNames[0];
       const ws = wb.Sheets[sheetName];
       const parsed = parsePortFExcelSheet(ws, sheetName);
-      // Try to map to an existing instrument by company name or instrument id
-      const inst = INSTRUMENTS.find(i =>
+      // Try to map to an existing instrument by id or by deal-name substring
+      let inst = INSTRUMENTS.find(i =>
         (i.id && i.id.toString() === parsed.sheetName) ||
         (i.position && parsed.company && i.position.toLowerCase().includes(parsed.company.toLowerCase().split(' ')[0]))
-      ) || currentInstrument();
-      const settle = parsed.loanStartDate ? new Date(parsed.loanStartDate).toISOString().slice(0,10) : inst.settlementDate;
-      const matur  = parsed.loanEndDate   ? new Date(parsed.loanEndDate).toISOString().slice(0,10)   : inst.maturityDate;
+      );
+      let isSynthetic = false;
+      if(!inst){
+        // No match — build a synthetic instrument from the Excel and register it.
+        // The user gets a brand-new deal entry usable for the rest of the pipeline.
+        inst = buildSyntheticInstrumentFromExcel(parsed);
+        INSTRUMENTS.push(inst);
+        isSynthetic = true;
+      } else {
+        // Match found — overlay any fees the Excel provided. We don't drop the
+        // seed fees (they may contain richer setup); we add Excel-only fees that
+        // the seed didn't have. The Excel total acts as a sanity-check.
+        if(parsed.fees && parsed.fees.length){
+          inst.excelFees = parsed.fees;     // for display in Phase 1 + 2
+        }
+      }
+      const settle = parsed.loanStartDate || inst.settlementDate;
+      const matur  = parsed.loanEndDate   || inst.maturityDate;
+      // Source-tracked field resolution: Excel value beats seed value beats synthetic.
+      // This drives the source badges in the Phase 1 setup panel.
+      const fieldSource = {};
+      const pick = (key, excelVal, seedVal, syntheticVal) => {
+        if(excelVal != null && excelVal !== ''){ fieldSource[key] = 'excel'; return excelVal; }
+        if(seedVal  != null && seedVal  !== ''){ fieldSource[key] = isSynthetic ? 'synthetic' : 'seed'; return seedVal; }
+        fieldSource[key] = 'synthetic'; return syntheticVal;
+      };
       const payload = {
         source: 'PortF Excel · sheet "' + parsed.sheetName + '"',
         exportedAt: new Date().toISOString(),
         instrument: {
-          id: inst.id,
-          legalEntity: inst.legalEntity,
-          deal: inst.deal,
-          position: inst.position,
-          incomeSecurity: inst.incomeSecurity,
-          currency: inst.currency || 'GBP',
-          faceValue: inst.faceValue,
-          commitment: inst.commitment,
-          coupon: inst.coupon,
-          ifrs: inst.ifrs,
+          id:           inst.id,
+          legalEntity:  pick('legalEntity',  parsed.legalEntity,    inst.legalEntity,    'PortF Excel Import'),
+          leid:         pick('leid',         parsed.leid,           inst.leid,           0),
+          deal:         pick('deal',         parsed.company,        inst.deal,           parsed.company),
+          position:     pick('position',     parsed.position,       inst.position,       parsed.company + ' (Excel imported)'),
+          positionId:   pick('positionId',   parsed.positionId,     inst.positionId,     null),
+          incomeSecurity: pick('incomeSecurity', parsed.incomeSecurity, inst.incomeSecurity, parsed.company + ' — imported ' + (parsed.debtType || 'instrument')),
+          securityId:   pick('securityId',   parsed.securityId,     inst.securityId,     null),
+          currency:     pick('currency',     parsed.currency,       inst.currency,       'GBP'),
+          faceValue:    pick('faceValue',    parsed.totalCommitment, inst.faceValue,     parsed.totalCommitment),
+          commitment:   pick('commitment',   parsed.totalCommitment, inst.commitment,    parsed.totalCommitment),
+          coupon:       inst.coupon,
+          ifrs:         inst.ifrs,
           settlementDate: settle,
-          maturityDate: matur,
+          maturityDate:   matur,
           excelMeta: {
             company: parsed.company,
             debtType: parsed.debtType,
             dayCountConvention: parsed.dayCountConvention,
-            interestAccrues: parsed.interestAccrues
+            interestAccrues: parsed.interestAccrues,
+            totalCommitment: parsed.totalCommitment,
+            isSynthetic
           }
         },
+        fieldSource,             // ← per-field source map for the setup panel badges
         accrualSchedule: parsed.accrual,
-        rawCashflows: parsed.cashflows
+        rawCashflows: parsed.cashflows,
+        excelSetup: parsed.rawMeta,
+        excelFees: parsed.fees
       };
+      // Re-build the dropdown if a new synthetic was added
+      if(isSynthetic){
+        rebuildInstrumentDropdown();
+        M.instrumentId = inst.id;
+        if($('active-deal')) $('active-deal').value = inst.id;
+        snapshotTreatmentDefaults(inst);
+        loadTreatmentForm();
+      }
       applyPortFPayload(payload);
-      toast(`Loaded Excel · ${parsed.accrual.length} rows from sheet "${parsed.sheetName}" (${parsed.company})`);
+      const feeNote = parsed.fees.length ? ` · ${parsed.fees.length} fee${parsed.fees.length === 1 ? '' : 's'}` : '';
+      const synNote = isSynthetic ? ' · NEW DEAL registered' : '';
+      toast(`Loaded Excel · ${parsed.accrual.length} rows from sheet "${parsed.sheetName}" (${parsed.company})${feeNote}${synNote}`);
     } catch(err){
       console.error(err);
       alert('Could not parse Excel: ' + err.message);
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+// Build a brand-new instrument record from a parsed Excel sheet — used when the
+// Excel doesn't match any seed instrument. Fees are populated from parsed.fees;
+// coupon is a best-effort guess from any "Underlying Debt" / interest fee block.
+function buildSyntheticInstrumentFromExcel(parsed){
+  const id = 'excel-' + (parsed.sheetName || 'new').toString().toLowerCase().replace(/\s+/g, '-');
+  const interestFee = parsed.fees.find(f => f.kind === 'interest');
+  const couponRate = interestFee ? interestFee.rate : 0;
+  return {
+    id,
+    legalEntity: 'PortF Excel Import',
+    leid: 0,
+    deal: parsed.company,
+    position: parsed.company + ' (Excel imported)',
+    incomeSecurity: parsed.company + ' — imported ' + (parsed.debtType || 'instrument'),
+    instrumentKind: /guarantee/i.test(parsed.debtType) ? 'guarantee' : 'loan',
+    currency: 'GBP',
+    faceValue: parsed.totalCommitment || 0,
+    commitment: parsed.totalCommitment || 0,
+    purchasePrice: parsed.totalCommitment || 0,
+    settlementDate: parsed.loanStartDate,
+    maturityDate:   parsed.loanEndDate,
+    dayBasis: /365/.test(parsed.dayCountConvention || '') ? 'ACT/365' : 'ACT/360',
+    coupon: { type: 'Fixed', fixedRate: couponRate, floatingRate: 0, spread: 0 },
+    pik: { enabled: false, rate: 0 },
+    ifrs: { ifrs9Classification: 'AmortisedCost', sppiPassed: true, businessModel: 'HoldToCollect', ecLStage: 1 },
+    fees: parsed.fees.filter(f => f.kind !== 'interest').map((f, idx) => ({
+      id: f.id || ('fee-' + idx),
+      kind: f.kind, mode: f.mode || 'periodic', label: f.label,
+      rate: f.rate, frequency: f.accrualFrequency || 'Annual',
+      basis: f.basis || 'drawn',
+      ifrs: f.ifrs || defaultIFRSTreatment(f.kind)
+    })),
+    excelImported: true
+  };
+}
+
+// Re-render the active-deal dropdown after a synthetic instrument is added.
+function rebuildInstrumentDropdown(){
+  const sel = $('active-deal'); if(!sel) return;
+  // Group instruments by legal entity for readability
+  const groups = {};
+  for(const inst of INSTRUMENTS){
+    const le = inst.legalEntity || 'Other';
+    if(!groups[le]) groups[le] = [];
+    groups[le].push(inst);
+  }
+  let html = '';
+  for(const le of Object.keys(groups).sort()){
+    html += `<optgroup label="${le}">`;
+    for(const inst of groups[le]){
+      const tag = inst.excelImported ? ' (Excel)' : '';
+      html += `<option value="${inst.id}">${inst.deal}${tag}</option>`;
+    }
+    html += `</optgroup>`;
+  }
+  sel.innerHTML = html;
+  sel.value = M.instrumentId;
 }
 
 function applyPortFPayload(payload){
@@ -1074,6 +1400,10 @@ function applyPortFPayload(payload){
       <td>${r.dailyFees ? fmtMoney2(r.dailyFees, ccy) : '—'}</td>
     </tr>`).join('')}</tbody></table>`;
   $('portf-details').classList.remove('hidden');
+  // ─── Setup info panel — every meta key/value the parser pulled ───
+  renderPortFSetupPanel(payload, inst);
+  // ─── Fees panel — every fee block from the Excel + the matched seed ───
+  renderPortFFeesPanel(payload, inst);
   $('portf-status').className = 'chip green self-center';
   $('portf-status').textContent = 'Loaded · ' + payload.accrualSchedule.length + ' rows';
   setStage('stage-1', 'done');
@@ -1082,6 +1412,106 @@ function applyPortFPayload(payload){
   $('acct-status').className = 'chip blue self-center';
   $('acct-status').textContent = 'Ready to run';
   toast('Loaded PortF payload — ' + payload.accrualSchedule.length + ' periods');
+}
+
+// Render Phase 1 "Setup Info" panel — every metadata key/value pair the parser
+// pulled from the Excel top-of-sheet, plus a few engine-resolved fields. Each row
+// carries a source badge so the operator can see whether a field came from the
+// Excel directly, from a matched seed instrument, or was synthesised by default.
+function renderPortFSetupPanel(payload, inst){
+  const meta = payload.excelSetup || {};
+  const ex   = payload.instrument?.excelMeta || {};
+  const fs   = payload.fieldSource || {};
+  const ccy  = inst?.currency || 'GBP';
+  const sourceBadge = (src) => {
+    if(src === 'excel')     return '<span class="chip green text-[9.5px]" title="Pulled directly from the Excel">Excel ✱</span>';
+    if(src === 'seed')      return '<span class="chip blue text-[9.5px]" title="From matched seed instrument record">Seed •</span>';
+    if(src === 'synthetic') return '<span class="chip amber text-[9.5px]" title="Inferred / synthesised — Excel did not carry this field">Synthetic 🆕</span>';
+    return '';
+  };
+  const rows = [];
+  const push = (label, value, sourceKey) => {
+    if(value == null || value === '') return;
+    rows.push([label, value, sourceKey ? sourceBadge(fs[sourceKey] || 'seed') : '']);
+  };
+  // Canonical fields with source tagging
+  push('Company',              ex.company || meta['Company'],                          'deal');
+  push('Debt Type',            ex.debtType || meta['Debt Type'],                       null);
+  push('Loan Start Date',      fmtDate(payload.instrument.settlementDate),             null);
+  push('Loan End Date',        fmtDate(payload.instrument.maturityDate),               null);
+  push('Day Count Convention', ex.dayCountConvention || meta['Day Count Convention'] || inst?.dayBasis, null);
+  push('Interest Accrues',     ex.interestAccrues || meta['Interest Accrues'],         null);
+  push('Total Commitment',     payload.instrument.commitment ? fmtMoney(payload.instrument.commitment, ccy) : null, 'commitment');
+  push('Currency',             ccy,                                                    'currency');
+  push('Legal Entity',         payload.instrument.legalEntity,                         'legalEntity');
+  push('LEID',                 payload.instrument.leid || null,                        'leid');
+  push('Position',             payload.instrument.position,                            'position');
+  push('Position ID',          payload.instrument.positionId,                          'positionId');
+  push('Income Security',      payload.instrument.incomeSecurity,                      'incomeSecurity');
+  push('Security ID',          payload.instrument.securityId,                          'securityId');
+  push('Source',               payload.source,                                         null);
+  if(ex.isSynthetic){
+    rows.push(['Status', 'NEW DEAL — synthetic instrument registered from Excel', '<span class="chip amber text-[9.5px]">Synthetic 🆕</span>']);
+  }
+  // Any extra metadata keys not already shown
+  const known = new Set(['Company','Debt Type','Loan Start Date','Loan End Date','Day Count Convention','Interest Accrues',
+                          'Legal Entity','LE','LEID','Position','Position ID','Income Security','Security','Security ID','Currency','CCY','Counterparty']);
+  for(const [k, v] of Object.entries(meta)){
+    if(!known.has(k) && v != null && v !== '') rows.push([k, String(v), sourceBadge('excel')]);
+  }
+  $('portf-setup-table').innerHTML = `<table class="data" style="width:100%">
+    <thead><tr><th class="left">Field</th><th class="left">Value</th><th>Source</th></tr></thead>
+    <tbody>${rows.map(([k,v,b]) => `<tr><td class="left text-[12px] font-semibold">${k}</td><td class="left text-[12px]">${v}</td><td style="text-align:right">${b}</td></tr>`).join('')}</tbody>
+  </table>
+  <div class="text-[11px] text-gray-500 mt-1">Source legend — <strong>Excel ✱</strong>: pulled directly from the Excel · <strong>Seed •</strong>: from matched seed instrument record · <strong>Synthetic 🆕</strong>: not in the Excel and no seed match — inferred placeholder. To carry these in the Excel, add rows to the metadata block (e.g. <code>A7=Legal Entity B7=NWF Sustainable Infrastructure</code>, <code>A8=Position B8=NWF Guarantor Position · Volt covered tranche</code>).</div>`;
+  $('portf-setup-section').classList.remove('hidden');
+}
+
+// Render Phase 1 "Loaded Fees" panel — fees parsed from the Excel + fees on
+// the matched/synthesised instrument. Highlights any totals the Excel supplied.
+function renderPortFFeesPanel(payload, inst){
+  // Prefer fees parsed from the Excel; fall back to the instrument's seed fees.
+  const excelFees = (payload.excelFees && payload.excelFees.length) ? payload.excelFees : null;
+  const instFees  = inst?.fees || [];
+  const ccy = inst?.currency || 'GBP';
+  const fmtFreq = (f) => f || '—';
+  const fmtRate = (r) => r != null ? (r * 100).toFixed(4) + '%' : '—';
+
+  if(!excelFees && !instFees.length){
+    $('portf-fees-section').classList.add('hidden');
+    return;
+  }
+  const headerRow = excelFees
+    ? `<tr><th class="left">Fee Name</th><th class="left">Kind</th><th class="left">Posting Type</th><th class="left">Calc Basis</th><th>Rate</th><th class="left">Accrual Freq</th><th class="left">Settlement Freq</th><th class="left">First Settle</th><th>Total Accrued (Excel)</th></tr>`
+    : `<tr><th class="left">Fee Name</th><th class="left">Kind</th><th class="left">Mode</th><th class="left">Frequency</th><th class="left">Basis</th><th>Rate</th><th class="left">IFRS Treatment</th></tr>`;
+  const rowsHtml = excelFees
+    ? excelFees.map(f => `<tr>
+        <td class="left text-[12px] font-semibold">${f.label}</td>
+        <td class="left text-[11px]">${f.kind}</td>
+        <td class="left text-[11px]">${f.postingType || '—'}</td>
+        <td class="left text-[11px]">${f.calcBasis || '—'}</td>
+        <td>${fmtRate(f.rate)}</td>
+        <td class="left text-[11px]">${fmtFreq(f.accrualFrequency)}</td>
+        <td class="left text-[11px]">${fmtFreq(f.settlementFrequency)}</td>
+        <td class="left text-[11px]">${fmtDate(f.firstSettlementDate)}</td>
+        <td>${f.totalAccruedFromExcel ? fmtMoney(f.totalAccruedFromExcel, ccy) : '—'}</td>
+      </tr>`).join('')
+    : instFees.map(f => `<tr>
+        <td class="left text-[12px] font-semibold">${f.label || f.kind}</td>
+        <td class="left text-[11px]">${f.kind}</td>
+        <td class="left text-[11px]">${f.mode || '—'}</td>
+        <td class="left text-[11px]">${fmtFreq(f.frequency)}</td>
+        <td class="left text-[11px]">${f.basis || '—'}</td>
+        <td>${fmtRate(f.rate)}</td>
+        <td class="left text-[11px]">${f.ifrs || '—'}</td>
+      </tr>`).join('');
+  const count = (excelFees || instFees).length;
+  $('portf-fees-count').textContent = count + (count === 1 ? ' fee' : ' fees') + (excelFees ? ' (from Excel)' : ' (from deal record)');
+  $('portf-fees-table').innerHTML = `<table class="data" style="width:100%">
+    <thead>${headerRow}</thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>${excelFees ? '<div class="text-[11px] text-gray-500 mt-1">Total Accrued shows the sum of daily fee amounts across the Excel data table.</div>' : ''}`;
+  $('portf-fees-section').classList.remove('hidden');
 }
 
 // ============================================================
@@ -1252,12 +1682,12 @@ function downloadDIUTemplate(){
     account:'421000', glAccountName:'Investment Interest Income',
     glTransType:'Income - Investment interest - Accrued',
     amountLE:0.00, isDebit:false, fx:1.0, amountLocal:0.00, originalAmount:0.00,
-    allocationRule:'By Commitment and GL Date',
+    allocationRule:'No Allocation',
     legalEntity:'<<LEGAL ENTITY>>', leid:0,
     deal:'<<DEAL>>', position:'<<POSITION>>', incomeSecurity:'<<SECURITY>>',
     batchId:'<<BATCH-ID>>', batchType:'STANDARD',
     batchComments:'<<batch comment>>', transactionComments:'<<line comment>>',
-    jeIndex:1, txIndex:1, leDomain:'Investran Global'
+    jeIndex:1, txIndex:1, leDomain:'NWF'
   };
   const csv = rowsToCSV([sample]);
   downloadFile('investran-diu-template-blank.csv', csv);
@@ -1693,7 +2123,10 @@ function runAccounting(){
     }
   }
   // Generate journals via existing engine + Investran GL mapping
-  M.acctJournals = generateDIU(inst, M.summary);
+  // GL Posting Date — empty input means AUTO mode (engine matches each row's
+  // effectiveDate). Filled value applies the same close date to every row.
+  const glPostDate = $('opt-gl-date')?.value || null;
+  M.acctJournals = generateDIU(inst, M.summary, { glDate: glPostDate });
   // KPI strip
   const ccy = inst.currency || 'GBP';
   const sum = M.summary;
@@ -1735,6 +2168,8 @@ function runAccounting(){
   // Daily schedule view (rebuilt every run; mirrors current treatment + overrides)
   renderScheduleTable();
   $('acct-schedule-section').classList.remove('hidden');
+  // Fee Specifications panel — per-fee detail with engine-computed accrued totals.
+  renderFeeSpecsPanel(inst);
   // Stamp the run with audit metadata + log to history (NWF month-end close).
   stampAcctRun(inst, /*status=*/'Draft');
   // Render the 6-panel Accounting Evidence Pack (NWF agenda).
@@ -1794,6 +2229,43 @@ function renderEvidencePack(inst, summary){
   renderFVSensitivities(inst, summary);
   renderECLTemplates(inst, summary);
   renderModificationHistory(inst, summary);
+}
+
+// ----- Phase 2 Fee Specifications panel ------------------------------------
+// Surface every fee on the active deal with full spec + the engine's actual
+// accrued total over the period (from M.summary.feeBreakdown). Useful for
+// verifying that guarantee fees, commitment fees, etc. are flowing through.
+function renderFeeSpecsPanel(inst){
+  if(!inst || !inst.fees || !inst.fees.length){
+    $('acct-fees-section')?.classList.add('hidden');
+    return;
+  }
+  const ccy = inst.currency || 'GBP';
+  const breakdown = M.summary?.feeBreakdown || {};
+  const fmtRate = r => r != null ? (r * 100).toFixed(4) + '%' : '—';
+  const rows = inst.fees.map(f => {
+    // Match each fee against the breakdown by label (engine keys are fee labels).
+    const accrued = breakdown[f.label] || breakdown[f.id] || 0;
+    return `<tr>
+      <td class="left text-[12px] font-semibold">${f.label || f.kind}</td>
+      <td class="left text-[11px]">${f.kind}</td>
+      <td class="left text-[11px]">${f.mode || '—'}</td>
+      <td class="left text-[11px]">${f.frequency || '—'}</td>
+      <td class="left text-[11px]">${f.basis || '—'}</td>
+      <td>${fmtRate(f.rate)}</td>
+      <td class="left text-[11px]"><span class="chip ${f.ifrs === 'IFRS9-EIR' ? 'blue' : f.ifrs === 'IFRS15-overTime' ? 'green' : 'amber'}" style="font-size:10px">${f.ifrs || '—'}</span></td>
+      <td>${accrued ? fmtMoney(accrued, ccy) : '—'}</td>
+    </tr>`;
+  }).join('');
+  const total = Object.values(breakdown).reduce((a,v) => a + (v||0), 0);
+  $('acct-fees-count').textContent = inst.fees.length + (inst.fees.length === 1 ? ' fee' : ' fees');
+  $('acct-fees-table').innerHTML = `<table class="data" style="width:100%">
+    <thead><tr><th class="left">Fee Name</th><th class="left">Kind</th><th class="left">Mode</th><th class="left">Frequency</th><th class="left">Basis</th><th>Rate</th><th class="left">IFRS Treatment</th><th>Accrued (life)</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr style="font-weight:700;background:#f8fafc"><td class="left" colspan="7">Total fees (life)</td><td>${fmtMoney(total, ccy)}</td></tr></tfoot>
+  </table>
+  <div class="text-[11px] text-gray-500 mt-2">"Accrued (life)" comes from the engine's <code>summary.feeBreakdown</code> (sum of <code>feeBreakdown[label]</code> across daily rows). IFRS treatment routes the income to: <strong>IFRS9-EIR</strong> → 421000 (capitalised into yield) · <strong>IFRS15-overTime</strong> → 492100/492200/492300/492400 by fee type · <strong>IFRS15-pointInTime</strong> → 492100/492500.</div>`;
+  $('acct-fees-section').classList.remove('hidden');
 }
 
 // ----- Daily Schedule view + CSV / JSON download ---------------------------
@@ -2513,11 +2985,113 @@ function downloadWorkdayCSV(){
 //   periodStart, periodEnd,
 //   actuals: [{ date, transactionType, account, amountLE, isDebit, workdayJournalId, status:'POSTED'|'CANCELLED' }]
 // }
+// Append a Workday actuals payload as a new batch on the active deal. Each batch
+// represents one period (Q1 2026, Q2 2026, etc.). The user can load many batches
+// and reconciliation in Stage 5 runs per batch.
 function applyWorkdayActuals(payload){
-  M.workdayActuals = payload;
-  const ccy = currentInstrument().currency || 'GBP';
+  if(!Array.isArray(M.actualsBatches)) M.actualsBatches = [];
+  if(!Array.isArray(M.reconciliations)) M.reconciliations = [];
+  // Stamp the batch with a stable id + load timestamp, defaulting period bounds
+  // from the actuals dates if not supplied.
+  const sortedDates = (payload.actuals || []).map(a => a.date).filter(d => d).sort();
+  payload.batchKey = payload.batchKey || ('B' + (M.actualsBatches.length + 1));
+  payload.loadedAt = new Date().toISOString();
+  payload.periodStart = payload.periodStart || sortedDates[0] || null;
+  payload.periodEnd   = payload.periodEnd   || sortedDates[sortedDates.length - 1] || null;
+  M.actualsBatches.push(payload);
+  M.workdayActuals = payload;                // active batch = the just-loaded one
+  M.activeBatchKey = payload.batchKey;
+  renderActualsBatchesList();
+  renderActualsTable(payload);
+  $('workday-actuals-section').classList.remove('hidden');
+  $('workday-in-status').className = 'chip green self-center';
+  $('workday-in-status').textContent = `${M.actualsBatches.length} batch${M.actualsBatches.length === 1 ? '' : 'es'} loaded`;
+  $('btn-recon-run').disabled = false;
+  $('recon-status').className = 'chip blue self-center';
+  $('recon-status').textContent = 'Ready to reconcile · ' + (payload.actuals || []).length + ' rows in active batch';
+  setStage('stage-4', 'done');
+  setStage('stage-5', 'active');
+  toast(`Loaded actuals batch ${payload.batchKey} — ${(payload.actuals || []).length} rows · ${fmtDate(payload.periodStart)} → ${fmtDate(payload.periodEnd)}`);
+}
+
+// Render the loaded-batches list in Stage 4 with click-to-select behaviour.
+function renderActualsBatchesList(){
+  const batches = M.actualsBatches || [];
+  $('actuals-batches-count').textContent = batches.length + (batches.length === 1 ? ' period' : ' periods');
+  if(!batches.length){ $('actuals-batches').classList.add('hidden'); return; }
+  $('actuals-batches').classList.remove('hidden');
+  const ccy = currentInstrument()?.currency || 'GBP';
+  $('actuals-batches-list').innerHTML = `<table class="data" style="width:100%">
+    <thead><tr>
+      <th class="left">Period</th>
+      <th class="left">Batch ID</th>
+      <th class="left">Source</th>
+      <th>Rows</th>
+      <th>Total Amount</th>
+      <th class="left">Loaded</th>
+      <th class="left">Recon</th>
+      <th></th>
+    </tr></thead>
+    <tbody>${batches.map((b, i) => {
+      const total = (b.actuals || []).reduce((a, r) => a + (r.amountLE || 0), 0);
+      const recon = (M.reconciliations || []).find(r => r.batchKey === b.batchKey);
+      const reconChip = recon
+        ? `<span class="chip ${recon.summary.breaks ? 'amber' : 'green'} text-[10px]">${recon.summary.tied}/${recon.summary.total} tied · ${recon.summary.breaks} brk</span>`
+        : `<span class="chip gray text-[10px]">pending</span>`;
+      const isActive = b.batchKey === M.activeBatchKey;
+      return `<tr class="${isActive ? 'event' : ''}" data-batch-row="${b.batchKey}" style="cursor:pointer">
+        <td class="left text-[12px]">${fmtDate(b.periodStart)} → ${fmtDate(b.periodEnd)}</td>
+        <td class="left text-[11px]" style="word-break:break-all">${b.batchId || b.batchKey}</td>
+        <td class="left text-[11px]">${(b.source || 'Workday').slice(0, 32)}</td>
+        <td>${(b.actuals || []).length}</td>
+        <td>${fmtMoney(total, ccy)}</td>
+        <td class="left text-[11px]">${b.loadedAt ? new Date(b.loadedAt).toLocaleString('en-GB') : '—'}</td>
+        <td class="left">${reconChip}</td>
+        <td><button class="mat-btn outline !py-0.5 !px-1.5 text-[10px]" data-batch-remove="${b.batchKey}" title="Remove this batch"><span class="material-icons-outlined text-[12px]">close</span></button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+  // Click a row to select that batch
+  document.querySelectorAll('[data-batch-row]').forEach(tr => {
+    tr.onclick = (ev) => {
+      if(ev.target.closest('[data-batch-remove]')) return;     // remove button handled separately
+      const key = tr.getAttribute('data-batch-row');
+      const b = M.actualsBatches.find(x => x.batchKey === key);
+      if(b){
+        M.activeBatchKey = key;
+        M.workdayActuals = b;
+        renderActualsBatchesList();
+        renderActualsTable(b);
+        const recon = (M.reconciliations || []).find(r => r.batchKey === key);
+        if(recon) renderReconResults(recon);
+      }
+    };
+  });
+  document.querySelectorAll('[data-batch-remove]').forEach(btn => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      const key = btn.getAttribute('data-batch-remove');
+      M.actualsBatches = M.actualsBatches.filter(x => x.batchKey !== key);
+      M.reconciliations = (M.reconciliations || []).filter(r => r.batchKey !== key);
+      // If we removed the active batch, fall back to the latest remaining
+      if(M.activeBatchKey === key){
+        const last = M.actualsBatches[M.actualsBatches.length - 1];
+        M.activeBatchKey = last?.batchKey || null;
+        M.workdayActuals = last || null;
+      }
+      renderActualsBatchesList();
+      if(M.workdayActuals) renderActualsTable(M.workdayActuals);
+      else { $('workday-actuals-section').classList.add('hidden'); }
+      toast('Removed batch ' + key);
+    };
+  });
+}
+
+function renderActualsTable(payload){
+  const ccy = currentInstrument()?.currency || 'GBP';
   const rows = payload.actuals || [];
-  $('workday-actuals-table').innerHTML = `<table class="data">
+  $('workday-actuals-table').innerHTML = `<div class="text-[11px] text-gray-500 mb-1">Showing batch <strong>${payload.batchKey}</strong> · ${fmtDate(payload.periodStart)} → ${fmtDate(payload.periodEnd)} · ${rows.length} rows</div>
+  <table class="data">
     <thead><tr><th class="left">Date</th><th class="left">Transaction Type</th><th>Account</th><th>Amount</th><th>DR/CR</th><th class="left">Workday JE</th><th class="left">Status</th></tr></thead>
     <tbody>${rows.map(r => `<tr>
       <td class="left">${fmtDate(r.date)}</td>
@@ -2528,15 +3102,6 @@ function applyWorkdayActuals(payload){
       <td class="left">${r.workdayJournalId || '—'}</td>
       <td class="left"><span class="chip ${r.status === 'POSTED' ? 'green' : r.status === 'CANCELLED' ? 'red' : 'gray'}">${r.status || 'unknown'}</span></td>
     </tr>`).join('')}</tbody></table>`;
-  $('workday-actuals-section').classList.remove('hidden');
-  $('workday-in-status').className = 'chip green self-center';
-  $('workday-in-status').textContent = 'Loaded · ' + rows.length + ' actuals';
-  $('btn-recon-run').disabled = false;
-  $('recon-status').className = 'chip blue self-center';
-  $('recon-status').textContent = 'Ready to reconcile';
-  setStage('stage-4', 'done');
-  setStage('stage-5', 'active');
-  toast('Workday actuals loaded — ' + rows.length + ' rows');
 }
 
 // Synthesise actuals from PCS journals with deliberate variances for demo
@@ -2621,30 +3186,51 @@ function runReconciliation(){
   const tied = lines.filter(l => l.status === 'tied').length;
   const within = lines.filter(l => l.status === 'within').length;
   const breaks = lines.filter(l => l.status === 'break').length;
-  M.reconciliation = { lines, summary: { tied, within, breaks, total: lines.length, tieRatePct: lines.length ? tied / lines.length * 100 : 100, totalDiff: lines.reduce((a, l) => a + l.diff, 0), totalAbsDiff: lines.reduce((a, l) => a + Math.abs(l.diff), 0) } };
+  M.reconciliation = {
+    batchKey: M.activeBatchKey || null,
+    periodStart: M.workdayActuals?.periodStart || null,
+    periodEnd:   M.workdayActuals?.periodEnd   || null,
+    runAt: new Date().toISOString(),
+    lines,
+    summary: { tied, within, breaks, total: lines.length, tieRatePct: lines.length ? tied / lines.length * 100 : 100, totalDiff: lines.reduce((a, l) => a + l.diff, 0), totalAbsDiff: lines.reduce((a, l) => a + Math.abs(l.diff), 0) }
+  };
+  // Persist this recon against the batch (replace any prior run for same batch)
+  if(!Array.isArray(M.reconciliations)) M.reconciliations = [];
+  M.reconciliations = M.reconciliations.filter(r => r.batchKey !== M.reconciliation.batchKey);
+  M.reconciliations.push(M.reconciliation);
+  // Refresh the Stage 4 batch list so each batch's recon chip updates
+  renderActualsBatchesList();
+  renderReconResults(M.reconciliation);
+  toast(`Reconciliation done — ${tied} tied, ${within} within tol, ${breaks} break${breaks!==1?'s':''}`);
+}
 
-  // KPIs
-  $('recon-kpis').innerHTML = [
+// Render the recon KPIs / status / table / feedback for a given recon record.
+// Used both at run time and when the operator clicks a different batch in Stage 4.
+function renderReconResults(r){
+  if(!r){ return; }
+  const ccy = currentInstrument()?.currency || 'GBP';
+  const { lines, summary } = r;
+  const { tied, within, breaks } = summary;
+  const periodHint = (r.periodStart && r.periodEnd)
+    ? `<div class="text-[11px] text-gray-600 mb-2">Showing recon for batch <strong>${r.batchKey}</strong> · ${fmtDate(r.periodStart)} → ${fmtDate(r.periodEnd)} · run ${r.runAt ? new Date(r.runAt).toLocaleString('en-GB') : '—'}</div>`
+    : '';
+  $('recon-kpis').innerHTML = periodHint + [
     { label:'Cash Lines Compared', value: lines.length.toString() },
-    { label:'Tied',                value: `${tied} / ${lines.length}`, sub: `${M.reconciliation.summary.tieRatePct.toFixed(1)}%` },
+    { label:'Tied',                value: `${tied} / ${lines.length}`, sub: `${summary.tieRatePct.toFixed(1)}%` },
     { label:'Within Tolerance',    value: within.toString() },
-    { label:'Breaks',              value: breaks.toString(), sub: 'Total |Δ|: ' + fmtMoney(M.reconciliation.summary.totalAbsDiff, ccy) },
-    { label:'Net Variance',        value: fmtMoney(M.reconciliation.summary.totalDiff, ccy), sub: 'Workday – PCS' }
+    { label:'Breaks',              value: breaks.toString(), sub: 'Total |Δ|: ' + fmtMoney(summary.totalAbsDiff, ccy) },
+    { label:'Net Variance',        value: fmtMoney(summary.totalDiff, ccy), sub: 'Workday – PCS' }
   ].map(k =>
     `<div class="kpi"><div class="label">${k.label}</div><div class="value text-[14px]">${k.value}</div><div class="sub">${k.sub||''}</div></div>`
   ).join('');
   $('recon-kpis').classList.remove('hidden');
-
-  // Status chip
   if(breaks === 0){
     $('recon-status').className = 'chip green self-center';
-    $('recon-status').textContent = `${M.reconciliation.summary.tieRatePct.toFixed(1)}% tied · no breaks`;
+    $('recon-status').textContent = `${summary.tieRatePct.toFixed(1)}% tied · no breaks`;
   } else {
     $('recon-status').className = 'chip red self-center';
-    $('recon-status').textContent = `${breaks} break${breaks>1?'s':''} (${M.reconciliation.summary.tieRatePct.toFixed(1)}% tied)`;
+    $('recon-status').textContent = `${breaks} break${breaks>1?'s':''} (${summary.tieRatePct.toFixed(1)}% tied)`;
   }
-
-  // Table
   $('recon-table').innerHTML = `<table class="data">
     <thead><tr><th class="left">Date</th><th class="left">Transaction Type</th><th>PCS Expected</th><th>Workday Actual</th><th>Δ (act – exp)</th><th>Δ%</th><th>Status</th><th class="left">Reason</th></tr></thead>
     <tbody>${lines.map(l => `<tr ${l.status==='break'?'class="break"':''}>
@@ -2658,14 +3244,12 @@ function runReconciliation(){
       <td class="left text-[11px] text-gray-600">${l.reason || ''}</td>
     </tr>`).join('')}</tbody></table>`;
   $('recon-section').classList.remove('hidden');
-
-  // Build PortF feedback message (always — even when tied, send a "no breaks" confirmation)
+  M.reconciliation = r;
   M.portfFeedback = buildPortFFeedback();
   $('feedback-payload').textContent = JSON.stringify(M.portfFeedback, null, 2);
   $('feedback-section').classList.remove('hidden');
   $('btn-portf-feedback').disabled = false;
   setStage('stage-5', 'done');
-  toast(`Reconciliation done — ${tied} tied, ${within} within tol, ${breaks} break${breaks!==1?'s':''}`);
 }
 
 function buildPortFFeedback(){
@@ -2735,6 +3319,310 @@ function sendPortFFeedback(){
 }
 
 // ============================================================
+// Session Save / Load — capture full pipeline state to localStorage
+// ============================================================
+// A "session" snapshot captures every M.* field plus the active instrument's
+// IFRS / fees / pik / modificationEvents, so reloading restores exactly what
+// you were working on at the moment of save. Stage 4/5 batch lists are
+// preserved so you can come back next month, load more actuals, and re-run
+// reconciliation.
+const SESSION_STORE_KEY = 'lmil:sessions:v1';
+
+function detectCurrentStage(){
+  if(M.reconciliation || (M.reconciliations && M.reconciliations.length)) return 'Stage 5 — Reconciliation';
+  if(M.actualsBatches && M.actualsBatches.length) return 'Stage 4 — Workday Actuals';
+  if(M.workdayBatch)                                return 'Stage 3 — Workday GL Push';
+  if(M.acctJournals && M.acctJournals.length)      return 'Stage 2 — PCS Accounting';
+  if(M.portfData)                                   return 'Stage 1 — PortF Inbound';
+  return 'Stage 0 — Empty';
+}
+
+function captureSession(label){
+  const inst = currentInstrument();
+  return {
+    schemaVersion: 1,
+    label: label || ('session-' + new Date().toISOString().slice(0,16).replace(/[T:]/g,'-')),
+    savedAt: new Date().toISOString(),
+    stage: detectCurrentStage(),
+    deal: {
+      instrumentId: M.instrumentId,
+      dealName: inst?.deal,
+      legalEntity: inst?.legalEntity,
+      position: inst?.position,
+      currency: inst?.currency || 'GBP',
+      // Snapshot the mutable contractual override + ifrs blocks so reload reapplies them
+      ifrs: inst?.ifrs ? JSON.parse(JSON.stringify(inst.ifrs)) : null,
+      pik:  inst?.pik  ? JSON.parse(JSON.stringify(inst.pik))  : null,
+      modificationEvents: inst?.modificationEvents ? JSON.parse(JSON.stringify(inst.modificationEvents)) : [],
+      fees: inst?.fees ? inst.fees.map(f => ({ id: f.id, ifrs: f.ifrs })) : []
+    },
+    state: {
+      portfData:        M.portfData        || null,
+      acctJournals:     M.acctJournals     || [],
+      acctRunMeta:      M.acctRunMeta      || null,
+      acctRunHistory:   M.acctRunHistory   || [],
+      workdayBatch:     M.workdayBatch     || null,
+      workdayActuals:   M.workdayActuals   || null,
+      actualsBatches:   M.actualsBatches   || [],
+      activeBatchKey:   M.activeBatchKey   || null,
+      reconciliation:   M.reconciliation   || null,
+      reconciliations:  M.reconciliations  || [],
+      portfFeedback:    M.portfFeedback    || null,
+      treatmentDirty:   M.treatmentDirty?.[inst?.id] || false
+    }
+  };
+}
+
+function listSessions(){
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_STORE_KEY) || '[]');
+  } catch(e){
+    return [];
+  }
+}
+function saveSessions(arr){
+  localStorage.setItem(SESSION_STORE_KEY, JSON.stringify(arr));
+}
+
+function persistSession(session){
+  const all = listSessions();
+  // Replace any existing save with the same label, otherwise append
+  const idx = all.findIndex(s => s.label === session.label);
+  if(idx >= 0) all[idx] = session; else all.push(session);
+  saveSessions(all);
+}
+
+function restoreSession(session){
+  // Find or hydrate the deal
+  let inst = INSTRUMENTS.find(i => i.id === session.deal.instrumentId);
+  if(!inst){
+    // Synthesise a minimal instrument so the engine has something to work with
+    inst = {
+      id: session.deal.instrumentId,
+      deal: session.deal.dealName,
+      legalEntity: session.deal.legalEntity,
+      position: session.deal.position,
+      currency: session.deal.currency,
+      faceValue: 0, commitment: 0,
+      settlementDate: session.state.portfData?.instrument?.settlementDate,
+      maturityDate:   session.state.portfData?.instrument?.maturityDate,
+      coupon: { type:'Fixed', fixedRate:0 },
+      ifrs: session.deal.ifrs || {},
+      pik:  session.deal.pik  || { enabled:false, rate:0 },
+      modificationEvents: session.deal.modificationEvents || [],
+      fees: [],
+      excelImported: true
+    };
+    INSTRUMENTS.push(inst);
+    rebuildInstrumentDropdown();
+  }
+  // Restore mutable fields onto the instrument
+  if(session.deal.ifrs)               inst.ifrs               = JSON.parse(JSON.stringify(session.deal.ifrs));
+  if(session.deal.pik)                inst.pik                = JSON.parse(JSON.stringify(session.deal.pik));
+  if(session.deal.modificationEvents) inst.modificationEvents = JSON.parse(JSON.stringify(session.deal.modificationEvents));
+  if(session.deal.fees && inst.fees){
+    for(const sf of session.deal.fees){
+      const f = inst.fees.find(x => x.id === sf.id);
+      if(f && sf.ifrs) f.ifrs = sf.ifrs;
+    }
+  }
+  // Restore M.* state
+  M.instrumentId      = session.deal.instrumentId;
+  M.portfData         = session.state.portfData        || null;
+  M.acctJournals      = session.state.acctJournals     || [];
+  M.acctRunMeta       = session.state.acctRunMeta      || null;
+  M.acctRunHistory    = session.state.acctRunHistory   || [];
+  M.workdayBatch      = session.state.workdayBatch     || null;
+  M.workdayActuals    = session.state.workdayActuals   || null;
+  M.actualsBatches    = session.state.actualsBatches   || [];
+  M.activeBatchKey    = session.state.activeBatchKey   || null;
+  M.reconciliation    = session.state.reconciliation   || null;
+  M.reconciliations   = session.state.reconciliations  || [];
+  M.portfFeedback     = session.state.portfFeedback    || null;
+  M.treatmentDirty[session.deal.instrumentId] = !!session.state.treatmentDirty;
+  // Sync dropdown + reload Treatment panel
+  if($('sel-instrument')) $('sel-instrument').value = M.instrumentId;
+  snapshotTreatmentDefaults(inst);
+  loadTreatmentForm();
+  // Replay the pipeline rendering. Each stage's renderer will gracefully no-op
+  // if its prerequisite state isn't present.
+  if(M.portfData){
+    applyPortFPayload(M.portfData);            // re-renders Stage 1 panels
+  }
+  if(M.acctJournals && M.acctJournals.length){
+    runAccounting();                            // rebuilds journals + Evidence Pack
+  }
+  if(M.workdayBatch){
+    // Restore the displayed batch info — repopulate the Workday batch panel
+    $('batch-id').textContent      = M.workdayBatch.envelope?.batchId || '—';
+    $('batch-extkey').textContent  = M.workdayBatch.envelope?.externalKey || '—';
+    $('batch-rows').textContent    = M.workdayBatch.summary?.jeRows ?? '—';
+    const ccy = inst.currency || 'GBP';
+    const balanced = M.workdayBatch.summary?.balanced;
+    $('batch-balance').innerHTML   = `${fmtMoney(M.workdayBatch.summary?.totalDebits || 0, ccy)} / ${fmtMoney(M.workdayBatch.summary?.totalCredits || 0, ccy)} ${balanced ? '<span class="chip green">balanced</span>' : '<span class="chip red">UNBALANCED</span>'}`;
+    $('workday-batch-info').classList.remove('hidden');
+    setStage('stage-3', 'done');
+  }
+  if(M.actualsBatches && M.actualsBatches.length){
+    renderActualsBatchesList();
+    if(M.workdayActuals) renderActualsTable(M.workdayActuals);
+    $('workday-actuals-section').classList.remove('hidden');
+    $('workday-in-status').className = 'chip green self-center';
+    $('workday-in-status').textContent = `${M.actualsBatches.length} batch${M.actualsBatches.length === 1 ? '' : 'es'} loaded`;
+    $('btn-recon-run').disabled = false;
+    setStage('stage-4', 'done');
+  }
+  if(M.reconciliation){
+    renderReconResults(M.reconciliation);
+    setStage('stage-5', 'done');
+  }
+  toast(`Loaded "${session.label}" — ${session.deal.dealName} · ${session.stage}`);
+}
+
+// ─── Modal helpers ─────────────────────────────────────────────────────
+function closeSessionModal(){ $('session-modal').style.display = 'none'; }
+
+function openSaveSessionModal(){
+  const inst = currentInstrument();
+  if(!inst){ toast('No active deal'); return; }
+  const stage = detectCurrentStage();
+  const defaultLabel = `${inst.deal} · ${stage} · ${new Date().toISOString().slice(0,10)}`;
+  $('session-modal-title').textContent = 'Save Session';
+  $('session-modal-sub').textContent = 'Captures full pipeline state for the active deal — restorable later.';
+  $('session-modal-body').innerHTML = `
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div class="md:col-span-2 bg-indigo-50 border border-indigo-200 rounded p-3 text-[12px]">
+        <div class="font-semibold text-indigo-900 mb-1">Save context</div>
+        <div><strong>Deal:</strong> ${inst.deal}</div>
+        <div><strong>Legal Entity:</strong> ${inst.legalEntity}</div>
+        <div><strong>Position:</strong> ${inst.position}</div>
+        <div><strong>Stage:</strong> <span class="chip blue">${stage}</span></div>
+        <div><strong>State captured:</strong>
+          PortF data ${M.portfData ? '✓' : '—'} ·
+          Journals ${M.acctJournals?.length ? `(${M.acctJournals.length})` : '—'} ·
+          Workday batch ${M.workdayBatch ? '✓' : '—'} ·
+          Actuals batches ${M.actualsBatches?.length || 0} ·
+          Reconciliations ${M.reconciliations?.length || 0}
+        </div>
+      </div>
+      <div class="md:col-span-2">
+        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Save label (used to find this session later)</label>
+        <input id="session-label-input" type="text" value="${defaultLabel.replace(/"/g,'&quot;')}" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white"/>
+        <div class="text-[10px] text-gray-500 mt-1">Saving with the same label overwrites the previous save.</div>
+      </div>
+    </div>`;
+  $('btn-session-confirm').textContent = '';
+  $('btn-session-confirm').innerHTML = '<span class="material-icons-outlined text-[16px]">save</span>Save';
+  $('btn-session-confirm').onclick = () => {
+    const label = $('session-label-input').value.trim() || defaultLabel;
+    const session = captureSession(label);
+    persistSession(session);
+    closeSessionModal();
+    toast(`Saved session "${label}"`);
+  };
+  $('btn-session-export').style.display = 'inline-flex';
+  $('btn-session-export').onclick = () => {
+    const label = $('session-label-input').value.trim() || defaultLabel;
+    const session = captureSession(label);
+    const blob = new Blob([JSON.stringify(session, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `lmil-session-${session.deal.instrumentId}-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(a.href);
+    toast('Exported session JSON');
+  };
+  $('btn-session-import').style.display = 'none';
+  $('session-modal').style.display = 'flex';
+  setTimeout(() => $('session-label-input')?.focus(), 50);
+}
+
+function openLoadSessionModal(){
+  const all = listSessions();
+  const inst = currentInstrument();
+  $('session-modal-title').textContent = 'Load Session';
+  $('session-modal-sub').textContent = `${all.length} saved session${all.length === 1 ? '' : 's'} on this device.`;
+  const grouped = {};
+  for(const s of all){
+    const k = s.deal?.dealName || 'unknown';
+    (grouped[k] = grouped[k] || []).push(s);
+  }
+  if(!all.length){
+    $('session-modal-body').innerHTML = `<div class="text-[12px] text-gray-600 italic p-4 text-center">No saved sessions yet. Save one first via the <strong>Save Session</strong> button.</div>`;
+  } else {
+    let html = '';
+    for(const [deal, sessions] of Object.entries(grouped)){
+      html += `<div class="font-semibold text-[12px] text-indigo-900 mb-1 mt-2">${deal} <span class="text-[10px] text-gray-500 font-normal">(${sessions.length})</span></div>`;
+      html += `<table class="data" style="width:100%">
+        <thead><tr><th class="left">Label</th><th class="left">Stage</th><th class="left">Saved</th><th></th></tr></thead>
+        <tbody>${sessions.sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||'')).map((s, idx) => `<tr>
+          <td class="left text-[12px]" style="word-break:break-all">${s.label}</td>
+          <td class="left text-[11px]"><span class="chip blue">${s.stage}</span></td>
+          <td class="left text-[11px]">${s.savedAt ? new Date(s.savedAt).toLocaleString('en-GB') : '—'}</td>
+          <td class="left">
+            <button class="mat-btn primary !py-0.5 !px-2 text-[11px]" data-load-session="${s.label.replace(/"/g,'&quot;')}">Load</button>
+            <button class="mat-btn outline !py-0.5 !px-1.5 text-[11px]" data-delete-session="${s.label.replace(/"/g,'&quot;')}" title="Delete this save"><span class="material-icons-outlined text-[12px]">delete</span></button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+    $('session-modal-body').innerHTML = html;
+    document.querySelectorAll('[data-load-session]').forEach(btn => {
+      btn.onclick = () => {
+        const label = btn.getAttribute('data-load-session');
+        const session = listSessions().find(s => s.label === label);
+        if(session){ closeSessionModal(); restoreSession(session); }
+      };
+    });
+    document.querySelectorAll('[data-delete-session]').forEach(btn => {
+      btn.onclick = () => {
+        const label = btn.getAttribute('data-delete-session');
+        if(!confirm('Delete saved session "' + label + '"?')) return;
+        saveSessions(listSessions().filter(s => s.label !== label));
+        openLoadSessionModal();   // re-render
+        toast('Deleted ' + label);
+      };
+    });
+  }
+  $('btn-session-confirm').style.display = 'none';
+  $('btn-session-export').style.display = 'none';
+  $('btn-session-import').style.display = 'inline-flex';
+  $('btn-session-import').onclick = () => $('session-import-file').click();
+  $('session-modal').style.display = 'flex';
+}
+
+// File-import handler for sessions exported earlier
+function setupSessionImportHandler(){
+  $('session-import-file')?.addEventListener('change', (ev) => {
+    const file = ev.target.files?.[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const session = JSON.parse(e.target.result);
+        if(!session.schemaVersion || !session.deal || !session.state){
+          throw new Error('Not a valid session file (missing schema fields)');
+        }
+        persistSession(session);
+        closeSessionModal();
+        restoreSession(session);
+      } catch(err){
+        alert('Could not import session: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  });
+}
+
+// Restore "show on confirm only" + close-modal listeners
+function setupSessionModalCloseHandlers(){
+  // Don't double-attach; the existing click-anywhere handler at the bottom of
+  // setup() handles json-modal close. Add a simple listener for session-modal.
+  document.addEventListener('click', (ev) => {
+    if(ev.target.closest('[data-close-session]')) closeSessionModal();
+  });
+}
+
+// ============================================================
 // JSON modal helpers
 // ============================================================
 function openJsonModal(opts){
@@ -2786,6 +3674,34 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('schedule-filter')?.addEventListener('change', renderScheduleTable);
   $('btn-schedule-csv')?.addEventListener('click', downloadScheduleCSV);
   $('btn-schedule-json')?.addEventListener('click', downloadScheduleJSON);
+  // GL Posting Date — empty by default (AUTO mode: glDate = effectiveDate per row).
+  // Setting a date overrides every row to that close date. Re-runs the engine on change.
+  function refreshGlDateModeChip(){
+    const v = $('opt-gl-date').value;
+    const chip = $('gl-date-mode');
+    if(v){
+      chip.className = 'chip blue text-[10px]';
+      chip.style.fontSize = '9.5px';
+      chip.textContent = 'OVERRIDE → ' + v;
+    } else {
+      chip.className = 'chip green text-[10px]';
+      chip.style.fontSize = '9.5px';
+      chip.textContent = 'AUTO';
+    }
+  }
+  if($('opt-gl-date')){
+    $('opt-gl-date').value = '';                 // empty == AUTO mode
+    refreshGlDateModeChip();
+    $('opt-gl-date').addEventListener('change', () => {
+      refreshGlDateModeChip();
+      if(M.portfData) runAccounting();
+    });
+    $('btn-gl-date-auto')?.addEventListener('click', () => {
+      $('opt-gl-date').value = '';
+      refreshGlDateModeChip();
+      if(M.portfData) runAccounting();
+    });
+  }
   // Stage 1
   $('btn-portf-load').onclick = ()=> openJsonModal({
     title: 'Load PortF Cashflow Payload',
@@ -2827,6 +3743,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // Stage 5
   $('btn-recon-run').onclick = runReconciliation;
   $('btn-portf-feedback').onclick = sendPortFFeedback;
+  // Session save / load
+  $('btn-session-save')?.addEventListener('click', openSaveSessionModal);
+  $('btn-session-load')?.addEventListener('click', openLoadSessionModal);
+  setupSessionImportHandler();
+  setupSessionModalCloseHandlers();
 
   // JSON modal wiring
   document.querySelectorAll('#json-modal [data-close="1"]').forEach(el => el.onclick = closeJsonModal);

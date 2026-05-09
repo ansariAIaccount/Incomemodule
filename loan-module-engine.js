@@ -1436,24 +1436,35 @@ function applyInvestranGLMapping(entries){
   return entries;
 }
 
-function generateDIU(instr, summary){
+function generateDIU(instr, summary, opts){
   if(!summary || !summary.rows.length) return [];
+  // glDate semantics:
+  //   • If opts.glDate is a non-empty string → every JE row uses that explicit close
+  //     date (typical month-end posting: glDate = '2026-05-31' across the batch).
+  //   • Otherwise → glDate AUTO-matches each row's effectiveDate (the day the
+  //     underlying economic event occurred). This is the safe default: a JE for a
+  //     drawdown booked on 2024-10-08 has glDate = 2024-10-08.
+  // The operator overrides via the Stage 2 "GL Posting Date" date picker when
+  // running a real period close.
+  const glDateOverride = opts && opts.glDate ? opts.glDate : null;
   const ctx = { legal: instr.legalEntity, leid: instr.leid, deal: instr.deal, position: instr.position, sec: instr.incomeSecurity };
   const entries = [];
   let jeIndex = 1;
   const add = (transType, amount, isDebit, account, effDate, comments) => {
     entries.push({
       legalEntity: ctx.legal, leid: ctx.leid, batchId: 1, jeIndex: jeIndex, txIndex: isDebit?2:1,
-      glDate: summary.periodEnd, effectiveDate: effDate,
+      glDate: glDateOverride || effDate,        // auto = effectiveDate per row, else override
+      effectiveDate: effDate,
       deal: ctx.deal, position: ctx.position, incomeSecurity: ctx.sec,
-      transactionType: transType, account: account, allocationRule: isDebit?'Non-Dominant':'By Commitment and GL Date',
+      transactionType: transType, account: account,
+      allocationRule: 'No Allocation',           // NWF default for the loan module
       batchType: 'Loan Calculator',
       batchComments: `Loan Calculator Entries from ${summary.periodStart} to ${summary.periodEnd}`,
       transactionComments: comments,
       originalAmount: isDebit ? amount : amount,
       amountLE: Math.abs(amount),
       fx: 1, amountLocal: Math.abs(amount),
-      isDebit, leDomain: 'Investran Global'
+      isDebit, leDomain: 'NWF'                    // NWF instead of generic Investran Global
     });
   };
   // Interest pair
