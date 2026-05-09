@@ -1470,32 +1470,54 @@ function renderPortFSetupPanel(payload, inst){
 // Render Phase 1 "Loaded Fees" panel — fees parsed from the Excel + fees on
 // the matched/synthesised instrument. Highlights any totals the Excel supplied.
 function renderPortFFeesPanel(payload, inst){
-  // Prefer fees parsed from the Excel; fall back to the instrument's seed fees.
-  const excelFees = (payload.excelFees && payload.excelFees.length) ? payload.excelFees : null;
+  // Source priority: payload.excelFees (Excel-parsed) → payload.fees (JSON-supplied)
+  // → instrument.fees (seed record). The first non-empty array wins.
+  const parsedFees = (payload.excelFees && payload.excelFees.length) ? payload.excelFees
+                   : (Array.isArray(payload.fees) && payload.fees.length) ? payload.fees
+                   : null;
   const instFees  = inst?.fees || [];
   const ccy = inst?.currency || 'GBP';
   const fmtFreq = (f) => f || '—';
-  const fmtRate = (r) => r != null ? (r * 100).toFixed(4) + '%' : '—';
+  const fmtRate = (r) => (r != null && r !== '') ? (r * 100).toFixed(4) + '%' : '—';
 
-  if(!excelFees && !instFees.length){
+  if(!parsedFees && !instFees.length){
     $('portf-fees-section').classList.add('hidden');
     return;
   }
-  const headerRow = excelFees
-    ? `<tr><th class="left">Fee Name</th><th class="left">Kind</th><th class="left">Posting Type</th><th class="left">Calc Basis</th><th>Rate</th><th class="left">Accrual Freq</th><th class="left">Settlement Freq</th><th class="left">First Settle</th><th>Total Accrued (Excel)</th></tr>`
+  // Canonical accessor — handles both Excel-parsed (camelCase) and JSON (verbatim) shapes.
+  const G = (f, ...keys) => {
+    for(const k of keys){ if(f[k] != null && f[k] !== '') return f[k]; }
+    return null;
+  };
+  const headerRow = parsedFees
+    ? `<tr><th class="left">Fee Name</th><th class="left">Kind</th><th class="left">Posting Type</th><th class="left">Calc Basis</th><th class="left">Rate Structure</th><th>Rate</th><th class="left">Accrual Freq</th><th class="left">Settlement Freq</th><th class="left">First Settle</th><th>Total Accrued</th></tr>`
     : `<tr><th class="left">Fee Name</th><th class="left">Kind</th><th class="left">Mode</th><th class="left">Frequency</th><th class="left">Basis</th><th>Rate</th><th class="left">IFRS Treatment</th></tr>`;
-  const rowsHtml = excelFees
-    ? excelFees.map(f => `<tr>
-        <td class="left text-[12px] font-semibold">${f.label}</td>
-        <td class="left text-[11px]">${f.kind}</td>
-        <td class="left text-[11px]">${f.postingType || '—'}</td>
-        <td class="left text-[11px]">${f.calcBasis || '—'}</td>
-        <td>${fmtRate(f.rate)}</td>
-        <td class="left text-[11px]">${fmtFreq(f.accrualFrequency)}</td>
-        <td class="left text-[11px]">${fmtFreq(f.settlementFrequency)}</td>
-        <td class="left text-[11px]">${fmtDate(f.firstSettlementDate)}</td>
-        <td>${f.totalAccruedFromExcel ? fmtMoney(f.totalAccruedFromExcel, ccy) : '—'}</td>
-      </tr>`).join('')
+  const rowsHtml = parsedFees
+    ? parsedFees.map(f => {
+        const name        = G(f, 'name', 'label');
+        const kind        = G(f, 'kind') || (G(f, 'postingType') === 'Interest' ? 'interest' : 'fee');
+        const posting     = G(f, 'postingType');
+        const basis       = G(f, 'calcBasis', 'calculationBasis', 'basis');
+        const rateStruct  = G(f, 'rateStructure');
+        const rate        = G(f, 'rate');
+        const accrualFreq = G(f, 'accrualFrequency');
+        const settleFreq  = G(f, 'settlementFrequency');
+        const firstSettle = G(f, 'firstSettlementDate');
+        const total       = G(f, 'totalAccrued', 'totalAccruedFromExcel');
+        const dataNote    = G(f, 'dataNote');
+        return `<tr>
+          <td class="left text-[12px] font-semibold">${name || '—'}</td>
+          <td class="left text-[11px]">${kind}</td>
+          <td class="left text-[11px]">${posting || '—'}</td>
+          <td class="left text-[11px]">${basis || '—'}</td>
+          <td class="left text-[11px]">${rateStruct || '—'}</td>
+          <td>${fmtRate(rate)}</td>
+          <td class="left text-[11px]">${fmtFreq(accrualFreq)}</td>
+          <td class="left text-[11px]">${fmtFreq(settleFreq)}</td>
+          <td class="left text-[11px]">${firstSettle ? fmtDate(firstSettle) : '—'}</td>
+          <td>${total != null && total !== '' ? fmtMoney(total, ccy) : '—'}${dataNote ? ` <span class="chip amber text-[9px]" title="${dataNote}">note</span>` : ''}</td>
+        </tr>`;
+      }).join('')
     : instFees.map(f => `<tr>
         <td class="left text-[12px] font-semibold">${f.label || f.kind}</td>
         <td class="left text-[11px]">${f.kind}</td>
@@ -1505,12 +1527,15 @@ function renderPortFFeesPanel(payload, inst){
         <td>${fmtRate(f.rate)}</td>
         <td class="left text-[11px]">${f.ifrs || '—'}</td>
       </tr>`).join('');
-  const count = (excelFees || instFees).length;
-  $('portf-fees-count').textContent = count + (count === 1 ? ' fee' : ' fees') + (excelFees ? ' (from Excel)' : ' (from deal record)');
+  const count = (parsedFees || instFees).length;
+  const sourceLabel = (payload.excelFees && payload.excelFees.length) ? 'from Excel'
+                    : (Array.isArray(payload.fees) && payload.fees.length) ? 'from JSON'
+                    : 'from deal record';
+  $('portf-fees-count').textContent = count + (count === 1 ? ' fee' : ' fees') + ' (' + sourceLabel + ')';
   $('portf-fees-table').innerHTML = `<table class="data" style="width:100%">
     <thead>${headerRow}</thead>
     <tbody>${rowsHtml}</tbody>
-  </table>${excelFees ? '<div class="text-[11px] text-gray-500 mt-1">Total Accrued shows the sum of daily fee amounts across the Excel data table.</div>' : ''}`;
+  </table>${parsedFees ? '<div class="text-[11px] text-gray-500 mt-1">Total Accrued shows the sum of daily fee amounts the source supplied.</div>' : ''}`;
   $('portf-fees-section').classList.remove('hidden');
 }
 
