@@ -143,7 +143,7 @@
     <div class="flex flex-wrap gap-2 items-center">
       <button id="btn-acct-run" class="mat-btn primary" disabled><span class="material-icons-outlined text-[16px]">play_arrow</span>Run Accounting</button>
       <button id="btn-diu-template" class="mat-btn outline"><span class="material-icons-outlined text-[16px]">download</span>DIU Template (blank)</button>
-      <button id="btn-diu-filled" class="mat-btn outline" disabled><span class="material-icons-outlined text-[16px]">file_download</span>Filled DIU CSV</button>
+      <button id="btn-diu-filled" class="mat-btn outline" disabled title="Download Investran DIU workbook with two tabs: GL (journal entries) + PortfolioPosition (security master)"><span class="material-icons-outlined text-[16px]">file_download</span>Filled DIU XLSX</button>
       <div class="flex items-center gap-1 border border-gray-300 rounded px-2 py-1 bg-white" title="Date this JE batch is posted to the GL. Leave blank for AUTO mode (glDate = effectiveDate per row). Set a date to override every row to that close date.">
         <span class="material-icons-outlined text-[14px] text-gray-500">event</span>
         <label for="opt-gl-date" class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">GL Posting Date</label>
@@ -1629,9 +1629,19 @@ function renderChangeHandlingPanel(inst){
 const DIU_HEADERS = [
   'effectiveDate','glDate','transactionType','account','glAccountName','glTransType',
   'amountLE','isDebit','fx','amountLocal','originalAmount','allocationRule',
-  'legalEntity','leid','deal','position','incomeSecurity',
+  'legalEntity','leid','deal','issuer','Security','incomeSecurity',
   'batchId','batchType','batchComments','transactionComments','jeIndex','txIndex','leDomain'
 ];
+// Header → source-field mapping. Some output columns are derived (issuer = deal)
+// or renamed (Security ← position) without changing the engine's data model.
+const DIU_HEADER_FIELD = {
+  issuer:   'deal',
+  Security: 'position'
+};
+function getDIUValue(row, header){
+  const src = DIU_HEADER_FIELD[header] || header;
+  return row[src];
+}
 // Numeric fields that represent money — rounded to 2 dp on CSV export.
 // (jeIndex / txIndex / leid stay as-is; fx is ratio with 4–6 dp tolerated.)
 const CSV_MONEY_FIELDS = new Set(['amountLE','amountLocal','originalAmount']);
@@ -1664,8 +1674,10 @@ function csvEscape(v, fieldName){
 function rowsToCSV(rows, headers){
   const hdrs = headers || DIU_HEADERS;
   // Prepend UTF-8 BOM so Excel opens the file correctly even on Windows defaults.
+  // Use getDIUValue so derived/renamed columns (issuer ← deal, Security ← position)
+  // pick up the right source field even though the header label is different.
   return '﻿' + [hdrs.join(',')].concat(
-    rows.map(r => hdrs.map(h => csvEscape(r[h], h)).join(','))
+    rows.map(r => hdrs.map(h => csvEscape(getDIUValue(r, h), h)).join(','))
   ).join('\n');
 }
 function downloadFile(name, content, mime){
@@ -1693,12 +1705,141 @@ function downloadDIUTemplate(){
   downloadFile('investran-diu-template-blank.csv', csv);
   toast('Downloaded blank DIU template');
 }
+// Map our internal instrumentKind onto the security-type vocabulary the DIU Sec
+// master worksheet uses (matches sample: Corporate Bond, Syndicated Bank Debt
+// Loan, Equity, Equity Option, Financial Guarantee, US T-Note).
+function deriveSecurityType(inst, child){
+  const kind = (child?.instrumentKind || inst?.instrumentKind || inst?.debtType || '').toLowerCase();
+  const sec  = (child?.incomeSecurity || inst?.incomeSecurity || '').toLowerCase();
+  if(/guarantee/.test(kind) || /guarantee/.test(sec))           return 'Financial Guarantee';
+  if(/bond/.test(kind) || /bond/.test(sec) || /perp/.test(sec)) return 'Corporate Bond';
+  if(/equity|series|ordinary/.test(kind) || /equity/.test(sec)) return 'Equity';
+  if(/treasury|t-note|t-bill/.test(sec))                        return 'US T-Note';
+  if(/loan|term|revolver|facility/.test(sec) || /loan/.test(kind)) return 'Syndicated Bank Debt Loan';
+  return 'Direct Investment';
+}
+function deriveDealType(inst){
+  const kind = (inst?.instrumentKind || '').toLowerCase();
+  if(/equity/.test(kind))     return 'Equity Investment';
+  if(/guarantee/.test(kind))  return 'Guarantee';
+  if(/multi/.test(kind))      return 'Multi-Tranche';
+  return 'Direct Investment';
+}
+
+// Build PortfolioPosition rows for the active instrument. One row per security:
+// for tranche/underlying wrappers, expand into one row per child.
+function buildPortfolioPositionRows(inst){
+  const rows = [];
+  const baseLegalEntity = inst.legalEntity || '';
+  const baseLEID        = inst.leid || '';
+  const baseDomain      = 'NWF';
+  const issuer          = inst.deal || '';
+  const dealType        = deriveDealType(inst);
+  const ccy             = inst.currency || 'GBP';
+  const securities = [];
+  if(Array.isArray(inst.tranches) && inst.tranches.length){
+    for(const t of inst.tranches){
+      securities.push({
+        deal:      t.deal || inst.deal,
+        issuer:    t.deal || inst.deal,
+        security:  t.incomeSecurity || (inst.incomeSecurity + ' — ' + (t.id || t.name)),
+        secType:   deriveSecurityType(inst, t),
+        currency:  t.currency || ccy
+      });
+    }
+  } else if(Array.isArray(inst.underlyingLoans) && inst.underlyingLoans.length){
+    for(const u of inst.underlyingLoans){
+      securities.push({
+        deal:      u.deal || inst.deal,
+        issuer:    u.deal || inst.deal,
+        security:  u.incomeSecurity || (inst.incomeSecurity + ' — ' + (u.id || u.name)),
+        secType:   deriveSecurityType(inst, u),
+        currency:  u.currency || ccy
+      });
+    }
+  } else {
+    securities.push({
+      deal:      inst.deal,
+      issuer:    issuer,
+      security:  inst.incomeSecurity || inst.deal,
+      secType:   deriveSecurityType(inst),
+      currency:  ccy
+    });
+  }
+  for(const s of securities){
+    rows.push({
+      'Legal Entity ID':                    baseLEID,
+      'Legal Entity':                       baseLegalEntity,
+      'Legal Entity Domain':                baseDomain,
+      'Deal':                               s.deal,
+      'Deal Type':                          dealType,
+      'Deal Domain':                        baseDomain,
+      'Deal Currency':                      s.currency,
+      'Issuer':                             s.issuer,
+      'Issuer Domain':                      baseDomain,
+      'Issuer Linked Organization':         s.issuer,
+      'Issuer Linked Organization Domain':  baseDomain,
+      'Issuer Currency':                    s.currency,
+      'Security':                           s.security,
+      'Security Type':                      s.secType,
+      'Security Currency':                  s.currency
+    });
+  }
+  return rows;
+}
+
+const PORTFOLIO_POSITION_COLS = [
+  'Legal Entity ID','Legal Entity','Legal Entity Domain',
+  'Deal','Deal Type','Deal Domain','Deal Currency',
+  'Issuer','Issuer Domain','Issuer Linked Organization','Issuer Linked Organization Domain','Issuer Currency',
+  'Security','Security Type','Security Currency'
+];
+
 function downloadDIUFilled(){
   if(!M.acctJournals.length){ toast('Run accounting first'); return; }
-  const csv = rowsToCSV(M.acctJournals);
   const inst = currentInstrument();
-  downloadFile(`investran-diu-${inst.id}-${new Date().toISOString().slice(0,10)}.csv`, csv);
-  toast(`Downloaded filled DIU CSV — ${M.acctJournals.length} JE rows`);
+  const dateStamp = new Date().toISOString().slice(0,10);
+  // Build XLSX workbook with two tabs: GL (the existing journal data) and
+  // PortfolioPosition (matches the DIU Sec master worksheet template).
+  // Apply the same sanitiser + 2-dp money rounding the CSV path uses, so the
+  // workbook is readable in legacy Excel / downstream ETL paths.
+  const sanitiseRow = (row, headers) => {
+    const out = {};
+    for(const h of headers){
+      // Look up source field via the header→field map (issuer ← deal, Security ← position).
+      const v = getDIUValue(row, h);
+      if(v == null) { out[h] = ''; continue; }
+      if(typeof v === 'number' && CSV_MONEY_FIELDS.has(h)){
+        out[h] = +v.toFixed(2);                 // keep numeric type for XLSX
+      } else if(typeof v === 'number'){
+        out[h] = v;
+      } else {
+        out[h] = sanitiseForCSV(v);
+      }
+    }
+    return out;
+  };
+  const glRows  = M.acctJournals.map(j => sanitiseRow(j, DIU_HEADERS));
+  const ppRows  = buildPortfolioPositionRows(inst).map(r => sanitiseRow(r, PORTFOLIO_POSITION_COLS));
+  // Use SheetJS (already loaded for Excel parsing) to build the workbook.
+  const wb = XLSX.utils.book_new();
+  const wsGL = XLSX.utils.json_to_sheet(glRows, { header: DIU_HEADERS });
+  XLSX.utils.book_append_sheet(wb, wsGL, 'GL');
+  const wsPP = XLSX.utils.json_to_sheet(ppRows, { header: PORTFOLIO_POSITION_COLS });
+  XLSX.utils.book_append_sheet(wb, wsPP, 'PortfolioPosition');
+  // Auto-size columns roughly by header text length
+  for(const ws of [wsGL, wsPP]){
+    const headers = Object.keys(ws).filter(k => /^[A-Z]+1$/.test(k)).map(k => ws[k].v);
+    ws['!cols'] = headers.map(h => ({ wch: Math.min(36, Math.max(12, (h || '').length + 4)) }));
+  }
+  // Generate + download
+  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `investran-diu-${inst.id}-${dateStamp}.xlsx`;
+  a.click(); URL.revokeObjectURL(a.href);
+  toast(`Downloaded filled DIU XLSX — ${glRows.length} JE rows · ${ppRows.length} portfolio position${ppRows.length === 1 ? '' : 's'}`);
 }
 
 // ----- Treatment editor: snapshot, write-back, reset ------------------
