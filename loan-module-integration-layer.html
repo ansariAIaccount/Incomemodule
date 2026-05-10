@@ -274,6 +274,24 @@
           <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Macro overlay weight (probability-weighted)</label>
           <input id="opt-macro-weight" type="number" step="0.01" min="0" max="2" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white" placeholder="1.00 = neutral · 1.20 = pessimistic"/>
         </div>
+        <!-- Gap #3 — Current DPD (auto-migrates Stage when threshold crossed) -->
+        <div>
+          <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Current DPD (days past due)</label>
+          <input id="opt-dpd-current" type="number" step="1" min="0" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white" placeholder="0 = current"/>
+        </div>
+        <!-- Gap #4 — Covenant breach (triggers SICR if currently Stage 1) -->
+        <div>
+          <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Covenant breach status</label>
+          <select id="opt-covenant-breach" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+            <option value="false">No — performing</option>
+            <option value="true">Yes — triggers SICR (Stage 1 → 2)</option>
+          </select>
+        </div>
+        <!-- Gap #3-bis — Auto-migration banner -->
+        <div id="ecl-auto-migration-banner" class="md:col-span-4 hidden bg-amber-50 border border-amber-200 rounded p-2 text-[11px] text-amber-900 mt-1">
+          <span class="material-icons-outlined text-[14px] align-middle">trending_up</span>
+          <span id="ecl-auto-migration-msg" class="align-middle ml-1"></span>
+        </div>
       </div>
     </div>
 
@@ -543,6 +561,16 @@
       <div id="ecl-templates" class="mt-3"></div>
     </details>
 
+    <!-- E-bis) ECL Calculation Trace — explicit IFRS 9 §5.5.17 disclosure -->
+    <details class="bg-white border border-gray-200 rounded-lg mb-2 p-3">
+      <summary class="font-semibold text-[12.5px] cursor-pointer flex items-center gap-2">
+        <span class="material-icons-outlined text-[16px]" style="color:var(--brand-600)">calculate</span>
+        IFRS 9 ECL Calculation Trace
+        <span class="text-[11px] text-gray-500 font-normal ml-auto">PD × LGD × EAD × CCF × stage curve · discounted at original EIR</span>
+      </summary>
+      <div id="ecl-trace" class="mt-3"></div>
+    </details>
+
     <!-- F) Modification Before/After + Audit Run History -->
     <details class="bg-white border border-gray-200 rounded-lg mb-2 p-3">
       <summary class="font-semibold text-[12.5px] cursor-pointer flex items-center gap-2">
@@ -720,6 +748,156 @@
 
 <div id="toast" class="toast"></div>
 
+<!-- ===== Loan Assistant — floating chat panel =====
+     Offline FAQ chat covering Accounting / IFRS / ECL / loan-module workflow. -->
+<style>
+  #da-fab { position:fixed; bottom:24px; right:24px; z-index:9998;
+    background:var(--brand-600,#2940f5); color:white; border:none;
+    border-radius:50%; width:56px; height:56px; cursor:pointer;
+    box-shadow:0 6px 18px rgba(41,64,245,.45); display:flex; align-items:center; justify-content:center;
+    transition:transform .15s ease;
+  }
+  #da-fab:hover { transform:scale(1.05); }
+  #da-fab .material-icons-outlined { font-size:26px; }
+  #da-panel { position:fixed; bottom:90px; right:24px; z-index:9999;
+    width:min(440px, 92vw); height:min(640px, 80vh);
+    background:white; border:1px solid #e3e6ee; border-radius:14px;
+    box-shadow:0 16px 48px rgba(15,20,40,.22);
+    display:none; flex-direction:column; overflow:hidden;
+  }
+  #da-panel.open { display:flex; }
+  #da-h { padding:10px 14px; background:linear-gradient(135deg, #1F4E79, #2940f5);
+    color:white; display:flex; align-items:center; gap:8px;
+  }
+  #da-h .title { font-weight:700; font-size:13px; }
+  #da-h .sub { font-size:10.5px; opacity:.85; }
+  #da-h .close { margin-left:auto; cursor:pointer; opacity:.85; }
+  #da-h .close:hover { opacity:1; }
+  #da-body { flex:1; overflow:auto; padding:12px 14px; background:#fafbff; }
+  #da-input-row { padding:10px 12px; border-top:1px solid #e1e4ec; background:white;
+    display:flex; gap:6px; align-items:center;
+  }
+  #da-input { flex:1; border:1px solid #d4d8e0; border-radius:8px; padding:8px 10px;
+    font-size:13px; outline:none;
+  }
+  #da-input:focus { border-color:var(--brand-600); }
+  #da-send { background:var(--brand-600); color:white; border:none; border-radius:8px;
+    padding:8px 14px; font-size:12px; font-weight:600; cursor:pointer;
+  }
+  .da-msg { background:white; border:1px solid #e1e4ec; border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+  .da-msg.user { background:#eef2ff; border-color:#c7d2fe; margin-left:32px; }
+  .da-msg.bot  { background:white; margin-right:24px; }
+  .da-msg .q { font-weight:600; font-size:12px; color:#1F4E79; margin-bottom:4px; }
+  .da-msg .a { font-size:12px; color:#1f2937; line-height:1.5; }
+  .da-msg .a code { background:#f1f5f9; padding:1px 4px; border-radius:3px; font-size:11px; }
+  .da-msg .steps { background:#f8fafc; border-left:3px solid var(--brand-600,#2940f5);
+    padding:6px 10px; margin-top:6px; font-size:11.5px; color:#374151;
+  }
+  .da-msg .steps .step-title { font-weight:600; color:#1F4E79; margin-bottom:4px; }
+  .da-msg .steps ol { margin:0; padding-left:18px; }
+  .da-msg .steps li { margin-bottom:2px; }
+  .da-msg .meta { font-size:10.5px; color:#6b7280; margin-top:6px; padding-top:6px; border-top:1px dashed #e5e7eb; }
+  .da-msg .meta .chip-mini { display:inline-block; background:#e0e7ff; color:#3730a3; padding:1px 6px; border-radius:8px; font-size:10px; margin-right:4px; }
+  .da-followups { margin-top:8px; }
+  .da-followups .label { font-size:10.5px; color:#6b7280; margin-bottom:3px; }
+  .da-chip { display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; color:#334155;
+    padding:3px 8px; border-radius:12px; font-size:10.5px; margin:2px 3px 0 0;
+    cursor:pointer; transition:background .12s;
+  }
+  .da-chip:hover { background:#e2e8f0; }
+  .da-suggestions { margin-bottom:10px; }
+  .da-suggestions .label { font-size:10.5px; color:#6b7280; margin-bottom:5px; }
+  .da-empty-tip { font-size:11px; color:#6b7280; font-style:italic; padding:8px; text-align:center;
+    border:1px dashed #cbd5e1; border-radius:8px; margin:8px 0;
+  }
+  .da-no-match { background:#fef3c7; border:1px solid #fcd34d; padding:10px;
+    border-radius:8px; font-size:12px; color:#78350f; margin-bottom:8px;
+  }
+  /* Settings panel + mode badge */
+  #da-settings { display:none; padding:14px; background:#fafbff; border-bottom:1px solid #e1e4ec; }
+  #da-settings.open { display:block; }
+  #da-settings label { display:block; font-size:10.5px; font-weight:600; color:#374151; margin-bottom:4px; margin-top:8px; }
+  #da-settings input, #da-settings select {
+    width:100%; padding:6px 8px; font-size:12px; border:1px solid #d4d8e0; border-radius:6px; outline:none;
+  }
+  #da-settings input:focus, #da-settings select:focus { border-color:var(--brand-600); }
+  #da-settings .row { display:flex; gap:6px; align-items:flex-end; }
+  #da-settings .row > * { flex:1; }
+  #da-settings button { padding:6px 10px; font-size:11.5px; border-radius:6px; cursor:pointer; }
+  #da-settings .save-btn { background:var(--brand-600); color:white; border:none; }
+  #da-settings .clear-btn { background:#f3f4f6; color:#374151; border:1px solid #d4d8e0; }
+  #da-settings .help { font-size:10.5px; color:#6b7280; margin-top:4px; line-height:1.4; }
+  #da-settings .help a { color:var(--brand-600); }
+  #da-mode-badge { font-size:10px; padding:2px 6px; border-radius:8px; margin-left:auto; margin-right:6px; }
+  #da-mode-badge.online  { background:#10b981; color:white; }
+  #da-mode-badge.offline { background:#9ca3af; color:white; }
+  .da-loading { display:inline-block; }
+  .da-loading::after { content:'·'; animation:da-dots 1.4s infinite; }
+  @keyframes da-dots {
+    0%, 20%   { content:'·'; }
+    40%       { content:'··'; }
+    60%, 100% { content:'···'; }
+  }
+  .da-msg .a strong { color:#1F4E79; }
+  .da-msg .a ul, .da-msg .a ol { margin:6px 0 6px 18px; padding:0; }
+  .da-msg .a li { margin-bottom:2px; }
+  .da-msg .a p { margin:6px 0; }
+  .da-cost { font-size:9.5px; color:#9ca3af; margin-top:4px; }
+</style>
+<button id="da-fab" title="Loan Assistant — ask a question about accounting, IFRS, ECL, or how the application works">
+  <span class="material-icons-outlined">chat</span>
+</button>
+<div id="da-panel">
+  <div id="da-h">
+    <span class="material-icons-outlined" style="font-size:18px">support_agent</span>
+    <div>
+      <div class="title">Loan Assistant</div>
+      <div class="sub">Accounting · IFRS · ECL · Loan-module workflow</div>
+    </div>
+    <span id="da-mode-badge" class="offline">offline</span>
+    <span class="close material-icons-outlined" id="da-settings-toggle" title="Settings — API key, model">settings</span>
+    <span class="close material-icons-outlined" id="da-close">close</span>
+  </div>
+  <div id="da-settings">
+    <label for="da-api-key">Anthropic API key</label>
+    <div class="row">
+      <input id="da-api-key" type="password" placeholder="sk-ant-..." autocomplete="off"/>
+      <button id="da-key-save" class="save-btn">Save</button>
+      <button id="da-key-clear" class="clear-btn">Clear</button>
+    </div>
+    <div class="help">
+      Stored locally in your browser only. Never transmitted to anyone except <code>api.anthropic.com</code>.
+      Get one at <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>.
+      When set, the assistant uses Claude AI; when empty, falls back to the offline FAQ.
+    </div>
+    <label for="da-model">Model</label>
+    <select id="da-model">
+      <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (fast, ~£0.001/q)</option>
+      <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (richer, ~£0.01/q)</option>
+    </select>
+  </div>
+  <div id="da-body">
+    <div class="da-suggestions" id="da-suggestions">
+      <div class="label">Try asking:</div>
+      <span class="da-chip" data-suggest="What is the difference between EIR and coupon rate?">EIR vs coupon</span>
+      <span class="da-chip" data-suggest="How is ECL calculated?">ECL formula</span>
+      <span class="da-chip" data-suggest="How does modification accounting work?">Modification accounting</span>
+      <span class="da-chip" data-suggest="What is SICR? How does Stage migration work?">SICR triggers</span>
+      <span class="da-chip" data-suggest="How are fees treated under IFRS 9 vs IFRS 15?">Fee treatment</span>
+      <span class="da-chip" data-suggest="What is in the Filled DIU XLSX?">DIU output</span>
+      <span class="da-chip" data-suggest="Are there any gaps in our accounting coverage?">Gap analysis</span>
+      <span class="da-chip" data-suggest="Which deal best illustrates each capability?">Deal recommendations</span>
+    </div>
+    <div class="da-empty-tip">Set your Anthropic API key in <strong>Settings</strong> for AI-powered answers · or just type a question for an offline keyword search.</div>
+  </div>
+  <div id="da-input-row">
+    <input id="da-input" type="text" placeholder="Ask about accounting, IFRS, ECL, or how a feature works..."/>
+    <button id="da-send">
+      <span class="material-icons-outlined" style="font-size:14px;vertical-align:middle">send</span>
+    </button>
+  </div>
+</div>
+
 <!-- ===== Generic JSON modal ===== -->
 <!-- ===== Session Save/Load modal ===== -->
 <div id="session-modal" class="json-modal" style="display:none">
@@ -772,6 +950,8 @@
 <!-- ===== Engine + Pipeline scripts (loaded from external files generated below) ===== -->
 <script src="loan-module-engine.js"></script>
 <script src="loan-module-instruments.js"></script>
+<script src="demo-assistant-kb.js"></script>
+<script src="demo-assistant-system-prompt.js"></script>
 <script>
 /* ============================================================
    Loan Module Integration Layer — Pipeline orchestration
@@ -1761,13 +1941,16 @@ function buildPortfolioPositionRows(inst){
   const issuer          = inst.deal || '';
   const dealType        = deriveDealType(inst);
   const ccy             = inst.currency || 'GBP';
+  // Security column matches what the GL worksheet's Security column carries
+  // (the deal's `position` field, e.g. "NWF Guarantor Position · Volt covered
+  // tranche"), so the two tabs are consistent.
   const securities = [];
   if(Array.isArray(inst.tranches) && inst.tranches.length){
     for(const t of inst.tranches){
       securities.push({
         deal:      t.deal || inst.deal,
         issuer:    t.deal || inst.deal,
-        security:  t.incomeSecurity || (inst.incomeSecurity + ' — ' + (t.id || t.name)),
+        security:  t.position || ((inst.position || inst.deal) + ' · ' + (t.id || t.name)),
         secType:   deriveSecurityType(inst, t),
         currency:  t.currency || ccy
       });
@@ -1777,7 +1960,7 @@ function buildPortfolioPositionRows(inst){
       securities.push({
         deal:      u.deal || inst.deal,
         issuer:    u.deal || inst.deal,
-        security:  u.incomeSecurity || (inst.incomeSecurity + ' — ' + (u.id || u.name)),
+        security:  u.position || ((inst.position || inst.deal) + ' · ' + (u.id || u.name)),
         secType:   deriveSecurityType(inst, u),
         currency:  u.currency || ccy
       });
@@ -1786,7 +1969,7 @@ function buildPortfolioPositionRows(inst){
     securities.push({
       deal:      inst.deal,
       issuer:    issuer,
-      security:  inst.incomeSecurity || inst.deal,
+      security:  inst.position || inst.deal,    // ← matches GL Security column (= position field)
       secType:   deriveSecurityType(inst),
       currency:  ccy
     });
@@ -1828,11 +2011,16 @@ function downloadDIUFilled(){
   // PortfolioPosition (matches the DIU Sec master worksheet template).
   // Apply the same sanitiser + 2-dp money rounding the CSV path uses, so the
   // workbook is readable in legacy Excel / downstream ETL paths.
-  const sanitiseRow = (row, headers) => {
+  // sanitiseRow has two modes:
+  //   useFieldMap=true  — GL rows: apply the header→source field mapping
+  //                       (issuer ← deal, Security ← position) before sanitising.
+  //   useFieldMap=false — PortfolioPosition rows: row keys already match the
+  //                       column headers, so skip the mapping (otherwise
+  //                       Security would redirect to row.position, blank).
+  const sanitiseRow = (row, headers, useFieldMap) => {
     const out = {};
     for(const h of headers){
-      // Look up source field via the header→field map (issuer ← deal, Security ← position).
-      const v = getDIUValue(row, h);
+      const v = useFieldMap ? getDIUValue(row, h) : row[h];
       if(v == null) { out[h] = ''; continue; }
       if(typeof v === 'number' && CSV_MONEY_FIELDS.has(h)){
         out[h] = +v.toFixed(2);                 // keep numeric type for XLSX
@@ -1844,8 +2032,25 @@ function downloadDIUFilled(){
     }
     return out;
   };
-  const glRows  = M.acctJournals.map(j => sanitiseRow(j, DIU_HEADERS));
-  const ppRows  = buildPortfolioPositionRows(inst).map(r => sanitiseRow(r, PORTFOLIO_POSITION_COLS));
+  // Per-glDate batch ID assignment. Group journals by glDate (preserving the
+  // order in which dates first appear), then stamp every row with a simple
+  // sequential integer batchId — 1, 2, 3, … per unique glDate. All rows
+  // sharing a glDate share a batchId. Stage 3's externalKey for the whole
+  // push remains unchanged — this is purely how the workbook surfaces batches.
+  const glDateToBatchId = new Map();
+  for(const j of M.acctJournals){
+    const d = j.glDate || j.effectiveDate || dateStamp;
+    if(!glDateToBatchId.has(d)){
+      glDateToBatchId.set(d, glDateToBatchId.size + 1);
+    }
+  }
+  // Stamp every journal row with its per-glDate batchId before sanitising.
+  // We mutate a shallow copy of each row so M.acctJournals isn't disturbed.
+  const stampedJournals = M.acctJournals.map(j => Object.assign({}, j, {
+    batchId: glDateToBatchId.get(j.glDate || j.effectiveDate || dateStamp)
+  }));
+  const glRows  = stampedJournals.map(j => sanitiseRow(j, DIU_HEADERS, /*useFieldMap=*/true));
+  const ppRows  = buildPortfolioPositionRows(inst).map(r => sanitiseRow(r, PORTFOLIO_POSITION_COLS, /*useFieldMap=*/false));
   // Use SheetJS (already loaded for Excel parsing) to build the workbook.
   const wb = XLSX.utils.book_new();
   const wsGL = XLSX.utils.json_to_sheet(glRows, { header: DIU_HEADERS });
@@ -1907,6 +2112,11 @@ function applyTreatmentFromForm(){
   const dpd3 = parseInt($('opt-dpd-stage3').value, 10);             if(!isNaN(dpd3)) inst.ifrs.dpdStage3Threshold = dpd3;   else delete inst.ifrs.dpdStage3Threshold;
   inst.ifrs.watchlistOverride   = $('opt-watchlist').value === 'true';
   const macroW = parseFloat($('opt-macro-weight').value);           if(!isNaN(macroW)) inst.ifrs.macroOverlayWeight = macroW; else delete inst.ifrs.macroOverlayWeight;
+  // Gap #3 — current DPD (auto-stage migration applies on next runAccounting)
+  const dpdCur = parseInt($('opt-dpd-current').value, 10);
+  if(!isNaN(dpdCur)) inst.ifrs.dpdCurrent = dpdCur; else delete inst.ifrs.dpdCurrent;
+  // Gap #4 — covenant breach (triggers SICR move to Stage 2 if currently Stage 1)
+  inst.ifrs.covenantBreach      = $('opt-covenant-breach').value === 'true';
   // ─── Modification Policy ───
   inst.ifrs.modification = inst.ifrs.modification || {};
   const modThresh = parseFloat($('opt-mod-threshold').value);      if(!isNaN(modThresh)) inst.ifrs.modification.substantialThreshold = modThresh; else delete inst.ifrs.modification.substantialThreshold;
@@ -1979,6 +2189,8 @@ function loadTreatmentForm(){
   $('opt-dpd-stage3').value       = inst.ifrs?.dpdStage3Threshold ?? '';
   $('opt-watchlist').value        = String(inst.ifrs?.watchlistOverride === true);
   $('opt-macro-weight').value     = inst.ifrs?.macroOverlayWeight ?? '';
+  $('opt-dpd-current').value      = inst.ifrs?.dpdCurrent ?? '';
+  $('opt-covenant-breach').value  = String(inst.ifrs?.covenantBreach === true);
   // Modification Policy
   $('opt-mod-threshold').value    = inst.ifrs?.modification?.substantialThreshold ?? '';
   $('opt-mod-reir').value         = String(inst.ifrs?.modification?.recomputeEIROnSubstantial !== false);
@@ -2224,6 +2436,46 @@ function resetTreatmentToDefaults(){
   toast('Reset accounting treatment + contractual overrides to deal defaults');
 }
 
+// Gap #3 + #4 — ECL Stage auto-migration from DPD + covenant breach.
+// Hierarchy of triggers (highest priority first):
+//   1. Watchlist override (qualitative): force Stage 2
+//   2. DPD ≥ Stage 3 threshold: force Stage 3 (credit-impaired)
+//   3. DPD ≥ Stage 2 threshold: force Stage 2 (SICR)
+//   4. Covenant breach: force Stage 2 (SICR) if currently Stage 1
+//   5. Otherwise: leave as-is (operator override stays)
+function applyEclAutoMigration(inst){
+  if(!inst || !inst.ifrs) return;
+  const ifrs = inst.ifrs;
+  const dpd = Number(ifrs.dpdCurrent || 0);
+  const t2  = Number(ifrs.dpdStage2Threshold || 30);
+  const t3  = Number(ifrs.dpdStage3Threshold || 90);
+  const cur = Number(ifrs.ecLStage || 1);
+  let target = cur, reason = null;
+  if(ifrs.watchlistOverride){
+    target = Math.max(cur, 2); reason = 'Watchlist override active (qualitative SICR signal)';
+  } else if(dpd >= t3){
+    target = 3; reason = `DPD ${dpd} ≥ Stage 3 threshold (${t3}) — credit-impaired`;
+  } else if(dpd >= t2){
+    target = Math.max(target, 2); reason = `DPD ${dpd} ≥ Stage 2 threshold (${t2}) — SICR`;
+  } else if(ifrs.covenantBreach && cur === 1){
+    target = 2; reason = 'Covenant breach flagged — SICR (qualitative trigger)';
+  }
+  // Show the banner if the engine moved the stage
+  const banner = $('ecl-auto-migration-banner');
+  const msg = $('ecl-auto-migration-msg');
+  if(reason && target !== cur){
+    ifrs.ecLStage = target;
+    // Re-sync the dropdown so the user sees the new value
+    if($('opt-ecl-stage')) $('opt-ecl-stage').value = String(target);
+    if(banner && msg){
+      msg.textContent = `ECL Stage auto-migrated ${cur} → ${target}. ${reason}.`;
+      banner.classList.remove('hidden');
+    }
+  } else if(banner){
+    banner.classList.add('hidden');
+  }
+}
+
 function runAccounting(){
   if(!M.portfData){ toast('Load PortF data first'); return; }
   // Use the deal that PortF data was loaded for — NOT the dropdown selection.
@@ -2238,6 +2490,10 @@ function runAccounting(){
     snapshotTreatmentDefaults(inst);   // ensure defaults are captured before any form-driven mutations
     loadTreatmentForm();               // repopulate the 24 controls with the new deal's values
   }
+  // Gap #3 + #4 — Auto-migrate ECL Stage based on DPD threshold breach OR covenant breach.
+  // Quantitative DPD always wins; qualitative covenant breach triggers SICR (Stage 1 → 2)
+  // when Stage is currently 1. Watchlist override forces Stage 2 unconditionally.
+  applyEclAutoMigration(inst);
   // Rebuild schedule + summary from the CURRENT instrument state. Any treatment
   // or contractual override (PIK, modification events, ECL stage, FV level,
   // fee treatment) since the last run must flow into the schedule before the
@@ -2296,14 +2552,28 @@ function runAccounting(){
   // KPI strip
   const ccy = inst.currency || 'GBP';
   const sum = M.summary;
+  // Gap #2 — Receivables balance: net DR vs CR posts to 113000 across all journals.
+  // For a complete-life run this nets to ≈£0 (every accrual settles by maturity);
+  // mid-period it surfaces the outstanding receivable balance. Also shown: gross
+  // accruals separate from gross settlements so a reviewer can see both legs.
+  let recvBookedDR = 0, recvClearedCR = 0;
+  for(const j of M.acctJournals){
+    if(j.account !== '113000') continue;
+    if(j.isDebit) recvBookedDR += j.amountLE; else recvClearedCR += j.amountLE;
+  }
+  const recvBalance = recvBookedDR - recvClearedCR;
   $('acct-kpis').innerHTML = [
-    { label:'Interest (life)',     value: fmtMoney(sum.totalCashAccrual, ccy) },
-    { label:'Fees (life)',         value: fmtMoney(sum.totalFees, ccy) },
-    { label:'PIK (life)',          value: fmtMoney(sum.totalPikAccrual, ccy) },
-    { label:'EIR Accretion',       value: fmtMoney(sum.totalEIRAccretion, ccy) },
-    { label:'JE Rows Generated',   value: M.acctJournals.length.toLocaleString() }
+    { label:'Interest (life)',         value: fmtMoney(sum.totalCashAccrual, ccy) },
+    { label:'Fees (life)',             value: fmtMoney(sum.totalFees, ccy) },
+    { label:'PIK (life)',              value: fmtMoney(sum.totalPikAccrual, ccy) },
+    { label:'EIR Accretion',           value: fmtMoney(sum.totalEIRAccretion, ccy) },
+    { label:'Receivables (113000)',    value: fmtMoney(Math.abs(recvBalance), ccy),
+                                        sub: `DR ${fmtMoney(recvBookedDR, ccy)} − CR ${fmtMoney(recvClearedCR, ccy)}` },
+    { label:'ECL Allowance (145000)',  value: fmtMoney(sum.closingECLAllowance || 0, ccy),
+                                        sub: 'Stage ' + (inst.ifrs?.ecLStage || 1) + ' lifetime' },
+    { label:'JE Rows Generated',       value: M.acctJournals.length.toLocaleString() }
   ].map(k =>
-    `<div class="kpi"><div class="label">${k.label}</div><div class="value text-[14px]">${k.value}</div></div>`
+    `<div class="kpi"><div class="label">${k.label}</div><div class="value text-[14px]">${k.value}</div>${k.sub ? `<div class="sub text-[10px] text-gray-500">${k.sub}</div>` : ''}</div>`
   ).join('');
   $('acct-kpis').classList.remove('hidden');
   // Journal coverage panel
@@ -2394,7 +2664,103 @@ function renderEvidencePack(inst, summary){
   renderPoPVariance(inst, summary);
   renderFVSensitivities(inst, summary);
   renderECLTemplates(inst, summary);
+  renderECLTrace(inst, summary);
   renderModificationHistory(inst, summary);
+}
+
+// Gap #5 — ECL Calculation Trace. Surfaces the explicit IFRS 9 §5.5.17 formula
+// the engine applies to compute the period's ECL allowance, with each input
+// shown alongside its current value pulled from the Treatment panel + summary.
+// Auditors can step through every multiplicand to verify the impairment posting.
+function renderECLTrace(inst, summary){
+  const ifrs = inst?.ifrs || {};
+  const ccy = inst?.currency || 'GBP';
+  const pd  = ifrs.pdAnnual || 0;
+  const lgd = ifrs.lgd || 0;
+  const ccf = ifrs.eadCCF != null ? ifrs.eadCCF : 1.0;     // default 100% on drawn
+  const stage = ifrs.ecLStage || 1;
+  const macro = ifrs.macroOverlayWeight != null ? ifrs.macroOverlayWeight : 1.0;
+  const closingBal = summary.closingBalance || 0;
+  const drawn = closingBal;
+  const undrawn = Math.max(0, (inst.commitment || 0) - drawn);
+  // Effective EAD: drawn fully exposed + undrawn × CCF
+  const ead = drawn + undrawn * ccf;
+  // Stage curve: Stage 1 = 12-month PD; Stage 2/3 = lifetime PD
+  const lifeYears = (() => {
+    const s = parseISO(summary.periodStart || inst.settlementDate);
+    const e = parseISO(summary.periodEnd   || inst.maturityDate);
+    if(!s || !e) return 1;
+    return Math.max(0.25, (e - s) / (365.25 * 86400 * 1000));
+  })();
+  const stageMultiplier = stage === 1 ? 1.0 : Math.min(lifeYears, 12);   // Stage 1 = 12m, Stage 2/3 = lifetime up to 12y
+  const stageLabel = stage === 1 ? '12-month'
+                  : stage === 2 ? `Lifetime (${stageMultiplier.toFixed(1)} y)`
+                  : stage === 3 ? `Lifetime — credit-impaired (${stageMultiplier.toFixed(1)} y)`
+                  : 'POCI — initial expected loss baseline';
+  // Expected Loss
+  const expectedLoss = pd * lgd * ead * stageMultiplier * macro;
+  // Discount at original EIR — single-period approximation
+  const eirInfo = computeEIR(inst);
+  const eir = (eirInfo && eirInfo.effectiveYield != null) ? eirInfo.effectiveYield
+            : (eirInfo && eirInfo.couponRate) || 0;
+  const discountFactor = 1 / Math.pow(1 + (eir || 0), Math.max(lifeYears * 0.5, 0.5));     // discount to mid-life as a heuristic
+  const discountedPV = expectedLoss * discountFactor;
+  const actualPosted = summary.closingECLAllowance || 0;
+  const variance = actualPosted - discountedPV;
+
+  const rows = [
+    ['PD (annual)',                  (pd * 100).toFixed(4) + '%',         'Treatment panel · IFRS 9 §B5.5.41'],
+    ['LGD',                          (lgd * 100).toFixed(2) + '%',        'Treatment panel · IFRS 9 §B5.5.55'],
+    ['Drawn balance (closing)',      fmtMoney(drawn, ccy),                'Engine schedule · summary.closingBalance'],
+    ['Undrawn commitment',           fmtMoney(undrawn, ccy),              'Engine · commitment − drawn'],
+    ['EAD CCF (credit conv. factor)', (ccf * 100).toFixed(0) + '%',        'Treatment panel · IFRS 9 §B5.5.31'],
+    ['Effective EAD',                fmtMoney(ead, ccy),                  '= drawn + undrawn × CCF'],
+    ['Stage',                        'Stage ' + stage + ' (' + stageLabel + ')', 'Treatment panel · IFRS 9 §5.5.3'],
+    ['Macro overlay weight',         (macro * 100).toFixed(0) + '%',      'Treatment panel · forward-looking adjustment'],
+    ['Expected Loss (EL)',           fmtMoney(expectedLoss, ccy),         '= PD × LGD × EAD × stage × overlay'],
+    ['Effective Interest Rate',      (eir * 100).toFixed(4) + '%',        'computeEIR() · drives discounting'],
+    ['Mid-life discount factor',     discountFactor.toFixed(4),           '= 1 / (1+EIR)^(life/2)'],
+    ['Discounted PV of EL',          fmtMoney(discountedPV, ccy),         '= EL × discount factor'],
+    ['Actual ECL posted (engine)',   fmtMoney(actualPosted, ccy),         'summary.closingECLAllowance'],
+    ['Variance: posted vs discounted PV', (variance >= 0 ? '+' : '−') + fmtMoney(Math.abs(variance), ccy),
+        Math.abs(variance) < 100
+            ? 'Within rounding tolerance'
+            : (actualPosted >= expectedLoss * 0.99 && actualPosted <= expectedLoss * 1.01
+               ? 'Engine posts gross EL · discount step is shown for IFRS 13 disclosure only'
+               : 'Engine uses daily compounding · trace is a single-period approximation')]
+  ];
+
+  const journalPair = expectedLoss > 0
+    ? `<div class="bg-gray-50 border border-gray-200 rounded p-2 mt-3 text-[11px]">
+         <div class="font-semibold mb-1">Resulting JE pair (period close)</div>
+         <table class="data" style="width:100%">
+           <thead><tr><th class="left">Account</th><th class="left">Description</th><th>DR</th><th>CR</th></tr></thead>
+           <tbody>
+             <tr><td class="left">470000</td><td class="left">Impairment Expense — IFRS 9 ECL</td><td>${fmtMoney(actualPosted, ccy)}</td><td></td></tr>
+             <tr><td class="left">145000</td><td class="left">Loan Loss Allowance (Contra-Asset)</td><td></td><td>${fmtMoney(actualPosted, ccy)}</td></tr>
+           </tbody>
+         </table>
+       </div>`
+    : '<div class="text-[11px] text-gray-500 italic mt-3">No ECL posted — instrument has no PD/LGD configured or balance is zero.</div>';
+
+  $('ecl-trace').innerHTML = `
+    <div class="bg-blue-50 border border-blue-200 rounded p-3 mb-3 text-[12px]">
+      <div class="font-semibold text-blue-900 mb-1">IFRS 9 §5.5.17 — Expected Credit Loss formula</div>
+      <div class="text-gray-700">ECL = <code>PD × LGD × EAD × stage_curve × macro_overlay</code>, then discounted at the original EIR.</div>
+      <div class="text-[11px] text-gray-500 mt-1">Each input below comes from the Treatment panel (Risk-side: PD/LGD/Stage/CCF/Overlay), the engine schedule (Operational-side: drawn/undrawn balances), or computeEIR() (Accounting-side: EIR for discounting).</div>
+    </div>
+    <table class="data" style="width:100%">
+      <thead><tr><th class="left">Input / Calculation</th><th class="left">Value</th><th class="left">Source</th></tr></thead>
+      <tbody>${rows.map(([k, v, src], i) => {
+        const isFinal = i >= 8;     // bold the calculated outputs
+        return `<tr ${isFinal ? 'style="background:#f8fafc"' : ''}>
+          <td class="left text-[12px] ${isFinal ? 'font-bold' : ''}">${k}</td>
+          <td class="left text-[12px] ${isFinal ? 'font-bold' : ''}">${v}</td>
+          <td class="left text-[11px] text-gray-600">${src}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    ${journalPair}`;
 }
 
 // ----- Phase 2 Fee Specifications panel ------------------------------------
@@ -2724,6 +3090,22 @@ function renderCarryingWaterfall(inst, summary){
          <div class="font-semibold border-t border-gray-300 mt-1 pt-1">Net carrying value: ${fmtMoney(close - (summary.closingECLAllowance||0), ccy)}</div>
        </div>`
     : '';
+  // Gap #1 — Deferred fees remaining at period end. Computed as opening
+  // deferred-fee balance + accretion to date (negative + positive → near 0
+  // when fully amortised). Useful for a reviewer asking "how much fee revenue
+  // is still on the balance sheet?" mid-life.
+  const originalDeferred = Math.abs(deferredT0);
+  const accretedToDate   = summary.totalEIRAccretion || 0;
+  const deferredRemaining = Math.max(0, originalDeferred - accretedToDate);
+  const deferredMemo = originalDeferred > 0.5
+    ? `<div class="bg-gray-50 border border-gray-200 rounded p-2 mt-2 text-[11px]">
+         <div class="font-semibold mb-1">Memo — Deferred Fee Balance (IFRS 9 §B5.4)</div>
+         <div>Original deferred fees at recognition: <strong>${fmtMoney(originalDeferred, ccy)}</strong></div>
+         <div>Less: EIR accretion to date: <span style="color:#22c55e">(${fmtMoney(accretedToDate, ccy)})</span></div>
+         <div class="font-semibold border-t border-gray-300 mt-1 pt-1">Deferred fees remaining: ${fmtMoney(deferredRemaining, ccy)}</div>
+         <div class="text-gray-500 mt-1">When this nets to zero (or near-zero) the fee revenue has been fully recognised over life.</div>
+       </div>`
+    : '';
 
   $('carrying-waterfall').innerHTML = `
     <table class="data" style="width:100%">
@@ -2731,6 +3113,7 @@ function renderCarryingWaterfall(inst, summary){
       <tbody>${bars}</tbody>
     </table>
     <div class="text-[11px] mt-2">${tieChip} <span class="text-gray-500 ml-1">Days in period: ${summary.daysCount?.toLocaleString() || '—'}</span></div>
+    ${deferredMemo}
     ${eclMemo}
   `;
 }
@@ -3757,6 +4140,323 @@ function openLoadSessionModal(){
 }
 
 // File-import handler for sessions exported earlier
+// ============================================================
+// Loan Assistant — FAQ chat (offline keyword search · Claude API when key set)
+// ============================================================
+// Keyword-scored search over the FAQ knowledge base. Each entry's tags +
+// question text + answer are tokenised and scored against the user's query.
+// Returns top 3 matches; if no entry scores above the threshold, shows a
+// "no match" panel with suggested phrasings.
+
+const DA_STOPWORDS = new Set(['the','a','an','is','are','was','were','do','does','did','how','what','why','when','where','which','who','whom','whose','if','of','to','for','from','in','on','at','by','with','and','or','but','so','this','that','these','those','it','its','our','us','we','i','you','your','my','me','can','should','will','would','about','as','into','out','up','down','over','under','more','most','any','all','some','such','same','just','than']);
+
+function daTokenize(s){
+  return (s || '').toLowerCase()
+    .replace(/[^a-z0-9§]+/g, ' ')   // keep IFRS section symbol
+    .split(/\s+/)
+    .filter(t => t && !DA_STOPWORDS.has(t) && t.length >= 2);
+}
+
+function daScore(entry, queryTokens){
+  if(!queryTokens.length) return 0;
+  // Build the entry's searchable token set: tags (highest weight) + question + first 200 chars of answer
+  const tagTokens = (entry.tags || []).flatMap(daTokenize);
+  const qTokens   = daTokenize(entry.q);
+  const aTokens   = daTokenize((entry.answer || '').replace(/<[^>]+>/g, ' ').slice(0, 300));
+  let score = 0;
+  for(const qt of queryTokens){
+    // Exact tag match: weight 3
+    if(tagTokens.includes(qt)) score += 3;
+    // Question text match: weight 2
+    if(qTokens.includes(qt)) score += 2;
+    // Answer text match: weight 1
+    if(aTokens.includes(qt)) score += 1;
+    // Partial tag match (substring): weight 1
+    for(const tag of tagTokens){
+      if(tag !== qt && (tag.includes(qt) || qt.includes(tag)) && Math.min(tag.length, qt.length) >= 4){
+        score += 1; break;
+      }
+    }
+  }
+  return score;
+}
+
+function daSearch(query, kb, limit){
+  const tokens = daTokenize(query);
+  if(!tokens.length) return [];
+  const scored = (kb || []).map(e => ({ entry: e, score: daScore(e, tokens) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit || 3);
+  return scored;
+}
+
+function daRenderResult(item){
+  const e = item.entry;
+  const stepsHtml = e.demoSteps && e.demoSteps.length
+    ? `<div class="steps">
+         <div class="step-title">Steps:</div>
+         <ol>${e.demoSteps.map(s => `<li>${s}</li>`).join('')}</ol>
+       </div>` : '';
+  const meta = [];
+  if(e.deal)    meta.push(`<span class="chip-mini">deal: ${e.deal}</span>`);
+  if(e.section) meta.push(`<span class="chip-mini">where: ${e.section}</span>`);
+  const metaHtml = meta.length ? `<div class="meta">${meta.join('')}</div>` : '';
+  // Follow-ups: render as clickable chips so the user can drill in
+  const followUps = (e.followUps || [])
+    .map(id => (window.FAQ_KB || []).find(x => x.id === id))
+    .filter(x => x);
+  const followHtml = followUps.length
+    ? `<div class="da-followups"><div class="label">Related:</div>${followUps.map(f =>
+        `<span class="da-chip" data-suggest="${f.q.replace(/"/g,'&quot;')}">${f.q}</span>`
+      ).join('')}</div>` : '';
+  return `<div class="da-msg bot">
+    <div class="q">${e.q}</div>
+    <div class="a">${e.answer}</div>
+    ${stepsHtml}
+    ${metaHtml}
+    ${followHtml}
+  </div>`;
+}
+
+// Conversation state for API mode (last N turns kept for context)
+const DA_HISTORY = [];
+const DA_HISTORY_TURNS = 6;       // 6 turns = 12 messages (user+assistant pairs)
+const DA_KEY_STORE = 'lmil:da:apiKey';
+const DA_MODEL_STORE = 'lmil:da:model';
+
+function daGetApiKey(){ return localStorage.getItem(DA_KEY_STORE) || ''; }
+function daGetModel(){ return localStorage.getItem(DA_MODEL_STORE) || 'claude-haiku-4-5-20251001'; }
+function daUpdateModeBadge(){
+  const badge = $('da-mode-badge');
+  if(!badge) return;
+  if(daGetApiKey()){
+    badge.className = 'online';
+    badge.textContent = 'AI · ' + (daGetModel().includes('haiku') ? 'Haiku' : 'Sonnet');
+  } else {
+    badge.className = 'offline';
+    badge.textContent = 'offline';
+  }
+}
+
+// Render assistant message — supports plain text from the API (basic markdown → HTML)
+function daRenderApiMessage(text, usage){
+  // Light markdown conversion: paragraphs, headings, lists, bold, code
+  let html = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Convert bullet lists
+  const lines = html.split('\n');
+  const out = [];
+  let inList = false, listType = null;
+  for(const line of lines){
+    const ulMatch = line.match(/^\s*[-•]\s+(.*)/);
+    const olMatch = line.match(/^\s*\d+\.\s+(.*)/);
+    if(ulMatch){
+      if(listType !== 'ul'){ if(inList) out.push(`</${listType}>`); out.push('<ul>'); listType = 'ul'; inList = true; }
+      out.push('<li>' + ulMatch[1] + '</li>');
+    } else if(olMatch){
+      if(listType !== 'ol'){ if(inList) out.push(`</${listType}>`); out.push('<ol>'); listType = 'ol'; inList = true; }
+      out.push('<li>' + olMatch[1] + '</li>');
+    } else {
+      if(inList){ out.push(`</${listType}>`); inList = false; listType = null; }
+      if(line.trim()) out.push('<p>' + line + '</p>');
+    }
+  }
+  if(inList) out.push(`</${listType}>`);
+  const body = out.join('');
+  const costNote = usage
+    ? `<div class="da-cost">${usage.input_tokens || 0} in · ${usage.output_tokens || 0} out · ${daGetModel().includes('haiku') ? '~£0.001' : '~£0.01'} est.</div>`
+    : '';
+  return `<div class="da-msg bot"><div class="a">${body}</div>${costNote}</div>`;
+}
+
+async function daCallClaude(query){
+  const apiKey = daGetApiKey();
+  const model = daGetModel();
+  // Build messages array — include last few turns for context
+  const messages = DA_HISTORY.slice(-DA_HISTORY_TURNS * 2).concat([{ role: 'user', content: query }]);
+  const body = {
+    model,
+    max_tokens: 1024,
+    system: window.DA_SYSTEM_PROMPT || '',
+    messages
+  };
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify(body)
+  });
+  if(!res.ok){
+    const errText = await res.text();
+    let errJson; try { errJson = JSON.parse(errText); } catch(e){}
+    const msg = errJson?.error?.message || errText || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  const data = await res.json();
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+  // Persist turn into history
+  DA_HISTORY.push({ role: 'user', content: query });
+  DA_HISTORY.push({ role: 'assistant', content: text });
+  return { text, usage: data.usage || null };
+}
+
+async function daHandleQuery(query){
+  const body = $('da-body');
+  if(!query || !query.trim()) return;
+  // Hide the suggestions on first ask so the chat takes over
+  const suggestions = $('da-suggestions');
+  const emptyTip = body.querySelector('.da-empty-tip');
+  if(suggestions) suggestions.style.display = 'none';
+  if(emptyTip) emptyTip.style.display = 'none';
+  // Echo user message
+  const userMsg = document.createElement('div');
+  userMsg.className = 'da-msg user';
+  userMsg.innerHTML = `<div class="a">${query.replace(/</g,'&lt;')}</div>`;
+  body.appendChild(userMsg);
+  body.scrollTop = body.scrollHeight;
+  $('da-input').value = '';
+  $('da-input').disabled = true;
+  $('da-send').disabled = true;
+
+  const apiKey = daGetApiKey();
+  if(apiKey){
+    // API mode — show loading bubble, then replace with the response
+    const loading = document.createElement('div');
+    loading.className = 'da-msg bot';
+    loading.innerHTML = '<div class="a"><span class="da-loading">Thinking</span></div>';
+    body.appendChild(loading);
+    body.scrollTop = body.scrollHeight;
+    try {
+      const { text, usage } = await daCallClaude(query);
+      const wrap = document.createElement('div');
+      wrap.innerHTML = daRenderApiMessage(text, usage);
+      loading.replaceWith(wrap.firstElementChild);
+    } catch(err){
+      loading.innerHTML = `<div class="a" style="color:#b91c1c"><strong>API error.</strong> ${err.message}<br><span style="font-size:10.5px">Falling back to offline FAQ...</span></div>`;
+      // Fallback to offline KB
+      const kb = window.FAQ_KB || [];
+      const results = daSearch(query, kb, 3);
+      for(const r of results){
+        const wrap = document.createElement('div');
+        wrap.innerHTML = daRenderResult(r);
+        body.appendChild(wrap.firstElementChild);
+      }
+    }
+  } else {
+    // Offline mode — search the KB
+    const kb = window.FAQ_KB || [];
+    const results = daSearch(query, kb, 3);
+    if(!results.length){
+      const noMatch = document.createElement('div');
+      noMatch.className = 'da-no-match';
+      noMatch.innerHTML = `<strong>No direct match.</strong> Add an Anthropic API key in Settings (gear icon) for AI-powered answers — or try simpler keywords like "EIR", "ECL", "modification", "fee treatment".`;
+      body.appendChild(noMatch);
+    } else {
+      for(const r of results){
+        const wrap = document.createElement('div');
+        wrap.innerHTML = daRenderResult(r);
+        body.appendChild(wrap.firstElementChild);
+      }
+    }
+  }
+  body.scrollTop = body.scrollHeight;
+  $('da-input').disabled = false;
+  $('da-send').disabled = false;
+  $('da-input').focus();
+}
+
+function setupDemoAssistant(){
+  const fab = $('da-fab');
+  const panel = $('da-panel');
+  const closeBtn = $('da-close');
+  const input = $('da-input');
+  const send = $('da-send');
+  const settingsToggle = $('da-settings-toggle');
+  const settings = $('da-settings');
+  const apiKeyInput = $('da-api-key');
+  const modelSelect = $('da-model');
+  const keySave = $('da-key-save');
+  const keyClear = $('da-key-clear');
+  if(!fab || !panel) return;
+
+  // Initialise mode badge + settings inputs
+  daUpdateModeBadge();
+  if(modelSelect) modelSelect.value = daGetModel();
+  // Don't pre-fill the password field with the actual key on every panel open — only show last 6 chars masked
+  const refreshKeyHint = () => {
+    if(!apiKeyInput) return;
+    const k = daGetApiKey();
+    apiKeyInput.placeholder = k ? '••••••••••••' + k.slice(-4) + ' (saved)' : 'sk-ant-...';
+  };
+  refreshKeyHint();
+
+  // Toggle panel
+  fab.addEventListener('click', () => {
+    panel.classList.toggle('open');
+    if(panel.classList.contains('open')) setTimeout(() => input?.focus(), 50);
+  });
+  closeBtn?.addEventListener('click', () => panel.classList.remove('open'));
+
+  // Settings toggle
+  settingsToggle?.addEventListener('click', () => {
+    settings.classList.toggle('open');
+    if(settings.classList.contains('open')) setTimeout(() => apiKeyInput?.focus(), 50);
+  });
+
+  // Save key
+  keySave?.addEventListener('click', () => {
+    const v = (apiKeyInput.value || '').trim();
+    if(!v){ toast('Enter an API key first'); return; }
+    if(!/^sk-ant-[\w-]+/.test(v)){
+      if(!confirm("Doesn't look like an Anthropic key (sk-ant-...). Save anyway?")) return;
+    }
+    localStorage.setItem(DA_KEY_STORE, v);
+    apiKeyInput.value = '';
+    refreshKeyHint();
+    daUpdateModeBadge();
+    toast('API key saved · AI mode enabled');
+  });
+
+  // Clear key
+  keyClear?.addEventListener('click', () => {
+    localStorage.removeItem(DA_KEY_STORE);
+    apiKeyInput.value = '';
+    refreshKeyHint();
+    daUpdateModeBadge();
+    toast('API key cleared · offline FAQ mode');
+  });
+
+  // Model change
+  modelSelect?.addEventListener('change', () => {
+    localStorage.setItem(DA_MODEL_STORE, modelSelect.value);
+    daUpdateModeBadge();
+    toast('Model: ' + modelSelect.options[modelSelect.selectedIndex].text);
+  });
+
+  // Send handlers
+  send.addEventListener('click', () => daHandleQuery(input.value));
+  input.addEventListener('keydown', (ev) => {
+    if(ev.key === 'Enter') daHandleQuery(input.value);
+  });
+
+  // Suggestion chips (initial + dynamic from follow-ups) — use event delegation
+  $('da-body').addEventListener('click', (ev) => {
+    const chip = ev.target.closest('.da-chip');
+    if(chip && chip.dataset.suggest){
+      input.value = chip.dataset.suggest;
+      daHandleQuery(input.value);
+    }
+  });
+}
+
 function setupSessionImportHandler(){
   $('session-import-file')?.addEventListener('change', (ev) => {
     const file = ev.target.files?.[0];
@@ -3821,7 +4521,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     'opt-ecl-stage','opt-pd','opt-lgd','opt-compute-ecl',
     // Priority 1 — Credit Risk & ECL Detail
     'opt-poci','opt-stage3-int','opt-suspended','opt-ccf',
-    'opt-dpd-stage2','opt-dpd-stage3','opt-watchlist','opt-macro-weight',
+    'opt-dpd-stage2','opt-dpd-stage3','opt-dpd-current','opt-covenant-breach','opt-watchlist','opt-macro-weight',
     // Modification Policy
     'opt-mod-threshold','opt-mod-reir','opt-mod-default','opt-continuing',
     // Tax & Other
@@ -3830,7 +4530,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     'opt-pik-enabled','opt-pik-rate','opt-pik-freq'
   ];
   TREATMENT_IDS.forEach(id => $(id)?.addEventListener('change', onTreatmentChange));
-  ['opt-pd','opt-lgd','opt-ccf','opt-dpd-stage2','opt-dpd-stage3','opt-macro-weight','opt-mod-threshold','opt-wht-rate','opt-pik-rate']
+  ['opt-pd','opt-lgd','opt-ccf','opt-dpd-stage2','opt-dpd-stage3','opt-dpd-current','opt-macro-weight','opt-mod-threshold','opt-wht-rate','opt-pik-rate']
     .forEach(id => $(id)?.addEventListener('input', onTreatmentChange));
   $('btn-treatment-reset')?.addEventListener('click', resetTreatmentToDefaults);
   $('btn-mod-add-nonsub')?.addEventListener('click', addNonSubstantialMod);
@@ -3913,6 +4613,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('btn-session-save')?.addEventListener('click', openSaveSessionModal);
   $('btn-session-load')?.addEventListener('click', openLoadSessionModal);
   setupSessionImportHandler();
+  setupDemoAssistant();
   setupSessionModalCloseHandlers();
 
   // JSON modal wiring
