@@ -4276,11 +4276,10 @@ function daRenderApiMessage(text, usage){
 async function daCallClaude(query){
   const apiKey = daGetApiKey();
   const model = daGetModel();
-  // Detect file:// origin proactively — fetch to https:// is blocked by every
-  // major browser from local files, regardless of headers. Surface a clear
-  // hint instead of the cryptic "Failed to fetch" TypeError.
+  // Detect file:// origin proactively — even the same-origin proxy needs the
+  // page served over HTTP.
   if(location.protocol === 'file:'){
-    throw new Error('Browsers block API calls from file:// URLs. Serve this page over HTTP: in a terminal, cd to the folder and run `python3 -m http.server 8080`, then open http://localhost:8080/loan-module-integration-layer.html');
+    throw new Error('Browsers block API calls from file:// URLs. Run `python3 serve.py` in the folder, then open http://localhost:8080/loan-module-integration-layer.html');
   }
   // Build messages array — include last few turns for context
   const messages = DA_HISTORY.slice(-DA_HISTORY_TURNS * 2).concat([{ role: 'user', content: query }]);
@@ -4290,21 +4289,24 @@ async function daCallClaude(query){
     system: window.DA_SYSTEM_PROMPT || '',
     messages
   };
+  // Always route through the same-origin proxy at /api/anthropic. Anthropic's
+  // preflight does not reliably return Access-Control-Allow-Origin, so direct
+  // browser→api.anthropic.com calls get blocked. The proxy (serve.py) sits in
+  // the same Python process that's serving this page and forwards the body
+  // to Anthropic with the API key. Same-origin = no CORS preflight needed.
   let res;
   try {
-    res = await fetch('https://api.anthropic.com/v1/messages', {
+    res = await fetch('/api/anthropic', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
+        'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify(body)
     });
   } catch(netErr){
-    // TypeError "Failed to fetch" — CORS / network / extension block
-    throw new Error('Network error reaching api.anthropic.com. Likely causes: (1) you opened the page from file:// (run `python3 -m http.server 8080` and use http://localhost:8080); (2) a corporate firewall or VPN is blocking api.anthropic.com; (3) a browser extension (ad-block, privacy) is blocking the request. Open DevTools → Network tab to see the exact reason. Original: ' + netErr.message);
+    throw new Error('Network error reaching the local proxy. Make sure `python3 serve.py` is running in the folder (not `python3 -m http.server`). Original: ' + netErr.message);
   }
   if(!res.ok){
     const errText = await res.text();
