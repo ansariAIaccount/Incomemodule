@@ -133,6 +133,15 @@
     <div id="portf-margin-table"></div>
   </details>
 
+  <!-- FX Rate Schedule — only visible when the loaded deal has fxRateSchedule[]
+       (foreign-currency deals like Pacific Energy Bridge USD/GBP). -->
+  <details id="portf-fx-section" class="hidden mb-3" open>
+    <summary class="text-[12px] mb-2 cursor-pointer font-semibold">
+      View FX rate schedule <span id="portf-fx-count" class="chip purple text-[10px]">0 fixings</span>
+    </summary>
+    <div id="portf-fx-table"></div>
+  </details>
+
   <details id="portf-details" class="hidden">
     <summary class="text-[12px] mb-2">View loaded PortF cashflow schedule</summary>
     <div class="scrolled" id="portf-cashflow-table"></div>
@@ -597,7 +606,7 @@
         <div class="font-semibold text-[12.5px]">IFRS 9 §B5.4 EIR Calculation Trace</div>
         <div class="text-[11px] text-gray-500">3 worked examples — bilateral · multi-tranche · floating-rate (RFR with sample SONIA history)</div>
       </div>
-      <button id="btn-show-eir-trace" class="mat-btn primary !py-1 !px-3 ml-auto">
+      <button id="btn-show-eir-trace" class="mat-btn !py-1 !px-3 ml-auto" style="background:#10B981;color:#FFFFFF;border-color:#10B981">
         <span class="material-icons-outlined text-[14px]" style="vertical-align:middle">open_in_new</span>
         Show EIR Trace
       </button>
@@ -1103,6 +1112,7 @@ function resetPipeline(){
   $('portf-setup-section')?.classList.add('hidden');
   $('portf-fees-section')?.classList.add('hidden');
   $('portf-margin-section')?.classList.add('hidden');
+  $('portf-fx-section')?.classList.add('hidden');
   $('evidence-pack').classList.add('hidden');
   M.acctRunMeta = null;
   ['ifrs-classification','ifrs-recognition','ifrs-eir','ifrs-eir-note','ifrs-fv','ifrs-fv-note'].forEach(id => $(id).textContent = '—');
@@ -1629,6 +1639,8 @@ function applyPortFPayload(payload){
   renderPortFFeesPanel(payload, inst);
   // ─── Margin schedule panel — only shows when marginSchedule[] is present ───
   renderPortFMarginSchedulePanel(inst);
+  // ─── FX rate schedule panel — only shows when fxRateSchedule[] is present ───
+  renderPortFFXSchedulePanel(inst);
   $('portf-status').className = 'chip green self-center';
   $('portf-status').textContent = 'Loaded · ' + payload.accrualSchedule.length + ' rows';
   setStage('stage-1', 'done');
@@ -1842,6 +1854,96 @@ function renderPortFMarginSchedulePanel(inst){
        All-in rate = ${blocks[0].index} base + margin (+ ESG adjustment, if applicable). For period-by-period
        EIR construction, see the EIR Calculation Trace at the bottom of Stage 2.
      </div>`;
+
+  section.classList.remove('hidden');
+}
+
+// ------------------------------------------------------------
+// FX Rate Schedule panel (Phase 1) — read-only.
+// Shown only when the loaded deal has an fxRateSchedule[]. For foreign-currency
+// deals this is the table of FX fixings (instrument-currency → functional-
+// currency) the engine reads each day to compute dailyFXGain and to translate
+// every JE amount from originalAmount to amountLE.
+// ------------------------------------------------------------
+function renderPortFFXSchedulePanel(inst){
+  const section = $('portf-fx-section');
+  if(!section) return;
+  if(!inst || !Array.isArray(inst.fxRateSchedule) || !inst.fxRateSchedule.length){
+    section.classList.add('hidden');
+    return;
+  }
+  const fx = inst.fxRateSchedule.slice().sort((a,b) => a.date.localeCompare(b.date));
+  const dealCcy = inst.currency || 'USD';
+  const leCcy = 'GBP';                                // functional currency
+  $('portf-fx-count').textContent = fx.length + (fx.length === 1 ? ' fixing' : ' fixings');
+
+  const ccySymOf = c => c === 'GBP' ? '£' : c === 'USD' ? '$' : c === 'EUR' ? '€' : c + ' ';
+  const dealSym  = ccySymOf(dealCcy);
+  const leSym    = ccySymOf(leCcy);
+  const faceCcy  = inst.faceValue || 0;
+  const initialRate = fx[0].rate;
+
+  // Compute the cumulative FX gain/loss over the life given the schedule and a
+  // constant face balance — illustrative only; the engine uses the real daily
+  // balance from the schedule.
+  let cumGain = 0;
+  let prevRate = initialRate;
+  const rows = fx.map((s, i) => {
+    const delta = i === 0 ? 0 : s.rate - prevRate;
+    const periodGain = i === 0 ? 0 : faceCcy * delta;
+    cumGain += periodGain;
+    const row = {
+      date: s.date,
+      rate: s.rate,
+      gbpValue: faceCcy * s.rate,
+      delta,
+      periodGain,
+      cumGain,
+      note: s.note || ''
+    };
+    prevRate = s.rate;
+    return row;
+  });
+
+  const tbody = rows.map((r, i) => `
+    <tr>
+      <td class="left">${i + 1}</td>
+      <td class="left">${r.date}</td>
+      <td>${r.rate.toFixed(4)}</td>
+      <td>${leSym}${Math.round(r.gbpValue).toLocaleString('en-GB')}</td>
+      <td class="${r.delta >= 0 ? 'text-emerald-700' : 'text-red-700'}">${i === 0 ? '—' : (r.delta >= 0 ? '+' : '') + r.delta.toFixed(4)}</td>
+      <td class="${r.periodGain >= 0 ? 'text-emerald-700' : 'text-red-700'}">${i === 0 ? '—' : (r.periodGain >= 0 ? '+' : '-') + leSym + Math.abs(Math.round(r.periodGain)).toLocaleString('en-GB')}</td>
+      <td class="left text-[11px] text-gray-600">${r.note}</td>
+    </tr>`).join('');
+
+  $('portf-fx-table').innerHTML = `
+    <div class="mb-2 border border-gray-200 rounded bg-white">
+      <div class="flex items-center gap-2 px-2 py-1.5 border-b border-gray-200 bg-gray-50">
+        <span class="font-semibold text-[12px]">${inst.deal || inst.id}</span>
+        <span class="chip blue text-[10px]">Instrument ${dealCcy} → Functional ${leCcy}</span>
+        <span class="chip gray text-[10px]">${fx.length} fixings</span>
+        <span class="chip purple text-[10px]">Face ${dealSym}${(faceCcy/1e6).toFixed(0)}m</span>
+      </div>
+      <table class="data" style="width:100%">
+        <thead><tr>
+          <th>#</th>
+          <th class="left">Effective from</th>
+          <th>FX rate (${leCcy}/${dealCcy})</th>
+          <th>Face in ${leCcy}</th>
+          <th>Δ vs previous</th>
+          <th>Period FX G/L (on face)</th>
+          <th class="left">Note</th>
+        </tr></thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div>
+    <div class="text-[11px] text-gray-500 mt-1">
+      Read-only. The engine reads this schedule step-effective (each fixing applies until the next).
+      Daily FX gain/loss = (drawn balance in ${dealCcy}) × (today's rate − yesterday's rate) — posted to account
+      <b>450000 Unrealised Gain/Loss</b> in ${leCcy}. Journals carry <code>originalAmount</code> (${dealCcy}),
+      <code>amountLE</code> (${leCcy}), and the active <code>fx</code> rate. The "Period FX G/L (on face)" column
+      above is an illustrative simplification — the engine uses the actual day-by-day drawn balance.
+    </div>`;
 
   section.classList.remove('hidden');
 }
