@@ -16,6 +16,42 @@ Run:
   python3 build_user_guide_pdf.py
 """
 
+import os
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.fonts import addMapping
+
+# ─── REGISTER UNICODE FONTS ──────────────────────────────────────────────────
+# Override the standard Helvetica / Courier names so every existing style picks
+# up a font that has the math, Greek, subscript, and currency glyphs we use.
+def _register_unicode_fonts():
+    candidates = [
+        ('/usr/share/fonts/truetype/dejavu', 'DejaVuSans', 'DejaVuSansMono'),
+        ('/Library/Fonts',                   'DejaVuSans', 'DejaVuSansMono'),
+        ('/usr/share/fonts/truetype/liberation', 'LiberationSans', 'LiberationMono'),
+    ]
+    for root, sans, mono in candidates:
+        sans_reg = os.path.join(root, f'{sans}.ttf')
+        if os.path.exists(sans_reg):
+            pdfmetrics.registerFont(TTFont('Helvetica',           f'{root}/{sans}.ttf'))
+            pdfmetrics.registerFont(TTFont('Helvetica-Bold',      f'{root}/{sans}-Bold.ttf'))
+            pdfmetrics.registerFont(TTFont('Helvetica-Oblique',   f'{root}/{sans}-Oblique.ttf'))
+            pdfmetrics.registerFont(TTFont('Helvetica-BoldOblique', f'{root}/{sans}-BoldOblique.ttf'))
+            pdfmetrics.registerFont(TTFont('Courier',             f'{root}/{mono}.ttf'))
+            pdfmetrics.registerFont(TTFont('Courier-Bold',        f'{root}/{mono}-Bold.ttf'))
+            # Hook bold/italic resolution for HTML <b>/<i> inside Paragraphs
+            addMapping('Helvetica', 0, 0, 'Helvetica')
+            addMapping('Helvetica', 1, 0, 'Helvetica-Bold')
+            addMapping('Helvetica', 0, 1, 'Helvetica-Oblique')
+            addMapping('Helvetica', 1, 1, 'Helvetica-BoldOblique')
+            addMapping('Courier',   0, 0, 'Courier')
+            addMapping('Courier',   1, 0, 'Courier-Bold')
+            print(f'  · Using {sans} from {root}')
+            return
+    print('  · No Unicode TTF found — keeping standard 14 fonts (boxes may appear)')
+
+_register_unicode_fonts()
+
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm, inch
@@ -110,7 +146,7 @@ def hrule(color=RULE, thickness=0.5, space_before=4, space_after=4):
                       spaceBefore=space_before, spaceAfter=space_after)
 
 def section_header(num, title, subtitle=None, story=None):
-    """Big section header — adds a navy bar with white text."""
+    """Big section header — adds a navy bar with white text + registers a TOC entry."""
     rows = [[Paragraph(f'<font color="white">PART {num}</font>', H_KICK),
              Paragraph(f'<font color="white">{title}</font>',
                        ParagraphStyle('SectionTitle', fontName='Helvetica-Bold',
@@ -124,6 +160,8 @@ def section_header(num, title, subtitle=None, story=None):
         ('TOPPADDING', (0, 0), (-1, -1), 12),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
     ]))
+    # Marker so GuideDoc.afterFlowable can emit a level-0 TOC entry
+    t._tocEntry = (0, f'Part {num}. {title}')
     story.append(t)
     if subtitle:
         story.append(Spacer(1, 6))
@@ -243,7 +281,12 @@ class GuideDoc(BaseDocTemplate):
         ]
 
     def afterFlowable(self, flowable):
-        """Capture H1/H2 paragraphs for the TOC."""
+        """Capture H1/H2 paragraphs + section-header tables for the TOC."""
+        # Section-header navy tables carry a _tocEntry marker
+        if hasattr(flowable, '_tocEntry'):
+            level, text = flowable._tocEntry
+            self.notify('TOCEntry', (level, text, self.page))
+            return
         if isinstance(flowable, Paragraph):
             text = flowable.getPlainText()
             style = flowable.style.name
@@ -303,29 +346,29 @@ story.append(Paragraph(
 story.append(Spacer(1, 30*mm))
 
 # Bottom of cover — quick stats
+COVER_NUM = ParagraphStyle('CoverNum', fontName='Helvetica-Bold', fontSize=32,
+                            leading=36, textColor=WHITE, alignment=TA_LEFT)
+COVER_LBL = ParagraphStyle('CoverLbl', fontName='Helvetica', fontSize=9,
+                            leading=11, textColor=colors.HexColor('#C2CCE0'),
+                            alignment=TA_LEFT)
 cover_stats = Table([
-    [Paragraph('<font color="white"><b>5</b></font>',
-               ParagraphStyle('CS', fontName='Helvetica-Bold', fontSize=28,
-                              textColor=WHITE, alignment=TA_LEFT)),
-     Paragraph('<font color="white"><b>13</b></font>',
-               ParagraphStyle('CS', fontName='Helvetica-Bold', fontSize=28,
-                              textColor=WHITE, alignment=TA_LEFT)),
-     Paragraph('<font color="white"><b>26 / 26</b></font>',
-               ParagraphStyle('CS', fontName='Helvetica-Bold', fontSize=28,
-                              textColor=WHITE, alignment=TA_LEFT)),
-     Paragraph('<font color="white"><b>IFRS</b></font>',
-               ParagraphStyle('CS', fontName='Helvetica-Bold', fontSize=28,
-                              textColor=WHITE, alignment=TA_LEFT))],
-    [Paragraph('<font color="#C2CCE0">Pipeline stages</font>', SMALL),
-     Paragraph('<font color="#C2CCE0">Seed instruments</font>', SMALL),
-     Paragraph('<font color="#C2CCE0">Capabilities covered</font>', SMALL),
-     Paragraph('<font color="#C2CCE0">9 · 13 · 15 aligned</font>', SMALL)],
-], colWidths=[40*mm, 40*mm, 45*mm, 45*mm])
+    [Paragraph('5',       COVER_NUM),
+     Paragraph('13',      COVER_NUM),
+     Paragraph('26 / 26', COVER_NUM),
+     Paragraph('IFRS',    COVER_NUM)],
+    [Paragraph('Pipeline stages',      COVER_LBL),
+     Paragraph('Seed instruments',     COVER_LBL),
+     Paragraph('Capabilities covered', COVER_LBL),
+     Paragraph('9 · 13 · 15 aligned',  COVER_LBL)],
+], colWidths=[42*mm, 42*mm, 46*mm, 40*mm], rowHeights=[42, 16])
 cover_stats.setStyle(TableStyle([
-    ('VALIGN', (0,0), (-1,-1), 'TOP'),
-    ('LEFTPADDING', (0,0), (-1,-1), 0),
-    ('TOPPADDING', (0,0), (-1,-1), 0),
-    ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+    ('VALIGN',        (0, 0), (-1, 0), 'TOP'),
+    ('VALIGN',        (0, 1), (-1, 1), 'TOP'),
+    ('LEFTPADDING',   (0, 0), (-1, -1), 0),
+    ('RIGHTPADDING',  (0, 0), (-1, -1), 6),
+    ('TOPPADDING',    (0, 0), (-1, 0), 0),
+    ('TOPPADDING',    (0, 1), (-1, 1), 2),
+    ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
 ]))
 story.append(cover_stats)
 
@@ -393,7 +436,7 @@ story.append(Spacer(1, 4))
 story.append(formula_box(
     'Carrying value (IAS 1 §54)',
     'Closing carrying  =  Opening carrying + Drawdowns − Repayments + EIR accretion\n'
-    '                  + PIK capitalised ± Modification G/L ± Hedge P&L ± FX',
+    '                  + PIK capitalised ± Modification G/L ± Hedge P&amp;L ± FX',
     where_html='ECL is presented as a memo contra-asset below carrying value, not as a movement.'))
 
 story.append(Spacer(1, 8))
@@ -407,7 +450,7 @@ gl_rows = [
     ['421000', 'Interest Income',               'CR',     'Daily accrued interest'],
     ['442000', 'Modification Gain / Loss',      'CR/DR',  'IFRS 9 §5.4.3 modification'],
     ['450000', 'Unrealised Gain / Loss',        'CR/DR',  'FVTPL MTM'],
-    ['451000', 'Hedge Ineffectiveness P&L',     'CR/DR',  'IFRS 9 §6'],
+    ['451000', 'Hedge Ineffectiveness P&amp;L',     'CR/DR',  'IFRS 9 §6'],
     ['452000', 'Fair Value Hedge MTM',          'CR/DR',  'IFRS 9 §6 FV hedge'],
     ['470000', 'Impairment Expense',            'DR',     'IFRS 9 §5.5 ECL build'],
     ['492100', 'Arrangement Fee Income',        'CR',     'IFRS 15 point-in-time / EIR'],
@@ -566,7 +609,7 @@ story.append(data_table(
      ['accretionPerDay','Per-day amortisation factor (effectiveYield / 365)']],
     col_widths=[40*mm, 130*mm]))
 story.append(Spacer(1, 4))
-story.append(callout('RFR & multi-tranche shortcut',
+story.append(callout('RFR &amp; multi-tranche shortcut',
     'For RFR deals the engine reports <font face="Courier">rfr.baseRate + margin</font> as a '
     'face-weighted aggregate rather than re-solving (the daily reset would make the solve '
     'meaningless). For multi-tranche structures (Suffolk Solar) and multi-underlying guarantees '
@@ -632,11 +675,11 @@ story.append(formula_box(
     where_html='PV_new = present value of modified cashflows discounted at the original EIR. '
                'Threshold is configurable (default 10%).',
     posts_html='Substantial → derecognise old asset, recognise new (re-derive EIR). '
-               'Non-substantial → adjust carrying, post P&L. Both post to 442000.'))
+               'Non-substantial → adjust carrying, post P&amp;L. Both post to 442000.'))
 story.append(Spacer(1, 4))
 story.append(Paragraph('Two paths', H4))
 story.append(data_table(
-    ['Path', 'Carrying treatment', 'EIR treatment', 'P&L'],
+    ['Path', 'Carrying treatment', 'EIR treatment', 'P&amp;L impact'],
     [['Substantial',     'Derecognise + recognise new', 'Re-derived from mod date',  'Gain/loss = FV_new − Carrying_old'],
      ['Non-substantial', 'Adjusted to PV_new',          'Original EIR retained',     'PV_new − Carrying_old']],
     col_widths=[35*mm, 50*mm, 45*mm, 40*mm]))
@@ -650,7 +693,7 @@ story.append(formula_box(
     '                  + EIR Accretion + OID Amortisation\n'
     '                  + PIK Capitalised\n'
     '                  ± Modification gain/loss\n'
-    '                  ± Hedge P&L\n'
+    '                  ± Hedge P&amp;L\n'
     '                  ± FX Revaluation',
     where_html='Opening carrying = principal balance − deferred fees at recognition. '
                'ECL is shown as a memo block below the waterfall (gross → less ECL → net), not as a movement.'))
@@ -693,14 +736,14 @@ story.append(formula_box(
 story.append(Paragraph('3.12  Hedge accounting — IFRS 9 §6', H2))
 story.append(Paragraph(
     'Only kicks in if the instrument has a <font face="Courier">hedge</font> block. CFH splits MTM '
-    'into effective (OCI reserve 360000) and ineffective (P&L 451000). FV hedge MTM all flows '
+    'into effective (OCI reserve 360000) and ineffective (P&amp;L 451000). FV hedge MTM all flows '
     'through 452000.', BODY))
 story.append(formula_box(
     'Effectiveness split (CFH)',
     'Effective_OCI  =  min(|ΔFV_hedge|, |ΔFV_hedged|) × sign(ΔFV_hedge)\n'
     'Ineffective_PL =  ΔFV_hedge − Effective_OCI',
-    posts_html='Effective: DR/CR 360000 OCI reserve. Ineffective: DR/CR 451000 P&L. '
-               'Reclass to P&L when the hedged forecast cashflow occurs.'))
+    posts_html='Effective: DR/CR 360000 OCI reserve. Ineffective: DR/CR 451000 P&amp;L. '
+               'Reclass to P&amp;L when the hedged forecast cashflow occurs.'))
 
 # ── 3.13 Period-on-Period variance ─────────────────────────────────────────
 story.append(Paragraph('3.13  Period-on-Period (PoP) variance decomposition', H2))
@@ -779,7 +822,7 @@ story.append(data_table(
     ['Section', 'Controls', 'Effect'],
     [['A. Core Classification', 'IFRS 9 class, SPPI, business model, FV Level, ECL stage',
                                 'Drives the whole treatment chain'],
-     ['B. Credit Risk & ECL',   'POCI, Stage 3 interest base, suspended interest, EAD CCF, DPD thresholds, watchlist, macro overlay, PD/LGD',
+     ['B. Credit Risk &amp; ECL',   'POCI, Stage 3 interest base, suspended interest, EAD CCF, DPD thresholds, watchlist, macro overlay, PD/LGD',
                                 'Tunes ECL measurement + auto-migration'],
      ['C. Modification policy', 'Substantial threshold, re-compute EIR on substantial, default treatment, continuing involvement',
                                 'Controls IFRS 9 §5.4.3 behaviour'],
@@ -787,7 +830,7 @@ story.append(data_table(
                                 'Live-test substantial / non-substantial scenarios'],
      ['C-tris. PIK editor',     'Enabled, rate, capitalisation frequency',
                                 'Override contractual PIK on the active deal'],
-     ['D. Tax & Other',         'WHT rate, WHT recoverability, deferred tax tracking, FX cadence',
+     ['D. Tax &amp; Other',         'WHT rate, WHT recoverability, deferred tax tracking, FX cadence',
                                 'Period-end adjustments'],
      ['E. Per-fee IFRS 15',     'Over-time / point-in-time / EIR-included per fee',
                                 'Routes each fee\'s recognition pattern']],
@@ -908,7 +951,7 @@ ep_rows = [
     ['B', 'Carrying Value Waterfall (IAS 1 §54)',
         'Anchors on opening carrying value (not principal). Itemises deferred IFRS 15 fees at '
         'recognition, drawdowns, repayments, EIR accretion, OID amortisation, PIK capitalised, '
-        'modification G/L, hedge P&L, FX. ECL is a memo block below (gross → less ECL → net).'],
+        'modification G/L, hedge P&amp;L, FX. ECL is a memo block below (gross → less ECL → net).'],
     ['C', 'Period-on-Period Variance Walk',
         'Decomposes ΔInterest between two halves of the schedule into Rate × Balance × Days × '
         'Modification × Cross/mix residual. See §3.13 for the formulas.'],
@@ -997,15 +1040,15 @@ story.append(data_table(
      ['Hedge instrument',      '—',                              'SONIA-receiver IRS (pay fixed)'],
      ['Hedged item',           '—',                              'Variable interest on £25m drawn'],
      ['Effective portion → ',  '—',                              'Account 360000 (OCI reserve)'],
-     ['Ineffective portion →', '—',                              'Account 451000 (P&L)'],
-     ['Reclass to P&L',        '—',                              'When hedged forecast cashflow occurs']],
+     ['Ineffective portion →', '—',                              'Account 451000 (P&amp;L)'],
+     ['Reclass to P&amp;L',        '—',                              'When hedged forecast cashflow occurs']],
     col_widths=[50*mm, 50*mm, 70*mm]))
 story.append(Spacer(1, 4))
 story.append(callout('Why the difference matters',
-    'Libra 2 books interest at the actual floating rate; the P&L moves with SONIA. Libra 3\'s '
+    'Libra 2 books interest at the actual floating rate; the P&amp;L moves with SONIA. Libra 3\'s '
     'hedge re-routes the effective portion of swap MTM to OCI, so the income statement sees the '
     'budgeted fixed rate of ~7.25% (4.75% swap-fixed + 250bps margin). Only the ineffective portion '
-    'hits P&L. The OCI reserve unwinds into P&L period-by-period as the hedged interest is recognised.'))
+    'hits P&amp;L. The OCI reserve unwinds into P&amp;L period-by-period as the hedged interest is recognised.'))
 
 # Example 3 — Volt guarantee
 story.append(Paragraph('6.3  Volt — financial guarantee (NWF as guarantor)', H2))
@@ -1049,7 +1092,7 @@ story.append(data_table(
      ['2', 'Statement of Financial Position',
           'Loans at amortised cost by stage, with ECL contra-asset.',
           'Carrying Value Waterfall + memo block'],
-     ['3', 'Statement of P&L with EIR / ECL split',
+     ['3', 'Statement of P&amp;L with EIR / ECL split',
           'Proves IFRS 9 is being applied correctly. (a) Interest via EIR. (b) ECL movements. (c) FX + modification.',
           'KPIs strip + Daily Schedule + ECL panel'],
      ['4', 'ECL Roll-Forward (Stage 1 ↔ 2 ↔ 3)',
@@ -1101,7 +1144,7 @@ faq = [
      'face-weighted aggregate.'),
     ('Q5.  Why does the carrying value waterfall sometimes show an amber Δ?',
      'The waterfall sums Opening carrying + Drawdowns − Repayments + EIR + OID amort + PIK + '
-     'Modification + Hedge P&L + FX. ECL is a memo (contra-asset disclosure), not a movement. Amber '
+     'Modification + Hedge P&amp;L + FX. ECL is a memo (contra-asset disclosure), not a movement. Amber '
      'appears when the calculated total differs from closingCarrying by more than £1 — typical '
      'residual on multi-thousand-day schedules is sub-£500 from accumulated rounding.'),
     ('Q6.  I changed PIK / a treatment field but the JEs and KPIs didn\'t update.',
