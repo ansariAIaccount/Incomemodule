@@ -1504,7 +1504,17 @@ function applyPortFExcel(file){
       // Re-build the dropdown if a new synthetic was added
       if(isSynthetic){
         rebuildInstrumentDropdown();
+      }
+      // ALWAYS sync the active-deal state to the resolved instrument — whether
+      // it came from a seed match or from a fresh synthetic. Without this, the
+      // dropdown stays on whatever was selected before the load, and downstream
+      // code that reads currentInstrument() (EIR Trace, Treatment panel reset,
+      // etc.) silently picks up the wrong deal. The symptom was: Margin
+      // Schedule panel and Show EIR Trace showing the previous deal's data.
+      if(M.instrumentId !== inst.id){
         M.instrumentId = inst.id;
+        const sel = $('sel-instrument');
+        if(sel) sel.value = inst.id;
         if($('active-deal')) $('active-deal').value = inst.id;
         snapshotTreatmentDefaults(inst);
         loadTreatmentForm();
@@ -1584,6 +1594,21 @@ function applyPortFPayload(payload){
   M.portfData = payload;
   // Build engine schedule + summary using the matching seed instrument
   const inst = INSTRUMENTS.find(i => i.id === payload.instrument.id) || currentInstrument();
+  // Belt-and-braces sync: make sure the active-deal state (M.instrumentId + the
+  // dropdown + Treatment panel) matches the payload we're rendering. Without
+  // this, a load that resolves to a different deal than the dropdown leaves
+  // currentInstrument() returning the wrong seed, which silently breaks the
+  // EIR Trace popup, Margin Schedule panel, FX Schedule panel, and any other
+  // surface that reads the active deal directly. Idempotent — no-op if already
+  // in sync.
+  if(inst && inst.id && M.instrumentId !== inst.id){
+    M.instrumentId = inst.id;
+    const sel = $('sel-instrument');
+    if(sel && sel.value !== inst.id) sel.value = inst.id;
+    if($('active-deal') && $('active-deal').value !== inst.id) $('active-deal').value = inst.id;
+    if(typeof snapshotTreatmentDefaults === 'function') snapshotTreatmentDefaults(inst);
+    if(typeof loadTreatmentForm === 'function') loadTreatmentForm();
+  }
   M.schedule = buildSchedule(inst);
   M.summary = summarize(M.schedule, inst.settlementDate, inst.maturityDate);
   // PortF-Excel ingestion path: the parser leaves dailyInterest / dailyFees / currentRate
