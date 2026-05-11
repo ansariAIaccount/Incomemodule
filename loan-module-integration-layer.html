@@ -124,6 +124,15 @@
     <div id="portf-fees-table"></div>
   </details>
 
+  <!-- Margin Schedule — only visible when the loaded deal has a marginSchedule[]
+       (RFR / floating-rate deals like Helios, Libra 2, Libra 3, Suffolk B). -->
+  <details id="portf-margin-section" class="hidden mb-3" open>
+    <summary class="text-[12px] mb-2 cursor-pointer font-semibold">
+      View margin schedule <span id="portf-margin-count" class="chip purple text-[10px]">0 periods</span>
+    </summary>
+    <div id="portf-margin-table"></div>
+  </details>
+
   <details id="portf-details" class="hidden">
     <summary class="text-[12px] mb-2">View loaded PortF cashflow schedule</summary>
     <div class="scrolled" id="portf-cashflow-table"></div>
@@ -580,6 +589,19 @@
       </summary>
       <div id="modification-history" class="mt-3"></div>
     </details>
+
+    <!-- G) IFRS 9 EIR Calculation Trace — opens in popup with 3 worked examples -->
+    <div class="bg-white border border-gray-200 rounded-lg mb-2 p-3 flex items-center gap-2 flex-wrap">
+      <span class="material-icons-outlined text-[16px]" style="color:var(--brand-600)">functions</span>
+      <div>
+        <div class="font-semibold text-[12.5px]">IFRS 9 §B5.4 EIR Calculation Trace</div>
+        <div class="text-[11px] text-gray-500">3 worked examples — bilateral · multi-tranche · floating-rate (RFR with sample SONIA history)</div>
+      </div>
+      <button id="btn-show-eir-trace" class="mat-btn primary !py-1 !px-3 ml-auto">
+        <span class="material-icons-outlined text-[14px]" style="vertical-align:middle">open_in_new</span>
+        Show EIR Trace
+      </button>
+    </div>
   </div>
 
   <!-- Daily schedule view — rebuilt on every Run Accounting / treatment change.
@@ -898,6 +920,26 @@
   </div>
 </div>
 
+<!-- ===== EIR Calculation Trace popup — renders the currently loaded deal ===== -->
+<div id="eir-trace-modal" class="json-modal" style="display:none">
+  <div class="json-modal-bd" data-close-eir="1"></div>
+  <div class="json-modal-pn" style="width:min(1100px, 95vw); max-height:92vh">
+    <div class="json-modal-h">
+      <div>
+        <div class="font-semibold text-[14px]">IFRS 9 §B5.4 — EIR Calculation Trace</div>
+        <div id="eir-modal-sub" class="text-[11px] text-gray-500">No deal loaded</div>
+      </div>
+      <button class="mat-btn outline !py-1 !px-2" data-close-eir="1"><span class="material-icons-outlined text-[16px]">close</span></button>
+    </div>
+    <div class="json-modal-b" id="eir-modal-body" style="padding-top:8px">
+      <div id="eir-trace-content"></div>
+    </div>
+    <div class="json-modal-f">
+      <button class="mat-btn outline" data-close-eir="1">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== Generic JSON modal ===== -->
 <!-- ===== Session Save/Load modal ===== -->
 <div id="session-modal" class="json-modal" style="display:none">
@@ -1060,6 +1102,7 @@ function resetPipeline(){
   $('acct-fees-section')?.classList.add('hidden');
   $('portf-setup-section')?.classList.add('hidden');
   $('portf-fees-section')?.classList.add('hidden');
+  $('portf-margin-section')?.classList.add('hidden');
   $('evidence-pack').classList.add('hidden');
   M.acctRunMeta = null;
   ['ifrs-classification','ifrs-recognition','ifrs-eir','ifrs-eir-note','ifrs-fv','ifrs-fv-note'].forEach(id => $(id).textContent = '—');
@@ -1584,6 +1627,8 @@ function applyPortFPayload(payload){
   renderPortFSetupPanel(payload, inst);
   // ─── Fees panel — every fee block from the Excel + the matched seed ───
   renderPortFFeesPanel(payload, inst);
+  // ─── Margin schedule panel — only shows when marginSchedule[] is present ───
+  renderPortFMarginSchedulePanel(inst);
   $('portf-status').className = 'chip green self-center';
   $('portf-status').textContent = 'Loaded · ' + payload.accrualSchedule.length + ' rows';
   setStage('stage-1', 'done');
@@ -1717,6 +1762,88 @@ function renderPortFFeesPanel(payload, inst){
     <tbody>${rowsHtml}</tbody>
   </table>${parsedFees ? '<div class="text-[11px] text-gray-500 mt-1">Total Accrued shows the sum of daily fee amounts the source supplied.</div>' : ''}`;
   $('portf-fees-section').classList.remove('hidden');
+}
+
+// ------------------------------------------------------------
+// Margin schedule panel (Phase 1) — read-only.
+// Shown only when the loaded deal (or any of its tranches / underlyings)
+// has a marginSchedule[]. For RFR / floating-rate deals this is the
+// contractual ratchet schedule the engine reads each day. For fixed-rate
+// deals the panel stays hidden.
+// ------------------------------------------------------------
+function renderPortFMarginSchedulePanel(inst){
+  const section = $('portf-margin-section');
+  if(!section) return;
+  if(!inst){ section.classList.add('hidden'); return; }
+
+  // Collect margin schedules from the instrument and any children. Each entry
+  // is { label, baseRate, index, schedule:[{from,to,marginBps,...}] }.
+  const blocks = [];
+  function pushBlockFrom(obj, label){
+    const ms = Array.isArray(obj.marginSchedule) ? obj.marginSchedule : null;
+    if(!ms || !ms.length) return;
+    blocks.push({
+      label,
+      index: (obj.coupon && obj.coupon.type) || (obj.rfr && obj.rfr.index) || 'RFR',
+      baseRate: (obj.rfr && obj.rfr.baseRate) || 0,
+      schedule: ms
+    });
+  }
+  pushBlockFrom(inst, inst.deal || inst.id || 'Deal');
+  (inst.tranches || []).forEach(t => pushBlockFrom(t, t.label || t.id));
+  (inst.underlyingLoans || []).forEach(u => pushBlockFrom(u, u.label || u.id));
+
+  if(!blocks.length){ section.classList.add('hidden'); return; }
+
+  // Total period count across all blocks (for the chip)
+  const totalPeriods = blocks.reduce((s, b) => s + b.schedule.length, 0);
+  $('portf-margin-count').textContent =
+      totalPeriods + (totalPeriods === 1 ? ' period' : ' periods');
+
+  function rowsFor(block){
+    return block.schedule.map((s, i) => {
+      const margin = s.marginBps != null ? s.marginBps / 10000 : (s.spread || 0);
+      const allIn  = (block.baseRate || 0) + margin;
+      const marginBps = s.marginBps != null ? s.marginBps : Math.round(margin * 10000);
+      return `<tr>
+        <td class="left">${i + 1}</td>
+        <td class="left">${s.from || '—'}</td>
+        <td class="left">${s.to   || '—'}</td>
+        <td>${marginBps}</td>
+        <td>${(margin * 100).toFixed(4)}%</td>
+        <td class="text-blue-700 font-semibold">${(allIn * 100).toFixed(4)}%</td>
+      </tr>`;
+    }).join('');
+  }
+
+  const html = blocks.map(b => `
+    <div class="mb-2 border border-gray-200 rounded bg-white">
+      <div class="flex items-center gap-2 px-2 py-1.5 border-b border-gray-200 bg-gray-50">
+        <span class="font-semibold text-[12px]">${b.label}</span>
+        <span class="chip blue text-[10px]">${b.index} base ${(b.baseRate * 100).toFixed(4)}%</span>
+        <span class="chip gray text-[10px]">${b.schedule.length} period${b.schedule.length === 1 ? '' : 's'}</span>
+      </div>
+      <table class="data" style="width:100%">
+        <thead><tr>
+          <th>#</th>
+          <th class="left">From</th>
+          <th class="left">To</th>
+          <th>Margin (bps)</th>
+          <th>Margin (%)</th>
+          <th>All-in rate</th>
+        </tr></thead>
+        <tbody>${rowsFor(b)}</tbody>
+      </table>
+    </div>`).join('');
+
+  $('portf-margin-table').innerHTML = html +
+    `<div class="text-[11px] text-gray-500 mt-1">
+       Read-only. The engine resolves the active margin per day from this schedule.
+       All-in rate = ${blocks[0].index} base + margin (+ ESG adjustment, if applicable). For period-by-period
+       EIR construction, see the EIR Calculation Trace at the bottom of Stage 2.
+     </div>`;
+
+  section.classList.remove('hidden');
 }
 
 // ============================================================
@@ -4659,6 +4786,418 @@ document.addEventListener('DOMContentLoaded', ()=>{
   };
   document.addEventListener('keydown', e => { if(e.key === 'Escape' && $('json-modal').style.display !== 'none') closeJsonModal(); });
 });
+
+/* ============================================================================
+   IFRS 9 §B5.4 — EIR Calculation Trace popup
+   Renders the trace for the CURRENTLY LOADED deal, auto-detecting type:
+     • Bilateral fixed-rate     → bisection-solve, show iterations
+     • Multi-tranche / wrapper  → per-tranche bisection + face-weighted aggregate
+     • RFR / floating           → period-by-period construction from baseRate + margin
+   ============================================================================ */
+(function(){
+  function $eir(id){ return document.getElementById(id); }
+  function fmtPctEir(r, dp){ dp = dp == null ? 4 : dp; return (r*100).toFixed(dp) + '%'; }
+  function fmtMoneyEir(n){
+    const sign = n < 0 ? '-' : '';
+    return sign + '£' + Math.abs(n).toLocaleString('en-GB',
+        { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  // Bisection solver that records every iteration
+  function eirSolveWithTrace(cashflows, lo, hi, tol, maxIter){
+    lo = lo == null ? -0.99 : lo;
+    hi = hi == null ? 5.0   : hi;
+    tol = tol == null ? 1e-6 : tol;
+    maxIter = maxIter == null ? 60 : maxIter;
+    const f = r => cashflows.reduce((s, cf) => s + cf.amount / Math.pow(1+r, cf.t), 0);
+    let fl = f(lo), fh = f(hi);
+    const iter = [];
+    if(fl * fh > 0){
+      iter.push({ i:0, lo, hi, mid:NaN, npv:NaN, note:'No sign change in initial bracket' });
+      return { r:null, iter };
+    }
+    for(let i=0; i<maxIter; i++){
+      const mid = (lo+hi)/2;
+      const fm = f(mid);
+      iter.push({ i:i+1, lo, hi, mid, npv:fm });
+      if(Math.abs(fm) < tol){ return { r:mid, iter }; }
+      if(fl*fm < 0){ hi=mid; fh=fm; } else { lo=mid; fl=fm; }
+    }
+    return { r:(lo+hi)/2, iter };
+  }
+
+  function ccyOf(inst){ return (inst && inst.currency) || 'GBP'; }
+  function ccySym(c){ return c === 'GBP' ? '£' : c === 'USD' ? '$' : c === 'EUR' ? '€' : c === 'JPY' ? '¥' : (c + ' '); }
+  function fmtMoneyCcy(n, c){
+    const sym = ccySym(c);
+    const sign = n < 0 ? '-' : '';
+    return sign + sym + Math.abs(n).toLocaleString('en-GB',
+        { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+
+  const RFR_TYPES_LOCAL = new Set(['SONIA','SOFR','ESTR','EURIBOR','TONA','FED']);
+  function isRFR(inst){
+    return !!(inst && (inst.rfr || (inst.coupon && RFR_TYPES_LOCAL.has(inst.coupon.type))));
+  }
+  function isTranched(inst){
+    return !!(inst && (
+      (Array.isArray(inst.tranches) && inst.tranches.length) ||
+      (Array.isArray(inst.underlyingLoans) && inst.underlyingLoans.length)
+    ));
+  }
+  // Years between two ISO dates
+  function yearsBetween(s, e){
+    const ds = new Date(s + 'T12:00:00'), de = new Date(e + 'T12:00:00');
+    if(isNaN(ds) || isNaN(de)) return 0;
+    return Math.max(0.01, (de - ds) / (365.25 * 86400000));
+  }
+
+  function openEIRTrace(){
+    const m = $eir('eir-trace-modal');
+    if(!m) return;
+    const inst = (typeof currentInstrument === 'function') ? currentInstrument() : null;
+    const body = $eir('eir-trace-content');
+    const sub  = $eir('eir-modal-sub');
+    if(!inst){
+      body.innerHTML = '<div class="bg-amber-50 border border-amber-200 rounded p-4 text-[13px]">' +
+        'No deal selected. Pick a deal from the <b>Active Deal</b> dropdown at the top of the page ' +
+        '(or load a PortF Excel in Stage 1), then re-open this trace.</div>';
+      sub.textContent = 'No deal loaded';
+      m.style.display = 'flex';
+      return;
+    }
+    sub.textContent = (inst.deal || inst.id) + ' · ' + (inst.legalEntity || '') + ' · ' + ccyOf(inst);
+    // Auto-detect deal type and render appropriate trace
+    if(isTranched(inst)){
+      body.innerHTML = renderEIRTrancheTrace(inst);
+    } else if(isRFR(inst)){
+      body.innerHTML = renderEIRRFRTrace(inst);
+    } else {
+      body.innerHTML = renderEIRBilateralTrace(inst);
+    }
+    m.style.display = 'flex';
+  }
+  function closeEIRTrace(){
+    const m = $eir('eir-trace-modal');
+    if(m) m.style.display = 'none';
+  }
+
+  function renderIterTable(iter){
+    const limit = 14;
+    const display = iter.length > limit
+      ? [...iter.slice(0,5), { sep:true, hidden: iter.length - 10 }, ...iter.slice(-5)]
+      : iter;
+    return `<table class="data" style="width:100%; font-size:11px">
+      <thead><tr><th>Iter</th><th class="left">Lo</th><th class="left">Hi</th><th class="left">Mid (trial r)</th><th class="left">NPV at mid</th></tr></thead>
+      <tbody>${display.map(it => it.sep
+          ? `<tr><td colspan="5" class="left text-gray-400" style="font-style:italic">... ${it.hidden} more iterations converging ...</td></tr>`
+          : `<tr>
+              <td>${it.i}</td>
+              <td class="left">${fmtPctEir(it.lo, 4)}</td>
+              <td class="left">${fmtPctEir(it.hi, 4)}</td>
+              <td class="left"><b>${fmtPctEir(it.mid, 6)}</b></td>
+              <td class="left ${Math.abs(it.npv) < 1 ? 'text-emerald-700' : ''}">${fmtMoneyEir(it.npv)}</td>
+            </tr>`).join('')}</tbody></table>`;
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Build cashflows for a bilateral (single-cashflow-bearing-unit) instrument.
+  // EIR-included fees reduce day-1 net outflow; non-EIR fees are excluded.
+  // ────────────────────────────────────────────────────────────────────────
+  function buildBilateralCashflows(inst){
+    const principal = inst.faceValue || inst.commitment || 0;
+    const couponRate = (inst.coupon && (inst.coupon.fixedRate || 0)) || 0;
+    const settle = inst.settlementDate || '';
+    const mat    = inst.maturityDate   || '';
+    const years  = Math.max(1, Math.round(yearsBetween(settle, mat)));
+    const annualCoupon = principal * couponRate;
+    // EIR-included fees (IFRS 9 §B5.4) — typically arrangement / origination fees marked IFRS9-EIR
+    const eirFees = (inst.fees || []).filter(f => f.ifrs === 'IFRS9-EIR');
+    const upfrontEirFee = eirFees.reduce((s, f) => {
+      if(f.mode === 'percent') return s + (f.rate || 0) * (principal);
+      if(f.mode === 'flat')    return s + (f.amount || 0);
+      return s + (f.amount || 0);
+    }, 0);
+    const cfs = [
+      { t:0, amount:-(principal - upfrontEirFee),
+        label:`Day 0 · Disburse ${fmtMoneyCcy(principal, ccyOf(inst))}${upfrontEirFee>0 ? ', receive '+fmtMoneyCcy(upfrontEirFee, ccyOf(inst))+' EIR-included fee' : ''}` }
+    ];
+    for(let y=1; y<years; y++) cfs.push({ t:y, amount: annualCoupon, label:`Year ${y} · Coupon ${(couponRate*100).toFixed(4)}% × principal` });
+    cfs.push({ t:years, amount: principal * (1 + couponRate), label:`Year ${years} · Final coupon + principal repayment` });
+    return { cfs, principal, couponRate, years, annualCoupon, upfrontEirFee, eirFees };
+  }
+
+  function renderEIRBilateralTrace(inst){
+    const ccy = ccyOf(inst);
+    const built = buildBilateralCashflows(inst);
+    const { cfs, principal, couponRate, years, annualCoupon, upfrontEirFee, eirFees } = built;
+    if(!principal || !couponRate || years < 1){
+      return '<div class="bg-amber-50 border border-amber-200 rounded p-4 text-[13px]">Instrument missing core inputs (face value, coupon, term). Check the active deal.</div>';
+    }
+    const sol = eirSolveWithTrace(cfs);
+    const npvEqn = cfs.map((cf, i) =>
+        (cf.amount < 0 ? '-' : (i ? '+ ' : '')) + fmtMoneyCcy(Math.abs(cf.amount), ccy) +
+        (cf.t === 0 ? '' : '/(1+r)^' + cf.t)).join(' ');
+    return `
+      <div class="bg-yellow-50 border border-yellow-200 rounded p-3 mb-3 text-[12px]">
+        <div class="font-semibold text-yellow-900 mb-1">Bilateral term loan · ${inst.deal || inst.id}</div>
+        <div class="text-gray-700">
+          ${fmtMoneyCcy(principal, ccy)} · ${years}-year bullet · ${(couponRate*100).toFixed(4)}% annual coupon
+          ${upfrontEirFee > 0 ? `· ${fmtMoneyCcy(upfrontEirFee, ccy)} EIR-included fee` : '· no EIR-included fees'}.
+          ${upfrontEirFee > 0
+            ? `Net day-1 outflow = ${fmtMoneyCcy(principal, ccy)} disbursed − ${fmtMoneyCcy(upfrontEirFee, ccy)} fee received = <b>${fmtMoneyCcy(principal - upfrontEirFee, ccy)}</b>.`
+            : `Day-1 outflow = ${fmtMoneyCcy(principal, ccy)} (no upfront fee).`}
+          EIR is the single rate <i>r</i> that NPVs all future cashflows back to that day-1 amount.
+        </div>
+      </div>
+      <div class="text-[12px] font-semibold mb-1">Contractual cashflows (lender's perspective)</div>
+      <table class="data" style="width:100%; font-size:11.5px">
+        <thead><tr><th>t (years)</th><th class="left">Cashflow</th><th class="left">Description</th></tr></thead>
+        <tbody>${cfs.map(cf => `
+          <tr><td>${cf.t}</td>
+              <td class="left ${cf.amount < 0 ? 'text-red-700' : 'text-emerald-700'}"><b>${fmtMoneyCcy(cf.amount, ccy)}</b></td>
+              <td class="left text-gray-700">${cf.label}</td></tr>`).join('')}</tbody>
+      </table>
+      <div class="bg-blue-50 border border-blue-200 rounded p-3 my-3 text-[12px]">
+        <div class="font-semibold text-blue-900 mb-1">Solve for r such that Σ CF<sub>t</sub> / (1+r)<sup>t</sup> = 0</div>
+        <code class="block text-[11px]" style="font-family:'Courier New',monospace; white-space:pre-wrap; word-break:break-word">${npvEqn} = 0</code>
+        <div class="text-[11px] text-gray-600 mt-1">Method: bisection over r ∈ [-0.99, +5.00], tolerance 1e-6, max 60 iterations.</div>
+      </div>
+      <div class="text-[12px] font-semibold mb-1">Bisection iterations</div>
+      ${renderIterTable(sol.iter)}
+      <div class="bg-emerald-50 border border-emerald-200 rounded p-3 mt-3 text-[12.5px]">
+        <div class="font-semibold text-emerald-900 mb-1">Result</div>
+        <div><b>EIR = ${fmtPctEir(sol.r, 4)}</b> &nbsp;·&nbsp; converged after ${sol.iter.length} iterations &nbsp;·&nbsp; headline coupon = ${(couponRate*100).toFixed(4)}%</div>
+        <div class="text-[11px] text-gray-700 mt-1">
+          ${upfrontEirFee > 0
+            ? `EIR &gt; coupon because the ${fmtMoneyCcy(upfrontEirFee, ccy)} upfront fee is effectively additional yield to the lender. IFRS 9 §B5.4 requires spreading that yield over the life of the loan via EIR rather than booking it on day 1.`
+            : `Without EIR-included fees the EIR equals the coupon rate — the loan is drawn at par and IFRS 9 §B5.4 has no upfront yield to spread.`}
+        </div>
+      </div>
+    `;
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Multi-tranche / multi-underlying — per-child bisection + face-weighted aggregate
+  // ────────────────────────────────────────────────────────────────────────
+  function renderEIRTrancheTrace(inst){
+    const ccy = ccyOf(inst);
+    const children = Array.isArray(inst.tranches) && inst.tranches.length
+      ? inst.tranches
+      : (inst.underlyingLoans || []);
+    const childLabel = Array.isArray(inst.tranches) && inst.tranches.length ? 'tranche' : 'underlying loan';
+    const dealSettle = inst.settlementDate;
+    const dealMat = inst.maturityDate;
+
+    function buildChild(t){
+      const face = t.faceValue || t.commitment || 0;
+      // Child coupon may be fixed or RFR. For RFR, use rfr.baseRate + margin for the headline.
+      let couponRate = 0;
+      let isFloating = false;
+      let rateDescription = '';
+      if(t.coupon && t.coupon.type === 'Fixed'){
+        couponRate = t.coupon.fixedRate || 0;
+        rateDescription = `Fixed ${(couponRate*100).toFixed(4)}%`;
+      } else if(t.coupon && RFR_TYPES_LOCAL.has(t.coupon.type)){
+        const base = (t.rfr && t.rfr.baseRate) || 0;
+        const ms = t.marginSchedule && t.marginSchedule[0];
+        const margin = ms ? (ms.marginBps != null ? ms.marginBps/10000 : 0) : (t.coupon.spread || 0);
+        couponRate = base + margin;
+        isFloating = true;
+        rateDescription = `${t.coupon.type} ${(base*100).toFixed(4)}% + margin ${(margin*100).toFixed(4)}% = ${(couponRate*100).toFixed(4)}%`;
+      } else {
+        couponRate = (t.coupon && t.coupon.fixedRate) || 0;
+        rateDescription = `${(couponRate*100).toFixed(4)}%`;
+      }
+      // Term: use child dates if present, else deal-level
+      const settle = t.settlementDate || dealSettle;
+      const mat    = t.maturityDate   || dealMat;
+      const years = Math.max(1, Math.round(yearsBetween(settle, mat)));
+      // EIR-included fees on the child (or inherited)
+      const eirFees = (t.fees || inst.fees || []).filter(f => f.ifrs === 'IFRS9-EIR');
+      const upfront = eirFees.reduce((s, f) => {
+        if(f.mode === 'percent') return s + (f.rate || 0) * face;
+        if(f.mode === 'flat')    return s + (f.amount || 0);
+        return s + (f.amount || 0);
+      }, 0);
+      const cfs = [{ t:0, amount:-(face - upfront) }];
+      for(let y=1; y<years; y++) cfs.push({ t:y, amount: face * couponRate });
+      cfs.push({ t:years, amount: face * (1 + couponRate) });
+      return {
+        id: t.id || t.label, label: t.label || t.id,
+        face, couponRate, years, upfront, eirFees, rateDescription, isFloating,
+        cfs, sol: eirSolveWithTrace(cfs)
+      };
+    }
+
+    const built = children.map(buildChild);
+    const totalFace = built.reduce((s, c) => s + c.face, 0);
+    const weighted = totalFace > 0
+      ? built.reduce((s, c) => s + c.face * (c.sol.r || 0), 0) / totalFace
+      : 0;
+
+    function childCard(c){
+      const ifrsTag = c.eirFees.length ? `${c.eirFees.length} EIR-included fee${c.eirFees.length>1?'s':''}` : 'no EIR-included fees';
+      return `<div class="border border-gray-200 rounded-lg p-3 bg-white">
+        <div class="font-semibold text-[12.5px] text-blue-900">${c.label}</div>
+        <div class="text-[11px] text-gray-500 mb-2">${c.rateDescription} · ${ifrsTag}${c.isFloating ? ' · floating (using current period rate for solve)' : ''}</div>
+        <div class="text-[11px] text-gray-600 mb-2">
+          Face <b>${fmtMoneyCcy(c.face, ccy)}</b> · term <b>${c.years}Y bullet</b>
+          ${c.upfront > 0 ? '· EIR-incl. fee <b>'+fmtMoneyCcy(c.upfront, ccy)+'</b>' : ''}
+        </div>
+        <table class="data" style="width:100%; font-size:11px">
+          <thead><tr><th>t</th><th class="left">Cashflow</th></tr></thead>
+          <tbody>${c.cfs.map(cf => `<tr>
+            <td>${cf.t}</td>
+            <td class="left ${cf.amount < 0 ? 'text-red-700' : 'text-emerald-700'}"><b>${fmtMoneyCcy(cf.amount, ccy)}</b></td>
+          </tr>`).join('')}</tbody>
+        </table>
+        <div class="bg-emerald-50 border border-emerald-200 rounded p-2 mt-2 text-[12px]">
+          <div><b>${c.label} EIR = ${fmtPctEir(c.sol.r, 4)}</b></div>
+          <div class="text-[11px] text-gray-600">${c.sol.iter.length} bisection iterations · headline ${(c.couponRate*100).toFixed(4)}%</div>
+        </div>
+      </div>`;
+    }
+
+    const aggExpr = built.map(c =>
+        `${(c.face/1e6).toFixed(0)}m × ${fmtPctEir(c.sol.r,4)}`).join(' + ');
+    const childCount = built.length;
+
+    return `
+      <div class="bg-yellow-50 border border-yellow-200 rounded p-3 mb-3 text-[12px]">
+        <div class="font-semibold text-yellow-900 mb-1">${inst.deal || inst.id} · ${childCount}-${childLabel} structure</div>
+        <div class="text-gray-700">
+          Total facility ${fmtMoneyCcy(totalFace, ccy)} split into ${childCount} ${childLabel}${childCount > 1 ? 's' : ''}, each with its own coupon and (optionally) its own fees.
+          Per IFRS 9 §B5.4, EIR is solved <b>at the lowest cashflow-bearing unit</b> — so each ${childLabel} gets its own EIR solve.
+          The deal-level number is a face-weighted aggregate for headline display;
+          the engine accretes each ${childLabel}'s carrying value using its own EIR.
+        </div>
+      </div>
+      <div class="grid gap-3" style="grid-template-columns:repeat(${Math.min(childCount, 2)}, 1fr)">
+        ${built.map(childCard).join('')}
+      </div>
+      <div class="bg-blue-50 border border-blue-200 rounded p-3 my-3 text-[12px]">
+        <div class="font-semibold text-blue-900 mb-1">Face-weighted aggregate at deal level</div>
+        <code class="block text-[11px]" style="font-family:'Courier New',monospace; white-space:pre-wrap">
+Deal EIR = (${aggExpr}) / ${(totalFace/1e6).toFixed(0)}m
+        </code>
+        <div class="text-[15px] font-bold mt-2">Aggregate EIR = ${fmtPctEir(weighted, 4)}</div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded p-3 text-[11.5px] text-gray-700">
+        <b>Why per-${childLabel}?</b> Each has a distinct expected cashflow profile (different coupon, different fees, different seniority on recovery).
+        Solving a single EIR across blended cashflows would conflate them and break IFRS 9's "spread the yield evenly over expected life" principle for each.
+        The same approach applies to multi-underlying guarantees (e.g. Volt Multi-Loan): each underlying gets its own EIR, with a face-weighted aggregate for display.
+      </div>
+    `;
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Floating-rate / RFR — period-by-period construction from rfr + marginSchedule
+  // ────────────────────────────────────────────────────────────────────────
+  function renderEIRRFRTrace(inst){
+    const ccy = ccyOf(inst);
+    const principal = inst.faceValue || inst.commitment || 0;
+    const rfr = inst.rfr || {};
+    const baseRate = rfr.baseRate || 0;
+    const index = (inst.coupon && inst.coupon.type) || rfr.index || 'RFR';
+    const ms = Array.isArray(inst.marginSchedule) ? inst.marginSchedule : [];
+    const settle = inst.settlementDate;
+    const mat    = inst.maturityDate;
+    const dayBasis = inst.dayBasis || 'ACT/365';
+    const dayDenom = (dayBasis === 'ACT/365' || dayBasis === 'ACT/ACT') ? 365 : 360;
+    // Build period rows from marginSchedule
+    const rows = (ms.length ? ms : [{ from: settle, to: mat, marginBps: (inst.coupon && inst.coupon.spread || 0) * 10000 }])
+      .map((s, i) => {
+        const margin = s.marginBps != null ? s.marginBps / 10000 : (s.spread || 0);
+        const eir = baseRate + margin;
+        const daily = principal * eir / dayDenom;
+        return {
+          idx: i + 1,
+          from: s.from || settle,
+          to:   s.to   || mat,
+          base: baseRate,
+          margin,
+          eir,
+          daily
+        };
+      });
+    const avgEir = rows.length ? rows.reduce((s, r) => s + r.eir, 0) / rows.length : baseRate;
+
+    return `
+      <div class="bg-yellow-50 border border-yellow-200 rounded p-3 mb-3 text-[12px]">
+        <div class="font-semibold text-yellow-900 mb-1">${inst.deal || inst.id} · Floating-rate (${index})</div>
+        <div class="text-gray-700">
+          ${fmtMoneyCcy(principal, ccy)} · ${settle} → ${mat} · day-count <b>${dayBasis}</b>.
+          For floating-rate deals EIR is <b>not bisection-solved</b> — the rate resets every period, so a single
+          fixed EIR would be meaningless. Instead the engine constructs EIR <b>compositionally</b> per period:
+        </div>
+        <code class="block text-[11px] mt-2 bg-white border border-yellow-300 rounded px-2 py-1" style="font-family:'Courier New',monospace">
+EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000  (+ esgAdjustment)
+        </code>
+      </div>
+      <div class="text-[12px] font-semibold mb-1">Margin schedule (loaded from PortF marginSchedule[])</div>
+      <table class="data" style="width:100%; font-size:11.5px">
+        <thead><tr>
+          <th class="left">#</th>
+          <th class="left">From</th>
+          <th class="left">To</th>
+          <th class="left">${index} base</th>
+          <th class="left">Margin</th>
+          <th class="left">EIR for period</th>
+          <th class="left">Daily interest @ ${fmtMoneyCcy(principal, ccy)}</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td class="left">${r.idx}</td>
+          <td class="left">${r.from}</td>
+          <td class="left">${r.to}</td>
+          <td class="left">${fmtPctEir(r.base, 4)}</td>
+          <td class="left">${fmtPctEir(r.margin, 4)}</td>
+          <td class="left text-blue-700"><b>${fmtPctEir(r.eir, 4)}</b></td>
+          <td class="left">${fmtMoneyCcy(r.daily, ccy)}</td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr style="background:#f5f7fa; font-weight:600">
+          <td class="left" colspan="5">Average across ${rows.length} period${rows.length > 1 ? 's' : ''}</td>
+          <td class="left text-blue-700">${fmtPctEir(avgEir, 4)}</td>
+          <td class="left">${fmtMoneyCcy(principal * avgEir / dayDenom, ccy)}</td>
+        </tr></tfoot>
+      </table>
+      <div class="bg-blue-50 border border-blue-200 rounded p-3 my-3 text-[12px]">
+        <div class="font-semibold text-blue-900 mb-1">Period-by-period EIR construction (5-step engine logic)</div>
+        <code class="block text-[11px]" style="font-family:'Courier New',monospace">
+1. Read ${index} reset for period t from rfr.baseRate (or rateSchedule[t])
+2. Read margin for period t from marginSchedule[t].marginBps
+3. EIR_t = ${index}_t + margin_t (+ ESG adjustment if applicable)
+4. Daily interest = balance × EIR_t × dayCountFactor(${dayBasis}, date)
+5. Carrying value accretion uses period-specific EIR_t — no re-solve needed
+        </code>
+      </div>
+      <div class="bg-emerald-50 border border-emerald-200 rounded p-3 text-[12.5px]">
+        <div class="font-semibold text-emerald-900 mb-1">Headline result</div>
+        <div><b>${index} base (current):</b> ${fmtPctEir(baseRate, 4)}</div>
+        <div><b>Average all-in EIR:</b> ${fmtPctEir(avgEir, 4)}  &nbsp;·&nbsp;  ${rows.length} margin period${rows.length>1?'s':''}</div>
+        <div class="text-[11px] text-gray-700 mt-2">
+          The headline EIR shown in Stage 2 for an RFR deal is the <b>current-period EIR</b>. Carrying value accretion uses
+          period-specific EIR each day — so rate resets are handled transparently without re-solving.
+        </div>
+        <div class="text-[11px] text-gray-700 mt-1">
+          <b>Substantial modification re-derivation:</b> if the margin schedule is amended materially mid-life (e.g. spread
+          bumped +150bps with PV change > 10%), IFRS 9 §5.4.3 triggers derecognition + recognition with a new schedule. The
+          construction logic above still applies; only the inputs change.
+        </div>
+      </div>
+    `;
+  }
+
+  // Wire button + close handlers + Esc key
+  document.addEventListener('click', e => {
+    if(e.target.closest('#btn-show-eir-trace')){ openEIRTrace(); return; }
+    if(e.target.closest('[data-close-eir]')){ closeEIRTrace(); return; }
+  });
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape' && document.getElementById('eir-trace-modal').style.display !== 'none'){
+      closeEIRTrace();
+    }
+  });
+})();
 </script>
 </body>
 </html>
