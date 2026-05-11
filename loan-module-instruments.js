@@ -915,6 +915,175 @@ const INSTRUMENTS = [
       }
     ],
     preset:'Volt Multi-Loan · £600m covered across 2 underlyings (SONIA + Fixed)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Aurora Renewables — multi-tranche infrastructure loan
+    // Demo example for EIR-at-tranche-level: each tranche has a different
+    // coupon AND an EIR-included arrangement fee, so EIR > coupon on each
+    // tranche and the deal-level number is a face-weighted aggregate.
+    // £120m total: Senior £80m fixed 5.75% + Mezz £40m fixed 9.25%, 5Y bullet.
+    // ----------------------------------------------------------------
+    id:'auroraMultiTranche',
+    positionId:'POS-NWF-AURORA-MT', securityId:'SEC-AURORA-RENEW-MT',
+    instrumentKind:'loan',
+    legalEntity:'NWF Sustainable Infrastructure', leid: 42,
+    deal:'Aurora Renewables Phase 1',
+    position:'NWF 100% Bilateral Position · Aurora Renewables',
+    incomeSecurity:'Aurora Renewables Multi-Tranche Facility (£80m Senior 5.75% + £40m Mezz 9.25%)',
+    currency:'GBP',
+    faceValue:    120_000_000,
+    purchasePrice: 120_000_000,
+    commitment:   120_000_000,
+    settlementDate:'2026-03-01',
+    maturityDate:   '2031-03-01',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    holidayCalendar:'ukBank',
+    skipHolidays:false,
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    coupon: { type:'Fixed', fixedRate:0, floatingRate:0, spread:0, floor:null, cap:null },
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed:true, businessModel:'HoldToCollect', ecLStage:1, pdAnnual:0.005, lgd:0.40 },
+    tranches: [
+      {
+        id:'auroraSenior',
+        label:'Senior tranche · 5.75% fixed',
+        faceValue: 80_000_000,
+        purchasePrice: 80_000_000,
+        commitment:    80_000_000,
+        coupon: { type:'Fixed', fixedRate: 0.0575, floatingRate:0, spread:0, floor:null, cap:null },
+        dayBasis: '30/360',
+        principalRepayment:'AtMaturity',
+        principalSchedule: [
+          { date:'2026-03-01', type:'initial', amount: 80_000_000 }
+        ],
+        fees: [
+          {
+            id:'auroraSeniorArrangement',
+            kind:'arrangement',
+            label:'Senior Arrangement Fee',
+            mode:'flat',
+            amount: 400_000,
+            base:'face',
+            frequency:'oneOff',
+            paymentDate:'2026-03-01',
+            ifrs:'IFRS9-EIR',
+            notes:'£400k arrangement fee on senior tranche. EIR-included per IFRS 9 §B5.4 — spread over life via EIR accretion.'
+          }
+        ]
+      },
+      {
+        id:'auroraMezz',
+        label:'Mezz tranche · 9.25% fixed',
+        faceValue: 40_000_000,
+        purchasePrice: 40_000_000,
+        commitment:    40_000_000,
+        coupon: { type:'Fixed', fixedRate: 0.0925, floatingRate:0, spread:0, floor:null, cap:null },
+        dayBasis: '30/360',
+        principalRepayment:'AtMaturity',
+        principalSchedule: [
+          { date:'2026-03-01', type:'initial', amount: 40_000_000 }
+        ],
+        fees: [
+          {
+            id:'auroraMezzArrangement',
+            kind:'arrangement',
+            label:'Mezz Arrangement Fee',
+            mode:'flat',
+            amount: 600_000,
+            base:'face',
+            frequency:'oneOff',
+            paymentDate:'2026-03-01',
+            ifrs:'IFRS9-EIR',
+            notes:'£600k arrangement fee on mezz tranche. EIR-included — spread over life via EIR accretion. Mezz fee is larger because the tranche is junior.'
+          }
+        ]
+      }
+    ],
+    preset:'Aurora Renewables Phase 1 · £120m Multi-Tranche (Senior 5.75% + Mezz 9.25%, both with EIR-incl. fees)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Helios Solar Bridge — clean RFR bilateral
+    // Demo example for EIR-on-floating-rate: SONIA + ratcheted margin,
+    // no EIR-included fees (so EIR is constructed compositionally each
+    // period rather than bisection-solved). The 3-period margin ratchet
+    // makes the period-by-period EIR construction visible in the trace.
+    // £30m bilateral, 5Y bullet, SONIA + 275/300/325 bps ratchet.
+    // ----------------------------------------------------------------
+    id:'heliosBridge',
+    positionId:'POS-NWF-HELIOS-RFR', securityId:'SEC-HELIOS-SOLAR-BRIDGE',
+    instrumentKind:'loan',
+    legalEntity:'NWF Sustainable Infrastructure', leid: 42,
+    deal:'Helios Solar Bridge',
+    position:'NWF 100% Bilateral Position · Helios Solar Bridge',
+    incomeSecurity:'Helios Solar Bridge Facility (£30m, Compounded SONIA + Ratcheted Margin)',
+    counterpartyId:'HEL001',
+    transactionId:'HEL001',
+    bilateralFlag:'Bilateral',
+    agentName:'Barclays Bank',
+    currency:'GBP',
+    faceValue:    30_000_000,
+    purchasePrice: 30_000_000,
+    commitment:   30_000_000,
+    settlementDate:'2026-04-15',
+    availabilityEnd:'2027-04-15',
+    maturityDate:   '2031-04-15',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis:'ACT/365',
+    businessDayConvention:'modifiedFollowing',
+    holidayCalendar:'ukBank',
+    skipHolidays:false,
+    coupon: {
+      type:'SONIA',
+      fixedRate: 0,
+      floatingRate: 0,
+      spread: 0,
+      floor: null, cap: null
+    },
+    rfr: {
+      index: 'SONIA',
+      baseRate: 0.0475,                      // illustrative SONIA fix (4.75%)
+      lookbackDays: 5,
+      rounding: 5
+    },
+    marginSchedule: [
+      { from:'2026-04-15', to:'2028-04-14', marginBps: 275 },   // Years 1-2: 2.75%
+      { from:'2028-04-15', to:'2030-04-14', marginBps: 300 },   // Years 3-4: 3.00%
+      { from:'2030-04-15', to:'2031-04-15', marginBps: 325 }    // Year 5:    3.25%
+    ],
+    pik: { enabled:false, rate:0, capitalizationFrequency:'Monthly' },
+    principalRepayment: 'AtMaturity',
+    principalSchedule: [
+      { date:'2026-04-15', type:'draw', amount: 30_000_000, drawdownId:'HEL001_D1', status:'forecast' }
+    ],
+    amortization: { method:'none' },
+    nonUseFee: { enabled:false, rate:0 },
+    fees: [
+      {
+        id:'heliosCommitment',
+        kind:'commitment',
+        label:'Commitment Fee',
+        mode:'marginLinked',
+        marginMultiple: 0.35,
+        base:'undrawn',
+        frequency:'quarterly',
+        paymentSchedule:'lastDayOfEach3MonthPeriod',
+        accrueFrom:'2026-04-15',
+        accrueTo:'2027-04-15',
+        ifrs:'IFRS15-overTime',
+        notes:'35% of margin × undrawn commitment × dcf. IFRS 15 over-time recognition — not EIR-included.'
+      }
+    ],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed:true, businessModel:'HoldToCollect', ecLStage:1, pdAnnual:0.0040, lgd:0.40 },
+    type:'simpleDaily',
+    preset:'Helios Solar Bridge · £30m Bilateral SONIA + Ratcheted Margin (275/300/325 bps), 5Y bullet'
   }
 ];
 
