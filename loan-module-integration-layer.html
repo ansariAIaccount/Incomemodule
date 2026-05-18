@@ -2329,12 +2329,46 @@ function downloadDIUFilled(){
 // ----- Treatment editor: snapshot, write-back, reset ------------------
 // Takes a snapshot of the instrument's IFRS block + fee IFRS treatments the
 // first time we see the deal, so 'Reset to defaults' can revert cleanly.
+// Collect every fee on the instrument — deal-level + every tranche's fees +
+// every underlying loan's fees. Returns rows the Treatment panel uses to
+// render dropdowns and route write-backs to the right container. Without this,
+// multi-tranche deals (Aurora, Suffolk) and multi-underlying guarantees (Volt
+// Multi-Loan) show an empty Per-fee section even though they have arrangement
+// / guarantee / commitment fees defined on their children.
+function collectAllFees(inst){
+  const out = [];
+  if(!inst) return out;
+  (inst.fees || []).forEach((f, idx) => out.push({
+    fee: f, scope: 'deal', scopeIdx: -1, feeIdx: idx,
+    scopeLabel: 'Deal-level'
+  }));
+  (inst.tranches || []).forEach((t, ti) => {
+    (t.fees || []).forEach((f, fi) => out.push({
+      fee: f, scope: 'tranche', scopeIdx: ti, feeIdx: fi,
+      scopeLabel: t.label || ('Tranche ' + (ti + 1))
+    }));
+  });
+  (inst.underlyingLoans || []).forEach((u, ui) => {
+    (u.fees || []).forEach((f, fi) => out.push({
+      fee: f, scope: 'underlying', scopeIdx: ui, feeIdx: fi,
+      scopeLabel: u.label || ('Underlying ' + (ui + 1))
+    }));
+  });
+  return out;
+}
+
 function snapshotTreatmentDefaults(inst){
   if(!inst || M.treatmentDefaults[inst.id]) return;
+  // Snapshot fee IFRS tags from ALL containers (deal + tranches + underlyings)
+  // so reset-to-defaults restores them correctly regardless of where they live.
+  const fees = collectAllFees(inst).map(row => ({
+    scope: row.scope, scopeIdx: row.scopeIdx, feeIdx: row.feeIdx,
+    id: row.fee.id, ifrs: row.fee.ifrs
+  }));
   M.treatmentDefaults[inst.id] = {
     ifrs: JSON.parse(JSON.stringify(inst.ifrs || {})),
-    fees: (inst.fees || []).map(f => ({ id: f.id, ifrs: f.ifrs })),
-    pik:  JSON.parse(JSON.stringify(inst.pik  || {})),   // contractual override snapshot
+    fees,
+    pik:  JSON.parse(JSON.stringify(inst.pik  || {})),
     modificationEvents: JSON.parse(JSON.stringify(inst.modificationEvents || []))
   };
 }
@@ -2394,25 +2428,33 @@ function applyTreatmentFromForm(){
   $('pik-status-chip').textContent = inst.pik.enabled
     ? `enabled · ${(inst.pik.rate*100).toFixed(2)}% · ${inst.pik.capitalizationFrequency}`
     : 'disabled';
-  // Per-fee IFRS treatment
+  // Per-fee IFRS treatment — write-back routes by scope (deal / tranche / underlying)
   const feeRows = document.querySelectorAll('[data-fee-treatment]');
   feeRows.forEach(el => {
-    const idx = parseInt(el.getAttribute('data-fee-idx'), 10);
-    if(inst.fees && inst.fees[idx]) inst.fees[idx].ifrs = el.value;
+    const scope = el.getAttribute('data-fee-scope') || 'deal';
+    const scopeIdx = parseInt(el.getAttribute('data-fee-scope-idx'), 10);
+    const feeIdx = parseInt(el.getAttribute('data-fee-idx'), 10);
+    let container = null;
+    if(scope === 'deal') container = inst.fees;
+    else if(scope === 'tranche' && inst.tranches && inst.tranches[scopeIdx]) container = inst.tranches[scopeIdx].fees;
+    else if(scope === 'underlying' && inst.underlyingLoans && inst.underlyingLoans[scopeIdx]) container = inst.underlyingLoans[scopeIdx].fees;
+    if(container && container[feeIdx]) container[feeIdx].ifrs = el.value;
   });
   // Mark dirty if differs from defaults (IFRS policy, fees, PIK, modification events)
   const def = M.treatmentDefaults[inst.id];
   let dirty = false;
   if(def){
+    // Compare current fee tags across ALL containers, not just inst.fees
+    const curFees = collectAllFees(inst).map(r => ({ id: r.fee.id, ifrs: r.fee.ifrs }));
     const cur = JSON.stringify({
       ifrs: inst.ifrs,
-      fees: (inst.fees || []).map(f => ({id:f.id, ifrs:f.ifrs})),
+      fees: curFees,
       pik:  inst.pik || {},
       mods: inst.modificationEvents || []
     });
     const orig= JSON.stringify({
       ifrs: def.ifrs,
-      fees: def.fees,
+      fees: (def.fees || []).map(f => ({ id: f.id, ifrs: f.ifrs })),
       pik:  def.pik || {},
       mods: def.modificationEvents || []
     });
@@ -2463,24 +2505,40 @@ function loadTreatmentForm(){
   $('pik-status-chip').textContent = inst.pik?.enabled
     ? `enabled · ${((inst.pik.rate||0)*100).toFixed(2)}% · ${inst.pik.capitalizationFrequency || 'Monthly'}`
     : 'disabled';
-  // Per-fee treatment
-  if(inst.fees && inst.fees.length){
+  // Per-fee treatment — pulls fees from the deal AND from every tranche /
+  // underlying. The scope column shows which container the fee lives in.
+  const allFees = collectAllFees(inst);
+  if(allFees.length){
     const opts = [
       ['IFRS9-EIR',          'IFRS 9 — capitalised into EIR'],
       ['IFRS15-overTime',    'IFRS 15 — recognised over time'],
       ['IFRS15-pointInTime', 'IFRS 15 — recognised point-in-time']
     ];
-    const rows = inst.fees.map((f, idx) => `
-      <tr>
+    // Group by scope so the table reads cleanly for multi-tranche deals.
+    const hasMultipleScopes = new Set(allFees.map(r => r.scope + ':' + r.scopeIdx)).size > 1;
+    const rows = allFees.map(row => {
+      const f = row.fee;
+      const scopeCell = hasMultipleScopes
+        ? `<td class="left text-[11px] py-1 px-2"><span class="chip blue text-[10px]">${row.scopeLabel}</span></td>`
+        : '';
+      return `<tr>
+        ${scopeCell}
         <td class="left text-[12px] py-1 px-2">${f.label || f.kind}</td>
-        <td class="left text-[11px] text-gray-500 py-1 px-2">${f.kind} · ${f.mode}${f.rate ? ' @ ' + (f.rate*100).toFixed(2) + '%' : ''}</td>
-        <td class="left py-1 px-2"><select class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white" data-fee-treatment data-fee-idx="${idx}">
+        <td class="left text-[11px] text-gray-500 py-1 px-2">${f.kind || ''} · ${f.mode || ''}${f.rate ? ' @ ' + (f.rate*100).toFixed(2) + '%' : ''}${f.amount ? ' · ' + (inst.currency||'GBP') + ' ' + f.amount.toLocaleString() : ''}</td>
+        <td class="left py-1 px-2"><select class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"
+            data-fee-treatment
+            data-fee-scope="${row.scope}"
+            data-fee-scope-idx="${row.scopeIdx}"
+            data-fee-idx="${row.feeIdx}">
           ${opts.map(([v,l]) => `<option value="${v}" ${v===f.ifrs?'selected':''}>${l}</option>`).join('')}
         </select></td>
-      </tr>`).join('');
-    $('fee-treatment-table').innerHTML = `<table class="data" style="font-size:12px"><thead><tr><th class="left">Fee</th><th class="left">Spec</th><th class="left">IFRS Treatment</th></tr></thead><tbody>${rows}</tbody></table>`;
+      </tr>`;
+    }).join('');
+    const headers = hasMultipleScopes
+      ? '<th class="left">Scope</th><th class="left">Fee</th><th class="left">Spec</th><th class="left">IFRS Treatment</th>'
+      : '<th class="left">Fee</th><th class="left">Spec</th><th class="left">IFRS Treatment</th>';
+    $('fee-treatment-table').innerHTML = `<table class="data" style="font-size:12px"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
     $('fee-treatment-section').classList.remove('hidden');
-    // Wire change handlers on the new dropdowns
     document.querySelectorAll('[data-fee-treatment]').forEach(el => el.onchange = onTreatmentChange);
   } else {
     $('fee-treatment-section').classList.add('hidden');
@@ -2679,11 +2737,16 @@ function resetTreatmentToDefaults(){
   inst.ifrs = JSON.parse(JSON.stringify(def.ifrs));
   if(def.pik) inst.pik = JSON.parse(JSON.stringify(def.pik));
   inst.modificationEvents = JSON.parse(JSON.stringify(def.modificationEvents || []));
-  if(inst.fees){
-    for(let i = 0; i < inst.fees.length; i++){
-      if(def.fees[i]) inst.fees[i].ifrs = def.fees[i].ifrs;
-    }
-  }
+  // Restore every fee's IFRS tag using the scope path captured at snapshot time.
+  // Multi-tranche / multi-underlying deals (Aurora, Suffolk, Volt Multi-Loan)
+  // have fees on the children — the per-row write-back routes by scope.
+  (def.fees || []).forEach(snap => {
+    let container = null;
+    if(snap.scope === 'deal') container = inst.fees;
+    else if(snap.scope === 'tranche' && inst.tranches && inst.tranches[snap.scopeIdx]) container = inst.tranches[snap.scopeIdx].fees;
+    else if(snap.scope === 'underlying' && inst.underlyingLoans && inst.underlyingLoans[snap.scopeIdx]) container = inst.underlyingLoans[snap.scopeIdx].fees;
+    if(container && container[snap.feeIdx]) container[snap.feeIdx].ifrs = snap.ifrs;
+  });
   M.treatmentDirty[inst.id] = false;
   loadTreatmentForm();
   if(M.portfData) runAccounting();
