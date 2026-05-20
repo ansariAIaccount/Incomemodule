@@ -155,8 +155,8 @@
   <div class="flex items-start gap-3 mb-3 flex-wrap">
     <span class="stage-num">2</span>
     <div class="flex-1">
-      <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">account_balance</span>PCS / Investran — IFRS-Aligned Accounting Engine</h2>
-      <p class="text-[12px] text-gray-600 mt-1">Translates PortF cashflows into IFRS-compliant accounting: classification, initial recognition, EIR, fair value, IFRS 15 fees, ECL staging, modifications, hedge accounting, FX. Outputs balanced double-entry journals on the Investran chart and a DIU-ready batch.</p>
+      <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">account_balance</span><span data-fw-stage-header>PCS / Investran — IFRS-Aligned Accounting Engine</span></h2>
+      <p data-fw-stage-desc class="text-[12px] text-gray-600 mt-1">Translates PortF cashflows into IFRS-compliant accounting: classification, initial recognition, EIR, fair value, IFRS 15 fees, ECL staging, modifications, hedge accounting, FX. Outputs balanced double-entry journals on the Investran chart and a DIU-ready batch.</p>
     </div>
     <div class="flex flex-wrap gap-2 items-center">
       <button id="btn-acct-run" class="mat-btn primary" disabled><span class="material-icons-outlined text-[16px]">play_arrow</span>Run Accounting</button>
@@ -178,13 +178,48 @@
     <div class="flex items-center gap-2 mb-2 flex-wrap">
       <span class="material-icons-outlined text-[18px]" style="color:#4338ca">tune</span>
       <h3 class="text-[13px] font-bold text-indigo-900">Accounting Treatment — Editable Policy</h3>
-      <span class="text-[11px] text-indigo-700">Override classification, ECL, fees · changes recalculate in real time</span>
+      <span id="treatment-framework-chip" class="chip blue text-[11px]" title="Accounting framework — set on the deal record in PortF">📋 IFRS</span>
+      <span class="text-[11px] text-indigo-700">Override framework, classification, credit-risk, fees · changes recalculate in real time</span>
       <span id="treatment-modified-chip" class="chip amber hidden">Modified vs default</span>
       <button id="btn-treatment-reset" class="mat-btn outline ml-auto !py-1 !px-2 text-[11px]" title="Reset all overrides to deal defaults"><span class="material-icons-outlined text-[14px]">restart_alt</span>Reset to defaults</button>
     </div>
+    <!-- Section 0 — Accounting Framework (per-deal, set in PortF) -->
+    <div class="bg-white border border-indigo-200 rounded p-2 mb-3 flex items-center gap-3 flex-wrap">
+      <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">Accounting Framework</label>
+      <select id="opt-framework" class="border border-gray-300 rounded px-2 py-1 text-sm bg-white">
+        <option value="IFRS">IFRS — International Financial Reporting Standards</option>
+        <option value="USGAAP">US GAAP — FASB ASC (CECL impairment)</option>
+        <option value="ASPE">Canadian ASPE — Private Enterprises (incurred-loss)</option>
+      </select>
+      <span class="text-[11px] text-gray-500" id="framework-source-note">Set in PortF at deal origination · override here for what-if testing</span>
+    </div>
+    <!-- Section 0-bis — EIR Calculation Method (Interest AT / Investran spec) ──
+         Only visible when framework = USGAAP. The 4-method dropdown drives
+         computeEIRUSGAAP() in the engine. Method 4 (override) reveals a
+         numeric input for the client-provided EIR. -->
+    <div id="eir-method-section" class="bg-white border border-indigo-200 rounded p-2 mb-3" style="display:none">
+      <div class="flex items-center gap-3 flex-wrap mb-2">
+        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">EIR Calculation Method (US GAAP · Interest AT)</label>
+        <select id="opt-eir-method" class="border border-gray-300 rounded px-2 py-1 text-sm bg-white">
+          <option value="method2">Method 2 — PRICE (iterative · default · highest priority)</option>
+          <option value="method1">Method 1 — Custom Formula (Main Street Capital)</option>
+          <option value="method3">Method 3 — Generic Formula</option>
+          <option value="override">Method 4 — Client Override (provide value)</option>
+        </select>
+        <div id="opt-eir-override-wrap" style="display:none" class="flex items-center gap-2">
+          <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">Override EIR (decimal)</label>
+          <input id="opt-eir-override" type="number" step="0.0001" class="border border-gray-300 rounded px-2 py-1 text-sm bg-white w-32" placeholder="e.g. 0.1496 = 14.96%"/>
+        </div>
+      </div>
+      <div class="text-[11px] text-gray-600">
+        Priority order if unspecified: <b>Override → PRICE → Generic → Custom</b>.
+        IRR/XIRR removed per spec (Folder 1).
+        IFRS / ASPE deals use the standard bisection solver and ignore this control.
+      </div>
+    </div>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
       <div>
-        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">IFRS 9 Classification</label>
+        <label data-fw-class-label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">IFRS 9 Classification</label>
         <select id="opt-ifrs9-class" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
           <option value="AmortisedCost">Amortised Cost (HTC + SPPI passes)</option>
           <option value="FVOCI">FVOCI (HTC&amp;Sell + SPPI passes)</option>
@@ -200,7 +235,7 @@
         </select>
       </div>
       <div>
-        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">SPPI Test</label>
+        <label data-fw-sppi-label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">SPPI Test</label>
         <select id="opt-sppi" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
           <option value="true">Passes — solely P+I</option>
           <option value="false">Fails — equity / contingent / leverage</option>
@@ -216,7 +251,7 @@
         </select>
       </div>
       <div>
-        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">ECL Stage (IFRS 9 §5.5)</label>
+        <label data-ecl-stage-label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">ECL Stage (IFRS 9 §5.5)</label>
         <select id="opt-ecl-stage" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
           <option value="1">Stage 1 — 12-month ECL</option>
           <option value="2">Stage 2 — Lifetime ECL (perf.)</option>
@@ -244,12 +279,12 @@
     <div class="mt-3 pt-3 border-t border-indigo-200">
       <div class="flex items-center gap-2 mb-2">
         <span class="material-icons-outlined text-[16px]" style="color:#4338ca">health_and_safety</span>
-        <h4 class="text-[12px] font-bold text-indigo-900">Credit Risk &amp; ECL Detail (IFRS 9 §5.5)</h4>
+        <h4 data-credit-risk-header class="text-[12px] font-bold text-indigo-900">Credit Risk &amp; ECL Detail (IFRS 9 §5.5)</h4>
         <span class="text-[10px] text-indigo-700">Stage 3 mechanics, POCI, EAD CCF, DPD triggers, watchlist, macro overlay</span>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <div>
-          <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">POCI flag (IFRS 9 §B5.5.45)</label>
+          <label data-fw-poci-label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">POCI flag (IFRS 9 §B5.5.45)</label>
           <select id="opt-poci" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
             <option value="false">No — performing at origination</option>
             <option value="true">Yes — POCI · credit-adjusted EIR</option>
@@ -317,7 +352,7 @@
     <div class="mt-3 pt-3 border-t border-indigo-200">
       <div class="flex items-center gap-2 mb-2">
         <span class="material-icons-outlined text-[16px]" style="color:#4338ca">edit_note</span>
-        <h4 class="text-[12px] font-bold text-indigo-900">Modification Policy (IFRS 9 §5.4.3)</h4>
+        <h4 data-fw-mod-header class="text-[12px] font-bold text-indigo-900">Modification Policy (IFRS 9 §5.4.3)</h4>
         <span class="text-[10px] text-indigo-700">10% PV test threshold and substantial-vs-non-substantial defaults</span>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -446,8 +481,8 @@
     <div id="fee-treatment-section" class="mt-3 pt-3 border-t border-indigo-200 hidden">
       <div class="flex items-center gap-2 mb-2">
         <span class="material-icons-outlined text-[16px]" style="color:#4338ca">request_quote</span>
-        <h4 class="text-[12px] font-bold text-indigo-900">Per-fee IFRS treatment</h4>
-        <span class="text-[10px] text-indigo-700">Switch a fee between IFRS 9 EIR-included and IFRS 15 over-time / point-in-time</span>
+        <h4 data-fw-fees-header class="text-[12px] font-bold text-indigo-900">Per-fee IFRS treatment</h4>
+        <span data-fw-fees-subtitle class="text-[10px] text-indigo-700">Switch a fee between IFRS 9 EIR-included and IFRS 15 over-time / point-in-time</span>
       </div>
       <div id="fee-treatment-table"></div>
     </div>
@@ -457,7 +492,7 @@
   <div class="mb-4">
     <div class="flex items-center gap-2 mb-2">
       <span class="material-icons-outlined text-[18px]" style="color:var(--brand-600)">checklist</span>
-      <h3 class="text-[13px] font-bold">IFRS-Aligned Accounting Capabilities</h3>
+      <h3 data-fw-capability-header class="text-[13px] font-bold">IFRS-Aligned Accounting Capabilities</h3>
       <span class="text-[11px] text-gray-500">Live status reflects the editable treatment above · changes recalculate every card</span>
     </div>
     <div id="capability-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2"></div>
@@ -466,17 +501,17 @@
   <!-- ─────────── Initial Recognition · EIR · Fair Value (3 detail cards) ─────────── -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
     <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-blue-700 mb-1">Initial Recognition (IFRS 9 §5.1)</div>
+      <div data-fw-recog-label class="text-[10px] font-semibold uppercase tracking-wider text-blue-700 mb-1">Initial Recognition (IFRS 9 §5.1)</div>
       <div id="ifrs-classification" class="font-semibold text-[14px]">—</div>
       <div id="ifrs-recognition" class="text-[11px] text-gray-600 mt-1">—</div>
     </div>
     <div class="bg-purple-50 border border-purple-200 rounded-lg p-3">
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-purple-700 mb-1">Effective Interest Rate (IFRS 9 §B5.4)</div>
+      <div data-fw-eir-label class="text-[10px] font-semibold uppercase tracking-wider text-purple-700 mb-1">Effective Interest Rate (IFRS 9 §B5.4)</div>
       <div id="ifrs-eir" class="font-semibold text-[14px]">—</div>
       <div id="ifrs-eir-note" class="text-[11px] text-gray-600 mt-1">—</div>
     </div>
     <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-amber-700 mb-1">Fair Value (IFRS 13)</div>
+      <div data-fw-fv-label class="text-[10px] font-semibold uppercase tracking-wider text-amber-700 mb-1">Fair Value (IFRS 13)</div>
       <div id="ifrs-fv" class="font-semibold text-[14px]">—</div>
       <div id="ifrs-fv-note" class="text-[11px] text-gray-600 mt-1">—</div>
     </div>
@@ -563,7 +598,7 @@
     <details class="bg-white border border-gray-200 rounded-lg mb-2 p-3">
       <summary class="font-semibold text-[12.5px] cursor-pointer flex items-center gap-2">
         <span class="material-icons-outlined text-[16px]" style="color:var(--brand-600)">leaderboard</span>
-        Fair Value Sensitivities (IFRS 13 §93 disclosure)
+        <span data-fw-fv-sens-title>Fair Value Sensitivities (IFRS 13 §93 disclosure)</span>
         <span class="text-[11px] text-gray-500 font-normal ml-auto">±50/100 bps rate · ±50 bps credit spread · linear duration approximation</span>
       </summary>
       <div id="fv-sensitivities" class="mt-3"></div>
@@ -573,7 +608,7 @@
     <details class="bg-white border border-gray-200 rounded-lg mb-2 p-3">
       <summary class="font-semibold text-[12.5px] cursor-pointer flex items-center gap-2">
         <span class="material-icons-outlined text-[16px]" style="color:var(--brand-600)">health_and_safety</span>
-        IFRS 9 Impairment — ECL Journal Templates
+        <span data-fw-ecl-tmpl-title>IFRS 9 Impairment — ECL Journal Templates</span>
         <span class="text-[11px] text-gray-500 font-normal ml-auto">Stage 1 / 2 / 3 transitions · build-up · release · default · write-off</span>
       </summary>
       <div id="ecl-templates" class="mt-3"></div>
@@ -583,7 +618,7 @@
     <details class="bg-white border border-gray-200 rounded-lg mb-2 p-3">
       <summary class="font-semibold text-[12.5px] cursor-pointer flex items-center gap-2">
         <span class="material-icons-outlined text-[16px]" style="color:var(--brand-600)">calculate</span>
-        IFRS 9 ECL Calculation Trace
+        <span data-fw-ecl-trace-title>IFRS 9 ECL Calculation Trace</span>
         <span class="text-[11px] text-gray-500 font-normal ml-auto">PD × LGD × EAD × CCF × stage curve · discounted at original EIR</span>
       </summary>
       <div id="ecl-trace" class="mt-3"></div>
@@ -603,8 +638,8 @@
     <div class="bg-white border border-gray-200 rounded-lg mb-2 p-3 flex items-center gap-2 flex-wrap">
       <span class="material-icons-outlined text-[16px]" style="color:var(--brand-600)">functions</span>
       <div>
-        <div class="font-semibold text-[12.5px]">IFRS 9 §B5.4 EIR Calculation Trace</div>
-        <div class="text-[11px] text-gray-500">3 worked examples — bilateral · multi-tranche · floating-rate (RFR with sample SONIA history)</div>
+        <div class="font-semibold text-[12.5px]">EIR Calculation Trace</div>
+        <div class="text-[11px] text-gray-500">Auto-detects deal type · cites IFRS 9 §B5.4 / ASC 310-20-35 / ASPE 3856.16 by deal framework</div>
       </div>
       <button id="btn-show-eir-trace" class="mat-btn !py-1 !px-3 ml-auto" style="background:#10B981;color:#FFFFFF;border-color:#10B981">
         <span class="material-icons-outlined text-[14px]" style="vertical-align:middle">open_in_new</span>
@@ -935,7 +970,7 @@
   <div class="json-modal-pn" style="width:min(1100px, 95vw); max-height:92vh">
     <div class="json-modal-h">
       <div>
-        <div class="font-semibold text-[14px]">IFRS 9 §B5.4 — EIR Calculation Trace</div>
+        <div class="font-semibold text-[14px]">EIR Calculation Trace</div>
         <div id="eir-modal-sub" class="text-[11px] text-gray-500">No deal loaded</div>
       </div>
       <button class="mat-btn outline !py-1 !px-2" data-close-eir="1"><span class="material-icons-outlined text-[16px]">close</span></button>
@@ -1015,6 +1050,84 @@
 */
 
 // ----- Module state ---------------------------------------------------
+/* ====================================================================
+   Accounting framework registry — one source of truth for IFRS / US GAAP /
+   Canadian ASPE. Each entry carries the citation strings, ECL methodology
+   choice, fee-tag option labels, and a UI chip colour. Framework on each
+   deal record (`instrument.accountingFramework`) selects which entry the
+   engine + UI uses for that deal. Operator can override per-run via the
+   Treatment panel Section 0.
+   ==================================================================== */
+const FRAMEWORKS = {
+  IFRS: {
+    code: 'IFRS', label: 'IFRS', long: 'IFRS (International Financial Reporting Standards)',
+    chipClass: 'blue',
+    eir:  { citation: 'IFRS 9 §B5.4',     name: 'Effective Interest Rate' },
+    ecl:  { citation: 'IFRS 9 §5.5',      name: 'Expected Credit Loss (3-stage model)',
+            model: 'staged',              // staged | cecl | incurred
+            formula: 'PD × LGD × EAD × stage_curve × macro_overlay',
+            traceTitle: 'IFRS 9 §5.5.17 — Expected Credit Loss formula',
+            inputLabels: { stage: 'ECL Stage', overlay: 'Macro overlay', dpdSt2: 'DPD → Stage 2', dpdSt3: 'DPD → Stage 3' } },
+    fees: {
+      eir:        { value: 'IFRS9-EIR',          label: 'IFRS 9 — capitalised into EIR' },
+      overTime:   { value: 'IFRS15-overTime',    label: 'IFRS 15 — recognised over time' },
+      pointInTime:{ value: 'IFRS15-pointInTime', label: 'IFRS 15 — recognised point-in-time' }
+    },
+    fv:           { citation: 'IFRS 13 §93',   name: 'Fair Value (3 levels)' },
+    mod:          { citation: 'IFRS 9 §5.4.3', name: 'Modification accounting',
+                    thresholdLabel: '10% PV test (substantial)' },
+    hedge:        { citation: 'IFRS 9 §6',     name: 'Hedge accounting (CFH/FVH)' },
+    fx:           { citation: 'IAS 21',        name: 'Foreign-currency translation' },
+    waterfall:    { citation: 'IAS 1 §54',     name: 'Carrying value waterfall' }
+  },
+  USGAAP: {
+    code: 'USGAAP', label: 'US GAAP', long: 'US GAAP (FASB ASC)',
+    chipClass: 'green',
+    eir:  { citation: 'ASC 310-20-35',    name: 'Interest method' },
+    ecl:  { citation: 'ASC 326 (CECL)',   name: 'Current Expected Credit Losses',
+            model: 'cecl',
+            formula: 'lifetime_PD × LGD × EAD × Q-factor',
+            traceTitle: 'ASC 326-20-30-2 — Current Expected Credit Loss (lifetime, no stages)',
+            inputLabels: { stage: 'CECL pool', overlay: 'Q-factor (qualitative)', dpdSt2: '(n/a)', dpdSt3: '(n/a)' } },
+    fees: {
+      eir:        { value: 'ASC310-20-EIR',       label: 'ASC 310-20 — capitalised into EIR' },
+      overTime:   { value: 'ASC606-overTime',     label: 'ASC 606 — recognised over time' },
+      pointInTime:{ value: 'ASC310-20-pointInTime',label:'ASC 310-20 — recognised point-in-time' }
+    },
+    fv:           { citation: 'ASC 820',       name: 'Fair Value (3 levels)' },
+    mod:          { citation: 'ASC 470-50/60', name: 'Debt modification / extinguishment',
+                    thresholdLabel: '10% cash-flow test (TDR removed per ASU 2022-02)' },
+    hedge:        { citation: 'ASC 815',       name: 'Hedge accounting' },
+    fx:           { citation: 'ASC 830',       name: 'Foreign-currency translation' },
+    waterfall:    { citation: 'ASC 310-10-50', name: 'Carrying value reconciliation' }
+  },
+  ASPE: {
+    code: 'ASPE', label: 'Canadian ASPE', long: 'ASPE (Accounting Standards for Private Enterprises)',
+    chipClass: 'red',
+    eir:  { citation: 'ASPE 3856.16',     name: 'Effective interest method' },
+    ecl:  { citation: 'ASPE 3856.16-19',  name: 'Incurred-loss impairment',
+            model: 'incurred',
+            formula: 'allowance recognised only when objective evidence of impairment exists',
+            traceTitle: 'ASPE 3856 — Incurred-loss impairment (binary trigger)',
+            inputLabels: { stage: 'Impairment trigger', overlay: '(n/a)', dpdSt2: '(n/a)', dpdSt3: '(n/a)' } },
+    fees: {
+      eir:        { value: 'ASPE3856-EIR',       label: 'ASPE 3856 — capitalised into EIR' },
+      overTime:   { value: 'ASPE3400-overTime',  label: 'ASPE 3400 — recognised over service period' },
+      pointInTime:{ value: 'ASPE3400-pointInTime',label:'ASPE 3400 — recognised point-in-time' }
+    },
+    fv:           { citation: 'ASPE 3856',     name: 'Fair value (where applicable)' },
+    mod:          { citation: 'ASPE 3856.27',  name: 'Modification of liabilities' },
+    hedge:        { citation: 'ASPE 3856.A53', name: 'Hedge accounting (simplified)' },
+    fx:           { citation: 'ASPE 1651',     name: 'Foreign currency translation' },
+    waterfall:    { citation: 'ASPE 1521',     name: 'Balance sheet presentation' }
+  }
+};
+
+function frameworkOf(inst){
+  const code = (inst && inst.accountingFramework) || 'IFRS';
+  return FRAMEWORKS[code] || FRAMEWORKS.IFRS;
+}
+
 const M = {
   instrumentId: null,           // Active deal id
   portfData: null,              // Loaded cashflow payload from PortF
@@ -1976,85 +2089,159 @@ function renderPortFFXSchedulePanel(inst){
 // ============================================================
 // STAGE 2 — PCS Accounting Engine
 // ============================================================
-// ----- IFRS Capability cards ------------------------------------------
-// One row per capability (10 total) reflecting the 10 bullets the workshop
-// deck calls out for the PCS Investran sub-ledger. Each card has a concise
-// description, an icon, plus a status chip that's filled in once accounting
-// runs against the active deal.
+// ----- Accounting Capability cards (framework-aware) ------------------
+// One row per capability (10 total). Each card's title, description, citation
+// and details adapt to the deal's accounting framework (IFRS / US GAAP / ASPE).
 function buildCapabilityCards(inst){
   const fees = inst?.fees || [];
-  const eirFees   = fees.filter(f => f.ifrs === 'IFRS9-EIR');
-  const ifrs15Fee = fees.filter(f => (f.ifrs || '').startsWith('IFRS15'));
+  const eirFees      = fees.filter(f => /EIR$/.test(f.ifrs || ''));
+  const overTimeFees = fees.filter(f => /overTime$/.test(f.ifrs || ''));
+  const pitFees      = fees.filter(f => /pointInTime$/.test(f.ifrs || ''));
   const hasFx     = !!(inst?.fxRateSchedule && inst.fxRateSchedule.length);
   const hasMods   = !!(inst?.modificationEvents && inst.modificationEvents.length);
   const cls       = inst?.ifrs?.ifrs9Classification || 'AmortisedCost';
   const stage     = inst?.ifrs?.ecLStage || 1;
   const fvLevel   = inst?.ifrs?.fairValueLevel;
   const ccy       = inst?.currency || 'GBP';
-  const cards = [
-    { icon:'rule', title:'Accounting determined from deal record',
-      desc:'Classification, EIR, fees and IFRS treatment all derive from the PortF instrument JSON — no manual configuration required for each booking.',
+  const fw        = frameworkOf(inst);
+  const isIFRS    = fw.ecl.model === 'staged';
+  const isUSGAAP  = fw.ecl.model === 'cecl';
+  const isASPE    = fw.ecl.model === 'incurred';
+  // US GAAP classification labels: HTM (Held-to-Maturity), AFS (Available-for-Sale), FVO
+  const usGaapClassLabel = cls === 'AmortisedCost' ? 'HTM (Held-to-Maturity)'
+                        : cls === 'FVOCI'         ? 'AFS (Available-for-Sale)'
+                                                   : 'FVO (Fair Value Option)';
+  const aspeClassLabel = cls === 'AmortisedCost' ? 'Amortised cost' : 'Fair value';
+  const classDisplay = isUSGAAP ? usGaapClassLabel : isASPE ? aspeClassLabel : cls;
+
+  // Card 1 — deal-record sourced (framework-neutral)
+  const card1 = { icon:'rule', title:'Accounting determined from deal record',
+      desc:'Classification, EIR, fees and treatment all derive from the PortF instrument JSON — no manual configuration required for each booking.',
       status: inst ? 'green' : 'gray',
-      detail: inst ? `Active deal: ${inst.deal} · ${cls} · ${ccy}` : '—' },
-    { icon:'login', title:'Initial recognition: amortised cost vs FVTPL',
-      desc:'IFRS 9 §5.1 — picks AmortisedCost / FVOCI / FVTPL based on SPPI test + business model. FVTPL items are excluded from EIR.',
+      detail: inst ? `Active deal: ${inst.deal} · ${classDisplay} · ${ccy} · ${fw.label}` : '—' };
+
+  // Card 2 — Initial recognition (citation varies)
+  const recCitation = isIFRS ? 'IFRS 9 §5.1' : isUSGAAP ? 'ASC 326-20-30 / ASC 320' : 'ASPE 3856.05-08';
+  const recDesc = isIFRS
+      ? 'IFRS 9 §5.1 — picks AmortisedCost / FVOCI / FVTPL based on SPPI test + business model. FVTPL excluded from EIR.'
+    : isUSGAAP
+      ? 'ASC 320 / ASC 326 — picks HTM / AFS / Trading (or Fair Value Option) based on intent + ability to hold to maturity. CECL applies to HTM and AFS (with credit-vs-noncredit split for AFS).'
+      : 'ASPE 3856 — choose amortised cost or fair value at recognition. Election is largely free for private enterprises.';
+  const sppiNote = isIFRS ? ` · SPPI ${inst?.ifrs?.sppiPassed === false ? 'fails' : 'passes'}` : '';
+  const businessModelNote = isIFRS ? ` · ${inst?.ifrs?.businessModel || 'HoldToCollect'}` : '';
+  const card2 = { icon:'login', title:'Initial recognition',
+      desc: recDesc,
       status: inst ? 'green' : 'gray',
-      detail: inst ? `${cls} · SPPI ${inst.ifrs?.sppiPassed === false ? 'fails' : 'passes'} · ${inst.ifrs?.businessModel || 'HoldToCollect'}` : '—' },
-    { icon:'percent', title:'Fees: directly attributable (in EIR) vs IFRS 15',
-      desc:'Origination/arrangement fees flow into the EIR. Service-based commitment / guarantee / management fees recognised under IFRS 15 over time or point-in-time.',
+      detail: inst ? `${classDisplay}${sppiNote}${businessModelNote}` : '—' };
+
+  // Card 3 — Fee recognition (citation varies)
+  const feeCitation = isIFRS ? 'IFRS 9 §B5.4 + IFRS 15' : isUSGAAP ? 'ASC 310-20 + ASC 606' : 'ASPE 3856 + ASPE 3400';
+  const feeDesc = isIFRS
+      ? 'Origination/arrangement fees flow into the EIR (IFRS 9 §B5.4). Service-based commitment / guarantee / management fees recognised under IFRS 15 over time or point-in-time.'
+    : isUSGAAP
+      ? 'Lending fees are scoped OUT of ASC 606 — they fall under ASC 310-20 (origination fees capitalised into EIR). Service fees (commitment, guarantee) follow ASC 606 over-time recognition.'
+      : 'Origination fees capitalised into EIR per ASPE 3856. Service-based fees follow ASPE 3400 (revenue).';
+  const card3 = { icon:'percent', title:'Fees: directly attributable (in EIR) vs service-based',
+      desc: feeDesc,
       status: fees.length ? 'green' : 'gray',
-      detail: `${eirFees.length} EIR fee${eirFees.length===1?'':'s'} · ${ifrs15Fee.length} IFRS 15 fee${ifrs15Fee.length===1?'':'s'}` },
-    { icon:'functions', title:'EIR: calculation, storage, re-calculation',
-      desc:'Effective yield solved from price + projected coupons + face. Stored on the instrument; re-solved automatically when contractual cashflows change.',
+      detail: `${eirFees.length} EIR fee${eirFees.length===1?'':'s'} · ${overTimeFees.length} over-time · ${pitFees.length} point-in-time · ${feeCitation}` };
+
+  // Card 4 — EIR (math identical; citation varies)
+  const eirDesc = isIFRS
+      ? 'Effective yield solved from price + projected coupons + face per IFRS 9 §B5.4. Stored on the instrument; re-solved automatically when contractual cashflows change.'
+    : isUSGAAP
+      ? 'Interest method per ASC 310-20-35-26. Same mathematical solver as IFRS 9 §B5.4 — origination fees and discounts/premiums are spread over the loan life via EIR.'
+      : 'Effective interest method per ASPE 3856.16. Same NPV-solving approach as IFRS 9.';
+  const card4 = { icon:'functions', title:'EIR: calculation, storage, re-calculation',
+      desc: eirDesc,
       status: 'green',
-      detail: 'Two-point secant solver · re-runs on cashflow refresh from PortF' },
-    { icon:'event_repeat', title:'Subsequent measurement, accruals, monthly posting',
-      desc:'Daily accrual schedule built from settlement → maturity. Scheduled monthly journal posting cycle, with period-end close.',
+      detail: `Bisection solver · ${fw.eir.citation}` };
+
+  // Card 5 — Subsequent measurement (framework-neutral mechanics, citation varies)
+  const card5 = { icon:'event_repeat', title:'Subsequent measurement, accruals, monthly posting',
+      desc:'Daily accrual schedule from settlement → maturity. Monthly journal posting cycle with period-end close. Same mechanics regardless of framework.',
       status: 'green',
-      detail: 'Daily grid · monthly close · DIU batch posting' },
-    { icon:'currency_exchange', title:'FX revaluation & multi-currency',
-      desc:'Non-functional currency loans revalue daily against an FX schedule. Realised FX on settlement; unrealised FX on opening balance.',
+      detail: 'Daily grid · monthly close · DIU batch posting' };
+
+  // Card 6 — FX revaluation
+  const fxCitation = fw.fx.citation;
+  const card6 = { icon:'currency_exchange', title:'FX revaluation & multi-currency',
+      desc:'Non-functional currency loans revalue daily against an FX schedule. Realised FX on settlement; unrealised FX on opening balance. ' + fxCitation + ' — same translation principle.',
       status: hasFx ? 'green' : 'gray',
-      detail: hasFx ? `${inst.fxRateSchedule.length} FX fixings · functional ${inst.functionalCurrency || 'GBP'}` : 'No FX schedule on this deal — single-currency' },
-    (() => {
-      // FV capability — always live: AmortisedCost still needs Level tagging for IFRS 7 §25
-      // disclosure note. Card lights amber when the operator has overridden the FV Level
-      // vs the deal default (treatmentDirty) so it's visually obvious that the policy
-      // has changed and a re-run is needed.
-      const def = M.treatmentDefaults[inst?.id]?.ifrs?.fairValueLevel;
-      const overridden = inst && fvLevel !== (def || undefined);
-      const onBalanceSheet = cls !== 'AmortisedCost';
-      let status = 'gray', detail;
-      if(!fvLevel){
-        status = onBalanceSheet ? 'amber' : 'gray';
-        detail = onBalanceSheet
-          ? `${cls} on balance sheet — FV Level NOT SET (required by IFRS 13 §72)`
-          : 'AmortisedCost — set FV Level for IFRS 7 §25 disclosure note';
-      } else {
-        status = overridden && M.treatmentDirty[inst?.id] ? 'amber' : 'green';
-        const inputDescr = fvLevel === 'Level 1' ? 'Quoted price in active market'
-                         : fvLevel === 'Level 2' ? 'Observable inputs (curves, comparable transactions)'
-                         : 'Unobservable inputs (DCF + sensitivities required)';
-        const usage = onBalanceSheet ? 'on balance sheet' : 'disclosure-only (IFRS 7 §25)';
-        detail = `${fvLevel} · ${usage} · ${inputDescr}${overridden ? ' · overridden' : ''}`;
-      }
-      return { icon:'leaderboard', title:'Fair value: hierarchy, sensitivities',
-        desc:'IFRS 13 — Level 1 / 2 / 3 hierarchy tagging. Level 3 requires unobservable-input disclosure + sensitivities. Disclosed in notes for amortised-cost items (IFRS 7 §25).',
-        status, detail };
-    })(),
-    { icon:'health_and_safety', title:'IFRS 9 staging: 12-mo vs lifetime, Stage 3',
-      desc:'§5.5 — Stage 1 (12-month ECL), Stage 2 (lifetime ECL on performing), Stage 3 (lifetime ECL on credit-impaired with interest on net carrying).',
+      detail: hasFx ? `${inst.fxRateSchedule.length} FX fixings · functional GBP · ${fxCitation}` : `No FX schedule on this deal — single-currency · ${fxCitation}` };
+
+  // Card 7 — Fair Value hierarchy (IFRS 13 / ASC 820 / ASPE 3856 — same 3 levels)
+  const card7 = (() => {
+    const def = M.treatmentDefaults[inst?.id]?.ifrs?.fairValueLevel;
+    const overridden = inst && fvLevel !== (def || undefined);
+    const onBalanceSheet = cls !== 'AmortisedCost';
+    const fvCitation = fw.fv.citation;
+    const noteCitation = isUSGAAP ? 'ASC 825-10-50' : isASPE ? 'ASPE 3856.38' : 'IFRS 7 §25';
+    let status = 'gray', detail;
+    if(!fvLevel){
+      status = onBalanceSheet ? 'amber' : 'gray';
+      detail = onBalanceSheet
+        ? `${classDisplay} on balance sheet — FV Level NOT SET (required by ${fvCitation})`
+        : `${classDisplay} — set FV Level for ${noteCitation} disclosure note`;
+    } else {
+      status = overridden && M.treatmentDirty[inst?.id] ? 'amber' : 'green';
+      const inputDescr = fvLevel === 'Level 1' ? 'Quoted price in active market'
+                       : fvLevel === 'Level 2' ? 'Observable inputs (curves, comparable transactions)'
+                       : 'Unobservable inputs (DCF + sensitivities required)';
+      const usage = onBalanceSheet ? 'on balance sheet' : `disclosure-only (${noteCitation})`;
+      detail = `${fvLevel} · ${usage} · ${inputDescr}${overridden ? ' · overridden' : ''}`;
+    }
+    return { icon:'leaderboard', title:'Fair value: hierarchy, sensitivities',
+      desc:`${fvCitation} — Level 1 / 2 / 3 hierarchy. Level 3 requires unobservable-input disclosure + sensitivities. Disclosed in notes for amortised-cost items (${noteCitation}).`,
+      status, detail };
+  })();
+
+  // Card 8 — Impairment model (CECL / staged / incurred — the framework-divergent card)
+  const card8 = (() => {
+    if(isUSGAAP){
+      return { icon:'health_and_safety', title:'CECL: lifetime expected credit loss (ASC 326)',
+        desc:'ASC 326 — recognise lifetime expected credit losses from day 1. No stage migration, no SICR test. Same PD/LGD/EAD inputs as IFRS 9 feed a different formula (lifetime cumulative PD × LGD × EAD × Q-factor).',
+        status: inst?.ifrs?.pdAnnual ? 'green' : 'gray',
+        detail: inst?.ifrs?.pdAnnual
+          ? `Lifetime CECL · PD ${(inst.ifrs.pdAnnual*100).toFixed(2)}% · LGD ${(inst.ifrs.lgd*100).toFixed(0)}% · Q-factor ${(((inst.ifrs.qFactor || inst.ifrs.macroOverlayWeight) ?? 1)*100).toFixed(0)}%`
+          : 'No PD/LGD on this deal' };
+    }
+    if(isASPE){
+      return { icon:'health_and_safety', title:'Incurred-loss impairment (ASPE 3856)',
+        desc:'ASPE 3856.16-19 — recognise an allowance only when there is objective evidence of impairment. Binary trigger; no forward-looking ECL.',
+        status: inst?.ifrs?.pdAnnual ? 'green' : 'gray',
+        detail: inst?.ifrs?.pdAnnual
+          ? `Trigger: ${inst.ifrs?.impairedFlag ? 'IMPAIRED' : 'performing'} · PD ${(inst.ifrs.pdAnnual*100).toFixed(2)}% · LGD ${(inst.ifrs.lgd*100).toFixed(0)}%`
+          : 'No PD/LGD on this deal' };
+    }
+    return { icon:'health_and_safety', title:'IFRS 9 staging: 12-month vs lifetime ECL',
+      desc:'IFRS 9 §5.5 — Stage 1 (12-month ECL), Stage 2 (lifetime ECL on SICR), Stage 3 (lifetime ECL on credit-impaired with interest on net carrying).',
       status: inst?.ifrs?.pdAnnual ? 'green' : 'gray',
-      detail: inst?.ifrs?.pdAnnual ? `Stage ${stage} · PD ${(inst.ifrs.pdAnnual*100).toFixed(2)}% · LGD ${(inst.ifrs.lgd*100).toFixed(0)}%` : 'No PD/LGD on this deal' },
-    { icon:'edit_note', title:'Modifications: gain/loss, new EIR, derecognition',
-      desc:'§5.4.3 — substantial mod = derecognise + new instrument; non-substantial = adjust carrying value, post P&L. New EIR computed when terms substantially change.',
-      status: hasMods ? 'green' : 'gray',
-      detail: hasMods ? `${inst.modificationEvents.length} modification event${inst.modificationEvents.length===1?'':'s'}` : 'No modifications on this deal' },
-    { icon:'cloud_upload', title:'Journal export to Workday + reconciliation',
-      desc:'Balanced double-entry batch pushed via DIU to Workday GL. Actual cash returned from Workday is reconciled back to PortF source data (Stage 4-5).',
-      status: 'green',
-      detail: 'DIU batch with deterministic externalKey · idempotent retries' }
-  ];
+      detail: inst?.ifrs?.pdAnnual
+        ? `Stage ${stage} · PD ${(inst.ifrs.pdAnnual*100).toFixed(2)}% · LGD ${(inst.ifrs.lgd*100).toFixed(0)}%`
+        : 'No PD/LGD on this deal' };
+  })();
+
+  // Card 9 — Modifications (citation varies; 10% test is shared)
+  const modDesc = isIFRS
+      ? 'IFRS 9 §5.4.3 — substantial mod = derecognise + new instrument; non-substantial = adjust carrying value, post P&L. New EIR on substantial modification.'
+    : isUSGAAP
+      ? 'ASC 470-50/60 — 10% cash-flow test determines modification vs extinguishment. TDR concept removed by ASU 2022-02 but vintage disclosures added.'
+      : 'ASPE 3856.27 — 10% PV test for substantial modification of liabilities.';
+  const card9 = { icon:'edit_note', title:'Modifications: gain/loss, derecognition',
+    desc: modDesc,
+    status: hasMods ? 'green' : 'gray',
+    detail: hasMods
+      ? `${inst.modificationEvents.length} modification event${inst.modificationEvents.length===1?'':'s'} · ${fw.mod.citation}`
+      : `No modifications on this deal · threshold per ${fw.mod.citation}` };
+
+  // Card 10 — Journal export (framework-neutral)
+  const card10 = { icon:'cloud_upload', title:'Journal export to Workday + reconciliation',
+    desc:'Balanced double-entry batch pushed via DIU to Workday GL. Actual cash returned from Workday is reconciled back to PortF source data (Stage 4-5).',
+    status: 'green',
+    detail: 'DIU batch with deterministic externalKey · idempotent retries' };
+
+  const cards = [card1, card2, card3, card4, card5, card6, card7, card8, card9, card10];
   return cards;
 }
 
@@ -2378,6 +2565,17 @@ function snapshotTreatmentDefaults(inst){
 function applyTreatmentFromForm(){
   const inst = currentInstrument();
   if(!inst) return;
+  // Accounting framework override (Section 0)
+  if($('opt-framework')) inst.accountingFramework = $('opt-framework').value;
+  // EIR method (US GAAP only · Section 0-bis)
+  if($('opt-eir-method')){
+    inst.eirMethod = $('opt-eir-method').value;
+    if(inst.eirMethod === 'override'){
+      const v = parseFloat($('opt-eir-override').value);
+      inst.eirOverride = isNaN(v) ? null : v;
+    }
+  }
+  syncFrameworkChip(inst);
   inst.ifrs = inst.ifrs || {};
   // Classification + recognition
   inst.ifrs.ifrs9Classification = $('opt-ifrs9-class').value;
@@ -2464,10 +2662,131 @@ function applyTreatmentFromForm(){
   $('treatment-modified-chip').classList.toggle('hidden', !dirty);
 }
 
+// Update every framework-dependent label on the page so the UI reflects the
+// active framework's terminology end-to-end (Stage 2 header, Treatment panel
+// labels, Modification policy citation, Capability panel title, etc.).
+function syncFrameworkChip(inst){
+  const fw = frameworkOf(inst);
+  const isIFRS    = fw.ecl.model === 'staged';
+  const isUSGAAP  = fw.ecl.model === 'cecl';
+  const isASPE    = fw.ecl.model === 'incurred';
+
+  // The active-framework chip itself
+  const chip = $('treatment-framework-chip');
+  if(chip){
+    chip.textContent = '📋 ' + fw.label;
+    chip.className = 'chip ' + fw.chipClass + ' text-[11px]';
+    chip.title = fw.long + ' — ECL model: ' + fw.ecl.name;
+  }
+
+  // Stage 2 main header + description
+  const stageHeader = document.querySelector('[data-fw-stage-header]');
+  if(stageHeader) stageHeader.textContent =
+    'PCS / Investran — ' + fw.label + '-Aligned Accounting Engine';
+  const stageDesc = document.querySelector('[data-fw-stage-desc]');
+  if(stageDesc) stageDesc.textContent =
+    'Translates PortF cashflows into ' + fw.label + '-compliant accounting: classification, initial recognition, '
+    + fw.eir.name + ', fair value, fee recognition, ' + fw.ecl.name + ', modifications, hedge accounting, FX. '
+    + 'Outputs balanced double-entry journals on the Investran chart and a DIU-ready batch.';
+
+  // Treatment panel labels
+  const classLabel = document.querySelector('[data-fw-class-label]');
+  if(classLabel) classLabel.textContent =
+    isIFRS   ? 'IFRS 9 Classification'
+  : isUSGAAP ? 'ASC 326-20 Classification (HTM / AFS / FVO)'
+  :            'ASPE 3856 Classification';
+  // SPPI test — IFRS-only concept. Hide its row for US GAAP / ASPE.
+  const sppiLabel = document.querySelector('[data-fw-sppi-label]');
+  const sppiRow = sppiLabel ? sppiLabel.closest('div') : null;
+  if(sppiRow){
+    if(isIFRS){
+      sppiRow.style.display = '';
+      sppiLabel.textContent = 'SPPI Test (IFRS 9 §4.1.2)';
+    } else {
+      sppiRow.style.display = 'none';
+    }
+  }
+  // Credit Risk section header
+  const creditRiskHeader = document.querySelector('[data-credit-risk-header]');
+  if(creditRiskHeader) creditRiskHeader.textContent =
+    'Credit Risk & ECL Detail (' + fw.ecl.citation + ')';
+  // ECL Stage label
+  const eclStageLabel = document.querySelector('[data-ecl-stage-label]');
+  if(eclStageLabel) eclStageLabel.textContent =
+    isUSGAAP ? 'CECL pool (ASC 326 — single lifetime ECL)'
+  : isASPE   ? 'Impairment trigger (ASPE 3856)'
+  :            'ECL Stage (IFRS 9 §5.5)';
+  // Modification policy section header
+  const modHeader = document.querySelector('[data-fw-mod-header]');
+  if(modHeader) modHeader.textContent =
+    'Modification Policy (' + fw.mod.citation + ')';
+  // Per-fee section header
+  const feesHeader = document.querySelector('[data-fw-fees-header]');
+  if(feesHeader) feesHeader.textContent =
+    isIFRS   ? 'Per-fee IFRS treatment'
+  : isUSGAAP ? 'Per-fee ASC 310-20 / ASC 606 treatment'
+  :            'Per-fee ASPE 3856 / 3400 treatment';
+  // Capability panel title
+  const capHeader = document.querySelector('[data-fw-capability-header]');
+  if(capHeader) capHeader.textContent = fw.label + '-Aligned Accounting Capabilities';
+
+  // The 3 detail cards above the capability grid (Initial Recognition · EIR · FV)
+  const recogCitation = isIFRS ? 'IFRS 9 §5.1' : isUSGAAP ? 'ASC 320 / ASC 326-20-30' : 'ASPE 3856.05-08';
+  const recogLabel = document.querySelector('[data-fw-recog-label]');
+  if(recogLabel) recogLabel.textContent = 'Initial Recognition (' + recogCitation + ')';
+  const eirLabel = document.querySelector('[data-fw-eir-label]');
+  if(eirLabel) eirLabel.textContent = 'Effective Interest Rate (' + fw.eir.citation + ')';
+  const fvLabel = document.querySelector('[data-fw-fv-label]');
+  if(fvLabel) fvLabel.textContent = 'Fair Value (' + fw.fv.citation + ')';
+
+  // Evidence Pack panel titles
+  const fvSensTitle = document.querySelector('[data-fw-fv-sens-title]');
+  if(fvSensTitle) fvSensTitle.textContent = 'Fair Value Sensitivities (' + fw.fv.citation + ' disclosure)';
+  const eclTmplTitle = document.querySelector('[data-fw-ecl-tmpl-title]');
+  if(eclTmplTitle) eclTmplTitle.textContent =
+    isUSGAAP ? 'ASC 326 CECL — Allowance Journal Templates'
+  : isASPE   ? 'ASPE 3856 — Incurred-Loss Allowance Templates'
+  :            'IFRS 9 Impairment — ECL Journal Templates';
+  const eclTraceTitle = document.querySelector('[data-fw-ecl-trace-title]');
+  if(eclTraceTitle) eclTraceTitle.textContent =
+    isUSGAAP ? 'ASC 326-20 CECL Calculation Trace'
+  : isASPE   ? 'ASPE 3856 Incurred-Loss Trace'
+  :            'IFRS 9 ECL Calculation Trace';
+
+  // POCI flag — IFRS-only concept. Hide the row for US GAAP and ASPE.
+  const pociLabel = document.querySelector('[data-fw-poci-label]');
+  const pociRow = pociLabel ? pociLabel.closest('div') : null;
+  if(pociRow) pociRow.style.display = isIFRS ? '' : 'none';
+
+  // Per-fee subtitle text
+  const feesSubtitle = document.querySelector('[data-fw-fees-subtitle]');
+  if(feesSubtitle) feesSubtitle.textContent =
+    isIFRS   ? 'Switch a fee between IFRS 9 EIR-included and IFRS 15 over-time / point-in-time'
+  : isUSGAAP ? 'Switch a fee between ASC 310-20 EIR-included and ASC 606 over-time / point-in-time'
+  :            'Switch a fee between ASPE 3856 EIR-included and ASPE 3400 over-time / point-in-time';
+
+  // EIR Method section — visible only for US GAAP deals
+  const eirMethodSection = $('eir-method-section');
+  if(eirMethodSection) eirMethodSection.style.display = isUSGAAP ? '' : 'none';
+  // Override input row — visible only when Method 4 selected (and US GAAP)
+  const eirOverrideWrap = $('opt-eir-override-wrap');
+  if(eirOverrideWrap){
+    const selected = $('opt-eir-method') ? $('opt-eir-method').value : 'method2';
+    eirOverrideWrap.style.display = (isUSGAAP && selected === 'override') ? '' : 'none';
+  }
+}
+
 // Populate the treatment form from the instrument's current state
 function loadTreatmentForm(){
   const inst = currentInstrument();
   if(!inst){ return; }
+  // Framework dropdown (Section 0)
+  if($('opt-framework')) $('opt-framework').value = inst.accountingFramework || 'IFRS';
+  // EIR method dropdown (Section 0-bis · US GAAP only)
+  if($('opt-eir-method')) $('opt-eir-method').value = inst.eirMethod || 'method2';
+  if($('opt-eir-override')) $('opt-eir-override').value =
+      (typeof inst.eirOverride === 'number') ? inst.eirOverride : '';
+  syncFrameworkChip(inst);
   $('opt-ifrs9-class').value     = inst.ifrs?.ifrs9Classification || 'AmortisedCost';
   $('opt-business-model').value  = inst.ifrs?.businessModel        || 'HoldToCollect';
   $('opt-sppi').value             = String(inst.ifrs?.sppiPassed !== false);
@@ -2509,10 +2828,16 @@ function loadTreatmentForm(){
   // underlying. The scope column shows which container the fee lives in.
   const allFees = collectAllFees(inst);
   if(allFees.length){
+    // Framework-aware option set: IFRS shows IFRS 9 / IFRS 15 tags,
+    // US GAAP shows ASC 310-20 / ASC 606 tags, ASPE shows ASPE 3856 / 3400.
+    // The engine treats any tag ending in -EIR as EIR-included, any tag
+    // ending in -overTime as straight-line over a service period, and
+    // -pointInTime as recognised on a single date.
+    const fw = frameworkOf(inst);
     const opts = [
-      ['IFRS9-EIR',          'IFRS 9 — capitalised into EIR'],
-      ['IFRS15-overTime',    'IFRS 15 — recognised over time'],
-      ['IFRS15-pointInTime', 'IFRS 15 — recognised point-in-time']
+      [fw.fees.eir.value,         fw.fees.eir.label],
+      [fw.fees.overTime.value,    fw.fees.overTime.label],
+      [fw.fees.pointInTime.value, fw.fees.pointInTime.label]
     ];
     // Group by scope so the table reads cleanly for multi-tranche deals.
     const hasMultipleScopes = new Set(allFees.map(r => r.scope + ':' + r.scopeIdx)).size > 1;
@@ -2992,79 +3317,134 @@ function renderEvidencePack(inst, summary){
 function renderECLTrace(inst, summary){
   const ifrs = inst?.ifrs || {};
   const ccy = inst?.currency || 'GBP';
+  const fw = frameworkOf(inst);
   const pd  = ifrs.pdAnnual || 0;
   const lgd = ifrs.lgd || 0;
   const ccf = ifrs.eadCCF != null ? ifrs.eadCCF : 1.0;     // default 100% on drawn
   const stage = ifrs.ecLStage || 1;
   const macro = ifrs.macroOverlayWeight != null ? ifrs.macroOverlayWeight : 1.0;
+  const qFactor = ifrs.qFactor != null ? ifrs.qFactor : macro;   // CECL qualitative factor
+  const impairedFlag = !!ifrs.impairedFlag;                       // ASPE incurred-loss trigger
   const closingBal = summary.closingBalance || 0;
   const drawn = closingBal;
   const undrawn = Math.max(0, (inst.commitment || 0) - drawn);
-  // Effective EAD: drawn fully exposed + undrawn × CCF
   const ead = drawn + undrawn * ccf;
-  // Stage curve: Stage 1 = 12-month PD; Stage 2/3 = lifetime PD
   const lifeYears = (() => {
     const s = parseISO(summary.periodStart || inst.settlementDate);
     const e = parseISO(summary.periodEnd   || inst.maturityDate);
     if(!s || !e) return 1;
     return Math.max(0.25, (e - s) / (365.25 * 86400 * 1000));
   })();
-  const stageMultiplier = stage === 1 ? 1.0 : Math.min(lifeYears, 12);   // Stage 1 = 12m, Stage 2/3 = lifetime up to 12y
-  const stageLabel = stage === 1 ? '12-month'
-                  : stage === 2 ? `Lifetime (${stageMultiplier.toFixed(1)} y)`
-                  : stage === 3 ? `Lifetime — credit-impaired (${stageMultiplier.toFixed(1)} y)`
-                  : 'POCI — initial expected loss baseline';
-  // Expected Loss
-  const expectedLoss = pd * lgd * ead * stageMultiplier * macro;
-  // Discount at original EIR — single-period approximation
   const eirInfo = computeEIR(inst);
   const eir = (eirInfo && eirInfo.effectiveYield != null) ? eirInfo.effectiveYield
             : (eirInfo && eirInfo.couponRate) || 0;
-  const discountFactor = 1 / Math.pow(1 + (eir || 0), Math.max(lifeYears * 0.5, 0.5));     // discount to mid-life as a heuristic
-  const discountedPV = expectedLoss * discountFactor;
+
+  // ── Framework-specific Expected Loss + input rows ────────────────────
+  let expectedLoss = 0;
+  let formulaCode  = '';
+  let rows = [];
+  let modelExplain = '';
+
+  if(fw.ecl.model === 'cecl'){
+    // ASC 326 CECL — lifetime PD from day 1, no stage curve
+    const lifetimePD = 1 - Math.pow(1 - pd, lifeYears);
+    expectedLoss = lifetimePD * lgd * ead * qFactor;
+    formulaCode = 'CECL = lifetime_PD × LGD × EAD × Q-factor';
+    modelExplain = 'CECL recognises lifetime expected losses from day 1. No stage migration. No SICR test. The qualitative Q-factor adjusts for forward-looking conditions not captured by the PD curve.';
+    rows = [
+      ['PD (annual marginal)',          (pd * 100).toFixed(4) + '%',       'Treatment panel · ASC 326-20-30-8'],
+      ['Life of instrument',            lifeYears.toFixed(2) + ' years',   'Settlement → maturity'],
+      ['Lifetime PD (cumulative)',      (lifetimePD * 100).toFixed(4) + '%','= 1 - (1 − PD)^life'],
+      ['LGD',                           (lgd * 100).toFixed(2) + '%',      'Treatment panel · ASC 326-20-30-9'],
+      ['Drawn balance (closing)',       fmtMoney(drawn, ccy),              'Engine schedule · summary.closingBalance'],
+      ['Undrawn commitment',            fmtMoney(undrawn, ccy),            'Engine · commitment − drawn'],
+      ['EAD CCF',                       (ccf * 100).toFixed(0) + '%',      'Treatment panel · ASC 326-20-30-5'],
+      ['Effective EAD',                 fmtMoney(ead, ccy),                '= drawn + undrawn × CCF'],
+      ['Q-factor (qualitative)',        (qFactor * 100).toFixed(0) + '%',  'Treatment panel · ASC 326-20-55-5 forward-looking adjustment'],
+      ['CECL Lifetime Expected Loss',   fmtMoney(expectedLoss, ccy),       '= lifetime_PD × LGD × EAD × Q-factor'],
+      ['Effective Interest Rate',       (eir * 100).toFixed(4) + '%',      'computeEIR() · ASC 310-20-35-26'],
+      ['Actual ECL posted (engine)',    fmtMoney(summary.closingECLAllowance || 0, ccy), 'summary.closingECLAllowance']
+    ];
+  } else if(fw.ecl.model === 'incurred'){
+    // ASPE 3856 — triggered allowance, binary
+    expectedLoss = impairedFlag ? (pd * lgd * ead) : 0;
+    formulaCode = 'Allowance = (impaired ? PD × LGD × EAD : 0)';
+    modelExplain = 'ASPE 3856 uses an incurred-loss model. An allowance is recognised only when there is objective evidence of impairment (binary trigger). For unimpaired performing loans, no allowance is posted.';
+    rows = [
+      ['Impairment trigger (objective evidence)', impairedFlag ? 'TRUE' : 'FALSE', 'Treatment panel · ASPE 3856.17'],
+      ['PD (annual)',                   (pd * 100).toFixed(4) + '%',       'Treatment panel'],
+      ['LGD',                           (lgd * 100).toFixed(2) + '%',      'Treatment panel'],
+      ['Drawn balance (closing)',       fmtMoney(drawn, ccy),              'Engine schedule · summary.closingBalance'],
+      ['Effective EAD',                 fmtMoney(ead, ccy),                '= drawn + undrawn × CCF'],
+      ['Allowance recognised',          fmtMoney(expectedLoss, ccy),       impairedFlag ? '= PD × LGD × EAD (triggered)' : 'No allowance (no objective evidence)'],
+      ['Actual posted (engine)',        fmtMoney(summary.closingECLAllowance || 0, ccy), 'summary.closingECLAllowance']
+    ];
+  } else {
+    // IFRS 9 §5.5 — 3-stage model (existing logic preserved)
+    const stageMultiplier = stage === 1 ? 1.0 : Math.min(lifeYears, 12);
+    const stageLabel = stage === 1 ? '12-month'
+                    : stage === 2 ? `Lifetime (${stageMultiplier.toFixed(1)} y)`
+                    : stage === 3 ? `Lifetime — credit-impaired (${stageMultiplier.toFixed(1)} y)`
+                    : 'POCI — initial expected loss baseline';
+    expectedLoss = pd * lgd * ead * stageMultiplier * macro;
+    formulaCode = 'ECL = PD × LGD × EAD × stage_curve × macro_overlay';
+    modelExplain = 'IFRS 9 §5.5 — Stage 1 (performing) uses a 12-month ECL. Stages 2/3 (significant increase in credit risk / credit-impaired) use lifetime ECL. POCI uses a credit-adjusted EIR baseline.';
+    const discountFactor = 1 / Math.pow(1 + (eir || 0), Math.max(lifeYears * 0.5, 0.5));
+    const discountedPV = expectedLoss * discountFactor;
+    const actualPosted = summary.closingECLAllowance || 0;
+    const variance = actualPosted - discountedPV;
+    rows = [
+      ['PD (annual)',                  (pd * 100).toFixed(4) + '%',         'Treatment panel · IFRS 9 §B5.5.41'],
+      ['LGD',                          (lgd * 100).toFixed(2) + '%',        'Treatment panel · IFRS 9 §B5.5.55'],
+      ['Drawn balance (closing)',      fmtMoney(drawn, ccy),                'Engine schedule · summary.closingBalance'],
+      ['Undrawn commitment',           fmtMoney(undrawn, ccy),              'Engine · commitment − drawn'],
+      ['EAD CCF (credit conv. factor)', (ccf * 100).toFixed(0) + '%',       'Treatment panel · IFRS 9 §B5.5.31'],
+      ['Effective EAD',                fmtMoney(ead, ccy),                  '= drawn + undrawn × CCF'],
+      ['Stage',                        'Stage ' + stage + ' (' + stageLabel + ')', 'Treatment panel · IFRS 9 §5.5.3'],
+      ['Macro overlay weight',         (macro * 100).toFixed(0) + '%',      'Treatment panel · forward-looking adjustment'],
+      ['Expected Loss (EL)',           fmtMoney(expectedLoss, ccy),         '= PD × LGD × EAD × stage × overlay'],
+      ['Effective Interest Rate',      (eir * 100).toFixed(4) + '%',        'computeEIR() · drives discounting'],
+      ['Mid-life discount factor',     discountFactor.toFixed(4),           '= 1 / (1+EIR)^(life/2)'],
+      ['Discounted PV of EL',          fmtMoney(discountedPV, ccy),         '= EL × discount factor'],
+      ['Actual ECL posted (engine)',   fmtMoney(actualPosted, ccy),         'summary.closingECLAllowance'],
+      ['Variance: posted vs discounted PV', (variance >= 0 ? '+' : '−') + fmtMoney(Math.abs(variance), ccy),
+          Math.abs(variance) < 100
+              ? 'Within rounding tolerance'
+              : (actualPosted >= expectedLoss * 0.99 && actualPosted <= expectedLoss * 1.01
+                 ? 'Engine posts gross EL · discount step is shown for IFRS 13 disclosure only'
+                 : 'Engine uses daily compounding · trace is a single-period approximation')]
+    ];
+  }
+
   const actualPosted = summary.closingECLAllowance || 0;
-  const variance = actualPosted - discountedPV;
-
-  const rows = [
-    ['PD (annual)',                  (pd * 100).toFixed(4) + '%',         'Treatment panel · IFRS 9 §B5.5.41'],
-    ['LGD',                          (lgd * 100).toFixed(2) + '%',        'Treatment panel · IFRS 9 §B5.5.55'],
-    ['Drawn balance (closing)',      fmtMoney(drawn, ccy),                'Engine schedule · summary.closingBalance'],
-    ['Undrawn commitment',           fmtMoney(undrawn, ccy),              'Engine · commitment − drawn'],
-    ['EAD CCF (credit conv. factor)', (ccf * 100).toFixed(0) + '%',        'Treatment panel · IFRS 9 §B5.5.31'],
-    ['Effective EAD',                fmtMoney(ead, ccy),                  '= drawn + undrawn × CCF'],
-    ['Stage',                        'Stage ' + stage + ' (' + stageLabel + ')', 'Treatment panel · IFRS 9 §5.5.3'],
-    ['Macro overlay weight',         (macro * 100).toFixed(0) + '%',      'Treatment panel · forward-looking adjustment'],
-    ['Expected Loss (EL)',           fmtMoney(expectedLoss, ccy),         '= PD × LGD × EAD × stage × overlay'],
-    ['Effective Interest Rate',      (eir * 100).toFixed(4) + '%',        'computeEIR() · drives discounting'],
-    ['Mid-life discount factor',     discountFactor.toFixed(4),           '= 1 / (1+EIR)^(life/2)'],
-    ['Discounted PV of EL',          fmtMoney(discountedPV, ccy),         '= EL × discount factor'],
-    ['Actual ECL posted (engine)',   fmtMoney(actualPosted, ccy),         'summary.closingECLAllowance'],
-    ['Variance: posted vs discounted PV', (variance >= 0 ? '+' : '−') + fmtMoney(Math.abs(variance), ccy),
-        Math.abs(variance) < 100
-            ? 'Within rounding tolerance'
-            : (actualPosted >= expectedLoss * 0.99 && actualPosted <= expectedLoss * 1.01
-               ? 'Engine posts gross EL · discount step is shown for IFRS 13 disclosure only'
-               : 'Engine uses daily compounding · trace is a single-period approximation')]
-  ];
-
+  // Framework-specific JE labels for the resulting pair
+  const expenseLabel = fw.ecl.model === 'cecl'   ? 'Credit Loss Expense — ASC 326 CECL'
+                    : fw.ecl.model === 'incurred' ? 'Loan Loss Provision — ASPE 3856 incurred'
+                                                   : 'Impairment Expense — IFRS 9 ECL';
+  const allowLabel   = fw.ecl.model === 'cecl'   ? 'Allowance for Credit Losses (Contra-Asset)'
+                    : fw.ecl.model === 'incurred' ? 'Loan Loss Allowance (Contra-Asset)'
+                                                   : 'Loan Loss Allowance (Contra-Asset)';
   const journalPair = expectedLoss > 0
     ? `<div class="bg-gray-50 border border-gray-200 rounded p-2 mt-3 text-[11px]">
          <div class="font-semibold mb-1">Resulting JE pair (period close)</div>
          <table class="data" style="width:100%">
            <thead><tr><th class="left">Account</th><th class="left">Description</th><th>DR</th><th>CR</th></tr></thead>
            <tbody>
-             <tr><td class="left">470000</td><td class="left">Impairment Expense — IFRS 9 ECL</td><td>${fmtMoney(actualPosted, ccy)}</td><td></td></tr>
-             <tr><td class="left">145000</td><td class="left">Loan Loss Allowance (Contra-Asset)</td><td></td><td>${fmtMoney(actualPosted, ccy)}</td></tr>
+             <tr><td class="left">470000</td><td class="left">${expenseLabel}</td><td>${fmtMoney(actualPosted, ccy)}</td><td></td></tr>
+             <tr><td class="left">145000</td><td class="left">${allowLabel}</td><td></td><td>${fmtMoney(actualPosted, ccy)}</td></tr>
            </tbody>
          </table>
        </div>`
-    : '<div class="text-[11px] text-gray-500 italic mt-3">No ECL posted — instrument has no PD/LGD configured or balance is zero.</div>';
+    : '<div class="text-[11px] text-gray-500 italic mt-3">No allowance posted — instrument has no PD/LGD configured, balance is zero, or (ASPE) no impairment trigger.</div>';
 
   $('ecl-trace').innerHTML = `
     <div class="bg-blue-50 border border-blue-200 rounded p-3 mb-3 text-[12px]">
-      <div class="font-semibold text-blue-900 mb-1">IFRS 9 §5.5.17 — Expected Credit Loss formula</div>
-      <div class="text-gray-700">ECL = <code>PD × LGD × EAD × stage_curve × macro_overlay</code>, then discounted at the original EIR.</div>
-      <div class="text-[11px] text-gray-500 mt-1">Each input below comes from the Treatment panel (Risk-side: PD/LGD/Stage/CCF/Overlay), the engine schedule (Operational-side: drawn/undrawn balances), or computeEIR() (Accounting-side: EIR for discounting).</div>
+      <div class="flex items-center gap-2 mb-1">
+        <span class="chip ${fw.chipClass} text-[10px]">${fw.label}</span>
+        <div class="font-semibold text-blue-900">${fw.ecl.traceTitle}</div>
+      </div>
+      <div class="text-gray-700">ECL = <code>${formulaCode}</code></div>
+      <div class="text-[11px] text-gray-600 mt-1">${modelExplain}</div>
     </div>
     <table class="data" style="width:100%">
       <thead><tr><th class="left">Input / Calculation</th><th class="left">Value</th><th class="left">Source</th></tr></thead>
@@ -3102,7 +3482,7 @@ function renderFeeSpecsPanel(inst){
       <td class="left text-[11px]">${f.frequency || '—'}</td>
       <td class="left text-[11px]">${f.basis || '—'}</td>
       <td>${fmtRate(f.rate)}</td>
-      <td class="left text-[11px]"><span class="chip ${f.ifrs === 'IFRS9-EIR' ? 'blue' : f.ifrs === 'IFRS15-overTime' ? 'green' : 'amber'}" style="font-size:10px">${f.ifrs || '—'}</span></td>
+      <td class="left text-[11px]"><span class="chip ${/EIR$/.test(f.ifrs || '') ? 'blue' : /overTime$/.test(f.ifrs || '') ? 'green' : 'amber'}" style="font-size:10px">${f.ifrs || '—'}</span></td>
       <td>${accrued ? fmtMoney(accrued, ccy) : '—'}</td>
     </tr>`;
   }).join('');
@@ -4847,6 +5227,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // Wire editable treatment controls
   const TREATMENT_IDS = [
     // Classification
+    'opt-framework',
+    'opt-eir-method','opt-eir-override',
     'opt-ifrs9-class','opt-business-model','opt-sppi','opt-fv-level',
     // ECL primary
     'opt-ecl-stage','opt-pd','opt-lgd','opt-compute-ecl',
@@ -5055,7 +5437,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
       m.style.display = 'flex';
       return;
     }
-    sub.textContent = (inst.deal || inst.id) + ' · ' + (inst.legalEntity || '') + ' · ' + ccyOf(inst);
+    const fw = (typeof frameworkOf === 'function') ? frameworkOf(inst) : { label:'IFRS', eir:{ citation:'IFRS 9 §B5.4' } };
+    sub.textContent = (inst.deal || inst.id) + ' · ' + (inst.legalEntity || '') + ' · ' + ccyOf(inst) + ' · ' + fw.label + ' (' + fw.eir.citation + ')';
+    // US GAAP deals use the Interest AT 4-method calculator — render the
+    // method-specific step trace from computeEIR(inst).eirTrace instead of
+    // the generic bilateral/tranche/RFR rendering. Falls through to the
+    // legacy rendering if no eirTrace is attached (e.g. method not set).
+    if(inst.accountingFramework === 'USGAAP'){
+      const report = (typeof computeEIR === 'function') ? computeEIR(inst) : null;
+      if(report && report.eirTrace){
+        body.innerHTML = renderEIRUSGAAP(inst, report);
+        m.style.display = 'flex';
+        return;
+      }
+    }
     // Auto-detect deal type and render appropriate trace
     if(isTranched(inst)){
       body.innerHTML = renderEIRTrancheTrace(inst);
@@ -5065,6 +5460,134 @@ document.addEventListener('DOMContentLoaded', ()=>{
       body.innerHTML = renderEIRBilateralTrace(inst);
     }
     m.style.display = 'flex';
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // US GAAP — 4-method EIR trace (Interest AT / Investran spec)
+  // ────────────────────────────────────────────────────────────────────────
+  function renderEIRUSGAAP(inst, report){
+    const ccy = ccyOf(inst);
+    const inputs = report.eirInputs || {};
+    const trace  = report.eirTrace || { steps: [] };
+    const methodCode  = report.eirMethod || 'method2';
+    const methodLabel = report.eirMethodLabel || 'Method 2 — PRICE';
+    const eir = report.effectiveYield;
+
+    // Inputs table
+    const inputRows = [
+      ['P  (Principal)',           fmtMoneyCcy(inputs.P  || 0, ccy)],
+      ['CV (Carrying Value)',      fmtMoneyCcy(inputs.CV || 0, ccy)],
+      ['Settlement → Maturity',    (inputs.settle || '?') + ' → ' + (inputs.mat || '?')],
+      ['m  (Years to maturity)',   (inputs.m || 0).toFixed(4)],
+      ['I1 (Coupon rate)',         fmtPctEir(inputs.I1 || 0, 4)],
+      ['I2 (PIK rate)',            fmtPctEir(inputs.I2 || 0, 4)],
+      ['PMT (Annual interest)',    fmtMoneyCcy(inputs.PMT || 0, ccy)]
+    ];
+
+    // Step table
+    const stepRows = (trace.steps || []).map(s => {
+      const v = (typeof s.value === 'number')
+        ? (Math.abs(s.value) < 1 ? s.value.toFixed(8) : s.value.toFixed(6))
+        : String(s.value);
+      return `<tr ${s.isFinal ? 'style="background:#dcfce7"' : ''}>
+        <td class="left ${s.isFinal ? 'font-bold' : ''}">${s.label}</td>
+        <td class="left text-[11px] text-gray-600">${s.formula || ''}</td>
+        <td class="left ${s.isFinal ? 'font-bold text-emerald-700' : ''}">${v}</td>
+      </tr>`;
+    }).join('');
+
+    // Method-specific blurb
+    const blurb = {
+      method1: 'EIR = (P/CV)^(1/m) − 1 + (I1+I2). Closed-form approximation used historically by some US BDCs (e.g. Main Street Capital). Five intermediate steps; no iteration.',
+      method2: 'Iterative bisection over a bond cashflow set: outflow of CV at t=0, coupon payments of PMT each year, balloon (P + final coupon) at maturity. Solves for the rate that makes NPV(rate, cashflows) = 0. This is the highest-priority method per the spec.',
+      method3: 'EIR = (PMT + (P−CV)/m) / ((CV+P)/2). Simple closed-form: average periodic income divided by average carrying value. Three intermediate steps; no iteration.',
+      override: 'Client-provided value. Skips all calculation. Use when the client has externally derived an effective yield and wants the engine to use that number as-is.'
+    }[methodCode] || '';
+
+    const compareRows = inst.accountingFramework === 'USGAAP'
+      ? buildEIRMethodCompare(inst)
+      : '';
+
+    return `
+      <div class="bg-emerald-50 border border-emerald-200 rounded p-3 mb-3 text-[12px]">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="chip green text-[10px]">US GAAP · Interest AT</span>
+          <div class="font-semibold text-emerald-900">${methodLabel}</div>
+        </div>
+        <div class="text-gray-700">${blurb}</div>
+        <div class="text-[11px] text-gray-600 mt-1">Citation: <b>ASC 310-20-35-26</b> (interest method). Spec source: Folder 1 — Effective Interest Rate Calculation Method.</div>
+      </div>
+
+      <div class="text-[12px] font-semibold mb-1">Inputs (from instrument record)</div>
+      <table class="data" style="width:100%; font-size:11.5px">
+        <thead><tr><th class="left">Parameter</th><th class="left">Value</th></tr></thead>
+        <tbody>${inputRows.map(([k,v]) => `<tr><td class="left">${k}</td><td class="left">${v}</td></tr>`).join('')}</tbody>
+      </table>
+
+      <div class="text-[12px] font-semibold mt-3 mb-1">Step-by-step calculation</div>
+      <table class="data" style="width:100%; font-size:11.5px">
+        <thead><tr><th class="left">Step</th><th class="left">Formula</th><th class="left">Value</th></tr></thead>
+        <tbody>${stepRows}</tbody>
+      </table>
+
+      <div class="bg-blue-50 border border-blue-200 rounded p-3 mt-3 text-[12.5px]">
+        <div class="font-semibold text-blue-900 mb-1">Result</div>
+        <div><b>EIR = ${fmtPctEir(eir, 4)}</b> &nbsp;·&nbsp; method: <b>${methodLabel}</b> &nbsp;·&nbsp; headline coupon: ${fmtPctEir(inputs.I1 || 0, 4)}</div>
+      </div>
+
+      ${compareRows}
+    `;
+  }
+
+  // Side-by-side comparison of all 4 methods, computed against the SAME inputs.
+  // Shows how the selected number relates to what the other methods would produce.
+  function buildEIRMethodCompare(inst){
+    if(typeof computeEIR !== 'function') return '';
+    const methods = ['method2', 'method1', 'method3'];
+    const results = {};
+    for(const m of methods){
+      const probe = Object.assign({}, inst, { eirMethod: m, accountingFramework: 'USGAAP' });
+      const r = computeEIR(probe);
+      results[m] = r && r.effectiveYield;
+    }
+    const selected = inst.eirMethod || 'method2';
+    const selectedEir = results[selected];
+    const fmt = (v) => (typeof v === 'number') ? fmtPctEir(v, 4) : '—';
+    const delta = (v) => (typeof v === 'number' && typeof selectedEir === 'number')
+        ? ((v - selectedEir) * 10000).toFixed(1) + ' bps' : '—';
+    return `
+      <div class="text-[12px] font-semibold mt-3 mb-1">All-method comparison (same inputs)</div>
+      <table class="data" style="width:100%; font-size:11.5px">
+        <thead><tr><th class="left">Method</th><th class="left">EIR</th><th class="left">Δ vs selected</th></tr></thead>
+        <tbody>
+          <tr ${selected==='method2'?'style="background:#dcfce7"':''}>
+            <td class="left ${selected==='method2'?'font-bold':''}">Method 2 — PRICE${selected==='method2'?' (selected)':''}</td>
+            <td class="left">${fmt(results.method2)}</td>
+            <td class="left">${delta(results.method2)}</td>
+          </tr>
+          <tr ${selected==='method1'?'style="background:#dcfce7"':''}>
+            <td class="left ${selected==='method1'?'font-bold':''}">Method 1 — Custom (P/CV)^(1/m)${selected==='method1'?' (selected)':''}</td>
+            <td class="left">${fmt(results.method1)}</td>
+            <td class="left">${delta(results.method1)}</td>
+          </tr>
+          <tr ${selected==='method3'?'style="background:#dcfce7"':''}>
+            <td class="left ${selected==='method3'?'font-bold':''}">Method 3 — Generic${selected==='method3'?' (selected)':''}</td>
+            <td class="left">${fmt(results.method3)}</td>
+            <td class="left">${delta(results.method3)}</td>
+          </tr>
+          ${selected === 'override' ? `<tr style="background:#dcfce7">
+            <td class="left font-bold">Method 4 — Client Override (selected)</td>
+            <td class="left">${fmt(inst.eirOverride)}</td>
+            <td class="left">—</td>
+          </tr>` : ''}
+        </tbody>
+      </table>
+      <div class="text-[11px] text-gray-500 mt-1">
+        All three closed-form / iterative methods run against the same P, CV, m, I1, I2, PMT inputs.
+        The Δ column shows the basis-point gap to the currently-selected method.
+        Methods 1 and 3 are approximations; Method 2 (PRICE) is the highest-priority calculation per the spec.
+      </div>
+    `;
   }
   function closeEIRTrace(){
     const m = $eir('eir-trace-modal');
@@ -5101,7 +5624,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const years  = Math.max(1, Math.round(yearsBetween(settle, mat)));
     const annualCoupon = principal * couponRate;
     // EIR-included fees (IFRS 9 §B5.4) — typically arrangement / origination fees marked IFRS9-EIR
-    const eirFees = (inst.fees || []).filter(f => f.ifrs === 'IFRS9-EIR');
+    const eirFees = (inst.fees || []).filter(f => /EIR$/.test(f.ifrs || ''));
     const upfrontEirFee = eirFees.reduce((s, f) => {
       if(f.mode === 'percent') return s + (f.rate || 0) * (principal);
       if(f.mode === 'flat')    return s + (f.amount || 0);
@@ -5203,7 +5726,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const mat    = t.maturityDate   || dealMat;
       const years = Math.max(1, Math.round(yearsBetween(settle, mat)));
       // EIR-included fees on the child (or inherited)
-      const eirFees = (t.fees || inst.fees || []).filter(f => f.ifrs === 'IFRS9-EIR');
+      const eirFees = (t.fees || inst.fees || []).filter(f => /EIR$/.test(f.ifrs || ''));
       const upfront = eirFees.reduce((s, f) => {
         if(f.mode === 'percent') return s + (f.rate || 0) * face;
         if(f.mode === 'flat')    return s + (f.amount || 0);

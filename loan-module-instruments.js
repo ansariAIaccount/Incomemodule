@@ -1084,6 +1084,262 @@ const INSTRUMENTS = [
     ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed:true, businessModel:'HoldToCollect', ecLStage:1, pdAnnual:0.0040, lgd:0.40 },
     type:'simpleDaily',
     preset:'Helios Solar Bridge · £30m Bilateral SONIA + Ratcheted Margin (275/300/325 bps), 5Y bullet'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Pacific Energy Bridge — USD-denominated bilateral with FX revaluation
+    // Demo example for multi-currency + daily FX revaluation (IAS 21 monetary
+    // item translation + IFRS 9 carrying value in functional currency).
+    //   • $50m face · 5.00% USD fixed coupon · 5Y bullet · ACT/360
+    //   • Reporting/functional currency: GBP
+    //   • fxRateSchedule[] supplies GBP-per-USD fixings — the engine reads
+    //     these step-effective and computes dailyFXGain = balance × (rate_t - rate_{t-1})
+    //   • Journals carry originalAmount (USD), amountLE (GBP), fx (rate)
+    // ----------------------------------------------------------------
+    id:'pacificEnergyBridge',
+    positionId:'POS-NWF-PACIFIC-FX', securityId:'SEC-PACIFIC-ENERGY-USD',
+    instrumentKind:'loan',
+    legalEntity:'NWF Renewable Equity', leid: 44,
+    deal:'Pacific Energy Bridge',
+    position:'NWF 100% Bilateral Position · Pacific Energy USD',
+    incomeSecurity:'Pacific Energy Bridge Facility (USD 50m, 5.00% fixed, GBP reporting)',
+    counterpartyId:'PAC001',
+    transactionId:'PAC001',
+    bilateralFlag:'Bilateral',
+    agentName:'Citi New York',
+    currency:'USD',                          // INSTRUMENT currency
+    faceValue:    50_000_000,                // USD
+    purchasePrice: 50_000_000,
+    commitment:   50_000_000,
+    settlementDate:'2026-05-01',
+    availabilityEnd:'2026-05-01',
+    maturityDate:   '2031-05-01',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis:'ACT/360',                      // USD convention
+    businessDayConvention:'modifiedFollowing',
+    holidayCalendar:'usFederal',
+    skipHolidays:false,
+    coupon: { type:'Fixed', fixedRate: 0.0500, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-05-01', type:'draw', amount: 50_000_000, drawdownId:'PAC001_D1', status:'forecast' }
+    ],
+    // ---- FX RATE SCHEDULE (instrument currency USD → functional GBP) ----
+    // Step-effective: each fixing applies from its date forward until the next.
+    // GBP-per-USD: 0.79 means $1.00 = £0.79 (i.e. $50m books at £39.5m).
+    fxRateSchedule: [
+      { date:'2026-05-01', rate: 0.7900, note:'Initial spot at signing — illustrative' },
+      { date:'2026-12-31', rate: 0.7750, note:'Year-end FY26 reporting fixing' },
+      { date:'2027-06-30', rate: 0.7600, note:'H1 FY27 — USD weakening' },
+      { date:'2027-12-31', rate: 0.7850, note:'Year-end FY27 — USD strengthening' },
+      { date:'2028-06-30', rate: 0.8000, note:'H1 FY28' },
+      { date:'2028-12-31', rate: 0.7950, note:'Year-end FY28' },
+      { date:'2029-06-30', rate: 0.7800, note:'H1 FY29' },
+      { date:'2029-12-31', rate: 0.7650, note:'Year-end FY29 — material GBP gain' },
+      { date:'2030-06-30', rate: 0.7700, note:'H1 FY30' },
+      { date:'2030-12-31', rate: 0.7850, note:'Year-end FY30' },
+      { date:'2031-05-01', rate: 0.7900, note:'Maturity — close to initial' }
+    ],
+    fees: [
+      {
+        id:'pacificArrangement',
+        kind:'arrangement',
+        label:'Arrangement Fee',
+        mode:'flat',
+        amount: 250_000,                   // USD 250k — EIR-included
+        base:'face',
+        frequency:'oneOff',
+        paymentDate:'2026-05-01',
+        ifrs:'IFRS9-EIR',
+        notes:'USD 250k arrangement fee paid at signing. EIR-included per IFRS 9 §B5.4 — accreted over 5Y via EIR. FX-translated to GBP at the day-1 fixing (0.7900).'
+      }
+    ],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed:true, businessModel:'HoldToCollect', ecLStage:1, pdAnnual:0.0060, lgd:0.45 },
+    preset:'Pacific Energy Bridge · USD 50m Bilateral 5.00% Fixed 5Y bullet · GBP reporting + FX revaluation'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Hudson Manufacturing Senior Notes — USD bilateral booked under US GAAP
+    // Demo example for US GAAP CECL impairment (ASC 326) — lifetime expected
+    // credit loss recognised from day 1, no IFRS-9-style stage migration.
+    //   • $40m senior secured bullet · 5.75% fixed coupon · 5-year · ACT/360
+    //   • US borrower, USD reporting, NWF books under US GAAP
+    //   • ECL drivers: PD 0.60% annual · LGD 35% · Q-factor 110% (qualitative
+    //     overlay for forward-looking macro)
+    //   • Per ASC 326-20, the engine should compute a LIFETIME ECL from day 1,
+    //     not a 12-month ECL. The CECL Trace panel surfaces the math.
+    // ----------------------------------------------------------------
+    id:'hudsonSeniorNotes',
+    positionId:'POS-NWF-HUDSON-USG', securityId:'SEC-HUDSON-MFG-USG',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Hudson Manufacturing Senior Notes',
+    position:'NWF 100% Bilateral Position · Hudson Manufacturing',
+    incomeSecurity:'Hudson Manufacturing Senior Secured Notes (USD 40m, 5.75% fixed, US GAAP / CECL)',
+    counterpartyId:'HUD001',
+    transactionId:'HUD001',
+    bilateralFlag:'Bilateral',
+    agentName:'JPMorgan New York',
+    currency:'USD',
+    accountingFramework:'USGAAP',            // ← framework set at deal origination
+    faceValue:    40_000_000,
+    purchasePrice: 40_000_000,
+    commitment:   40_000_000,
+    settlementDate:'2026-06-01',
+    availabilityEnd:'2026-06-01',
+    maturityDate:   '2031-06-01',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis:'ACT/360',                      // USD convention
+    businessDayConvention:'modifiedFollowing',
+    holidayCalendar:'usFederal',
+    skipHolidays:false,
+    coupon: { type:'Fixed', fixedRate: 0.0575, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-06-01', type:'draw', amount: 40_000_000, drawdownId:'HUD001_D1', status:'forecast' }
+    ],
+    fees: [
+      {
+        id:'hudsonOrigination',
+        kind:'arrangement',
+        label:'Origination Fee',
+        mode:'flat',
+        amount: 300_000,                     // USD 300k — ASC 310-20 EIR
+        base:'face',
+        frequency:'oneOff',
+        paymentDate:'2026-06-01',
+        ifrs:'ASC310-20-EIR',                // US GAAP equivalent of IFRS9-EIR
+        notes:'USD 300k origination fee paid at signing. ASC 310-20 — capitalised into EIR and accreted over 5Y. Equivalent treatment to IFRS 9 §B5.4.'
+      }
+    ],
+    // ---- IFRS block — reused as the canonical "credit metadata" block ----
+    // Under CECL the same PD/LGD/EAD inputs feed a different formula. The
+    // engine reads `accountingFramework` and branches the ECL math.
+    ifrs: {
+      ifrs9Classification:'AmortisedCost',   // US GAAP equivalent: Held-to-Maturity
+      sppiPassed: true,
+      businessModel:'HoldToCollect',
+      ecLStage: 1,                           // ignored under CECL; left as default
+      pdAnnual: 0.0060,                       // 0.60% annual PD
+      lgd:      0.35,                         // 35% LGD
+      qFactor:  1.10,                         // CECL qualitative factor (forward-looking overlay)
+      macroOverlayWeight: 1.10                // shared label for IFRS macro / CECL Q-factor
+    },
+    preset:'Hudson Manufacturing Senior Notes · USD 40m · US GAAP / ASC 326 CECL demo'
+  },
+  /* ─────────────────────────────────────────────────────────────────────────
+     US GAAP — EIR Method proof deals (Folder 1 spec)
+
+     Three reference instruments reconciled against the proof workbooks in
+     "loan calculator files 1/". Each deal targets a specific calculation
+     method so you can switch the EIR Method dropdown and see the engine's
+     answer match the spec exactly:
+
+       • mainStreetTest    — Method 1 proof   · EIR ≈ 14.46%
+       • interestATSample1 — Method 2 proof   · EIR ≈ 14.96% / 15.82%
+       • interestATRandom  — Method 3 + Method 1 dual demo · 16.06% / 16.83%
+
+     These ship as draftable / illustrative records, accountingFramework=USGAAP,
+     so they only exercise the Interest AT 4-method calculator path.
+     ────────────────────────────────────────────────────────────────────── */
+  {
+    id:'mainStreetTest',
+    positionId:'POS-NWF-MSTR-EIR1', securityId:'SEC-MSTR-EIR-METHOD1',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Main Street Capital — Method 1 Test',
+    position:'NWF 100% Bilateral · Method 1 EIR proof',
+    incomeSecurity:'Main Street Capital Sub-Debt (USD 1.32m face, Method 1 custom-formula proof)',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    eirMethod:'method1',
+    faceValue:    1_320_000,        // P
+    purchasePrice: 1_227_600,        // CV
+    commitment:   1_320_000,
+    settlementDate:'2008-10-14',
+    maturityDate:   '2013-10-17',
+    dayBasis:'ACT/365',
+    holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.13, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    principalRepayment:'AtMaturity',
+    principalSchedule: [{ date:'2008-10-14', type:'draw', amount: 1_320_000, status:'actual' }],
+    fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed:true, businessModel:'HoldToCollect', ecLStage:1, pdAnnual:0.005, lgd:0.40, qFactor:1.0 },
+    preset:'Main Street Capital · Method 1 (P/CV)^(1/m) - 1 + (I1+I2) proof · expected EIR ≈ 14.46%'
+  },
+  {
+    id:'interestATSample1',
+    positionId:'POS-NWF-IATS1-EIR2', securityId:'SEC-IATS1-EIR-METHOD2',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Interest AT Sample 1 — Method 2 Test',
+    position:'NWF 100% Bilateral · Method 2 PRICE proof',
+    incomeSecurity:'Interest AT Sample 1 Bond (USD 11.12m face, PRICE method proof)',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    eirMethod:'method2',
+    faceValue:    11_120_346.43,    // P
+    purchasePrice: 10_183_896.20,    // CV (purchase at discount)
+    commitment:   11_120_346.43,
+    settlementDate:'2009-11-13',
+    maturityDate:   '2016-11-13',
+    dayBasis:'30/360',
+    holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.13, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    principalRepayment:'AtMaturity',
+    principalSchedule: [{ date:'2009-11-13', type:'draw', amount: 11_120_346.43, status:'actual' }],
+    fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed:true, businessModel:'HoldToCollect', ecLStage:1, pdAnnual:0.0075, lgd:0.40, qFactor:1.0 },
+    preset:'Interest AT Sample 1 · Method 2 PRICE bisection proof · expected EIR ≈ 15.82% (annual)'
+  },
+  {
+    id:'interestATRandom',
+    positionId:'POS-NWF-IATR-EIR3', securityId:'SEC-IATR-EIR-METHOD3',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Interest AT Random Test — Method 3 Test',
+    position:'NWF 100% Bilateral · Method 3 generic formula proof',
+    incomeSecurity:'Interest AT Random Test (USD 10m face, Cash + PIK, generic-formula proof)',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    eirMethod:'method3',
+    faceValue:    10_000_000,       // P
+    purchasePrice:  9_000_000,       // CV
+    commitment:   10_000_000,
+    settlementDate:'2013-06-12',
+    maturityDate:   '2023-06-12',
+    dayBasis:'30/360',
+    holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.10, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:true, rate:0.05, capitalizationFrequency:'Quarterly' },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    principalRepayment:'AtMaturity',
+    principalSchedule: [{ date:'2013-06-12', type:'draw', amount: 10_000_000, status:'actual' }],
+    fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed:true, businessModel:'HoldToCollect', ecLStage:1, pdAnnual:0.01, lgd:0.45, qFactor:1.10 },
+    preset:'Interest AT Random · Method 3 generic-formula proof · expected EIR ≈ 16.83% (Method 3) / 16.06% (Method 1)'
   }
 ];
 

@@ -140,8 +140,145 @@ function aggregateChildEIRs(childResults, childRecords, kind){
   };
 }
 
+/* ============================================================================
+   US GAAP — 4-method EIR calculator (Interest AT / Investran convention)
+   Applied ONLY when instr.accountingFramework === 'USGAAP'. IFRS / ASPE deals
+   continue to use the original IRR-style bisection (see below).
+
+   Methods per the Income Security Panel spec (Folder 1):
+     • Method 1 (custom formula — Main Street Capital):
+         EIR = (P/CV)^(1/m) - 1 + (I1 + I2)
+     • Method 2 (PRICE, iterative — default):  retained as highest-priority
+         EIR = bisection over (CV, [coupon CFs..., face + last coupon])
+     • Method 3 (generic formula):
+         EIR = (PMT + (P-CV)/m) / ((CV+P)/2)
+     • Method 4 (client override):
+         EIR = instr.eirOverride  (skip calculation)
+
+   Priority order when instr.eirMethod is null/missing:
+     override → method2 (PRICE) → method3 → method1.
+   ============================================================================ */
+function computeEIRUSGAAP(instr){
+  if(!instr) return null;
+  const method = instr.eirMethod || 'method2';     // default: PRICE
+
+  const settle   = parseISO(instr.settlementDate);
+  const maturity = parseISO(instr.maturityDate);
+  if(!settle || !maturity || maturity <= settle) return null;
+
+  const basis = instr.dayBasis || 'ACT/365';
+  const daysPerYear = (basis === 'ACT/365' || basis === 'ACT/ACT') ? 365 : 360;
+  const totalDays = Math.round((maturity - settle) / ONE_DAY);
+  const m = totalDays / daysPerYear;
+
+  const P    = instr.faceValue    || 0;
+  const CV   = instr.purchasePrice || P;
+  const c    = instr.coupon || { type: 'Fixed', fixedRate: 0 };
+  const I1   = (c.type === 'Fixed') ? (c.fixedRate || 0) : 0;
+  const I2   = (instr.pik && instr.pik.enabled && instr.pik.rate) || 0;
+  // PMT per Folder 1 spec — annual interest payment INCLUDING PIK accrual.
+  // Test data verifies: P=10m, I1=10%, I2=5% → PMT = 1.5m (not just cash 1m).
+  const PMT  = P * (I1 + I2);
+
+  function packReport(eir, methodCode, methodLabel, source, note, trace){
+    return {
+      method:         instr.amortization?.method || methodCode,
+      eirMethod:      methodCode,
+      eirMethodLabel: methodLabel,
+      couponRate:     I1,
+      annualCoupon:   PMT,
+      effectiveYield: eir,
+      impliedYTM:     null,
+      cashYield:      CV > 0 ? (PMT / CV) : null,
+      totalReturn:    null,
+      yearsToMat:     m,
+      dayBasis:       basis,
+      source:         source,
+      note:           note,
+      rateBreakdown:  '',
+      eirTrace:       trace,
+      eirInputs:      { P, CV, m, I1, I2, PMT, settle: instr.settlementDate, mat: instr.maturityDate }
+    };
+  }
+
+  // ── Method 4 — Client Override ─────────────────────────────────────────
+  if(method === 'override'){
+    if(typeof instr.eirOverride === 'number'){
+      const eir = instr.eirOverride;
+      return packReport(eir, 'override', 'Method 4 — Client Override',
+        'override', 'Client-provided override · ' + (eir*100).toFixed(4) + '% · skips calculation',
+        { steps: [{ label: 'Client override', value: eir, isFinal: true }] });
+    }
+    // override flagged but no value → fall through to default
+  }
+
+  // ── Method 1 — Custom formula (Main Street Capital) ────────────────────
+  if(method === 'method1'){
+    if(CV <= 0 || m <= 0) return packReport(I1, 'method1', 'Method 1 — Custom Formula',
+      'method1-degenerate', 'Cannot compute: CV or m is zero',
+      { steps: [] });
+    const A   = P / CV;
+    const B   = 1 / m;
+    const C   = Math.pow(A, B);
+    const D   = I1 + I2;
+    const eir = C - 1 + D;
+    return packReport(eir, 'method1', 'Method 1 — Custom Formula',
+      'method1-custom', 'EIR = (P/CV)^(1/m) - 1 + (I1+I2)',
+      { steps: [
+          { label: 'A = P / CV',         value: A,   formula: P + ' / ' + CV },
+          { label: 'B = 1 / m',          value: B,   formula: '1 / ' + m.toFixed(6) },
+          { label: 'C = A^B',            value: C,   formula: A.toFixed(6) + '^' + B.toFixed(6) },
+          { label: 'D = I1 + I2',        value: D,   formula: I1 + ' + ' + I2 },
+          { label: 'EIR = C - 1 + D',    value: eir, isFinal: true,
+            formula: C.toFixed(6) + ' - 1 + ' + D.toFixed(6) }
+      ]});
+  }
+
+  // ── Method 3 — Generic formula ─────────────────────────────────────────
+  if(method === 'method3'){
+    if(CV + P <= 0 || m <= 0) return packReport(I1, 'method3', 'Method 3 — Generic Formula',
+      'method3-degenerate', 'Cannot compute: CV+P or m is zero',
+      { steps: [] });
+    const a   = (P - CV) / m;
+    const b   = PMT + a;
+    const cAvg= (CV + P) / 2;
+    const eir = b / cAvg;
+    return packReport(eir, 'method3', 'Method 3 — Generic Formula',
+      'method3-generic', 'EIR = (PMT + (P-CV)/m) / ((CV+P)/2)',
+      { steps: [
+          { label: 'A = (P-CV) / m',     value: a,    formula: '(' + P + ' - ' + CV + ') / ' + m.toFixed(6) },
+          { label: 'B = PMT + A',        value: b,    formula: PMT + ' + ' + a.toFixed(6) },
+          { label: 'C = (CV+P) / 2',     value: cAvg, formula: '(' + CV + ' + ' + P + ') / 2' },
+          { label: 'EIR = B / C',        value: eir,  isFinal: true,
+            formula: b.toFixed(6) + ' / ' + cAvg.toFixed(6) }
+      ]});
+  }
+
+  // ── Method 2 — PRICE (default; bisection over bond cashflows) ──────────
+  const cfs = [];
+  const fullYears = Math.floor(m);
+  for(let y = 1; y <= fullYears; y++) cfs.push({ t: y, amount: PMT });
+  const stub = m - fullYears;
+  cfs.push({ t: m, amount: P + (stub > 0 ? PMT * stub : 0) });
+  const eir = solveYield(CV, cfs);
+  return packReport(eir, 'method2', 'Method 2 — PRICE (Iterative)',
+    'method2-price', 'PRICE method · bisection solve over coupon + balloon cashflows',
+    { steps: [
+        { label: 'Cashflow set',       value: cfs.length + ' periods' },
+        { label: 'Day-1 outflow',      value: -CV },
+        { label: 'Coupon stream',      value: PMT + ' × ' + fullYears + ' years' },
+        { label: 'Balloon',            value: P + (stub > 0 ? ' + stub coupon' : '') },
+        { label: 'Bisection result',   value: eir, isFinal: true }
+    ], cashflows: cfs });
+}
+
 function computeEIR(instr){
   if(!instr) return null;
+
+  // ── US GAAP — branch to Interest AT 4-method calculator (Folder 1 spec)
+  if(instr.accountingFramework === 'USGAAP'){
+    return computeEIRUSGAAP(instr);
+  }
 
   // ---- Multi-tranche / guarantee wrapper handling ----------------------
   // For loans split into tranches[] (e.g. Suffolk Solar) compute a face-weighted
