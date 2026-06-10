@@ -16,7 +16,230 @@
   .stage-card.done { border-color:#0f8a4d; background:#f0fdf4; }
   .stage-num { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:var(--brand); color:white; font-weight:700; font-size:13px; }
   .stage-card.done .stage-num { background:#0f8a4d; }
-  .stage-arrow { color:var(--brand); display:flex; align-items:center; justify-content:center; padding:12px 0; }
+  .stage-arrow { display:none; }   /* arrows hidden — tab nav replaces vertical flow */
+
+  /* ─── Tab navigation (sticky top) ────────────────────────────────────── */
+  .tab-nav {
+    position: sticky; top: 0; z-index: 40;
+    background: linear-gradient(to bottom, #FFFFFF 0%, #FAFBFD 100%);
+    border-bottom: 1px solid #E1E5EE;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 4px 16px rgba(33,41,92,0.04);
+    padding: 10px 12px;
+    display: flex; gap: 6px; overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .tab-nav::-webkit-scrollbar { height: 4px; }
+  .tab-nav::-webkit-scrollbar-thumb { background: #D4DAE3; border-radius: 2px; }
+
+  .tab-btn {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+    padding: 9px 14px;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all .15s ease;
+    min-width: 175px; text-align: left;
+    position: relative;
+  }
+  .tab-btn:hover { background: #F0F4FA; border-color: #E1E5EE; }
+  .tab-btn.active {
+    background: linear-gradient(135deg, #21295C 0%, #2E3A7B 100%);
+    color: white;
+    border-color: #21295C;
+    box-shadow: 0 4px 12px rgba(33,41,92,0.25);
+    transform: translateY(-1px);
+  }
+  /* Chevron under the active tab pointing into the content */
+  .tab-btn.active::after {
+    content: '';
+    position: absolute;
+    left: 50%; bottom: -8px;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid #21295C;
+  }
+  .tab-btn.done {
+    background: linear-gradient(135deg, #0F8A4D 0%, #0AA85C 100%);
+    color: white;
+    border-color: #0F8A4D;
+  }
+  .tab-btn.active.done { background: linear-gradient(135deg, #21295C 0%, #2E3A7B 100%); border-color: #21295C; }
+
+  .tab-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: rgba(33,41,92,0.08); color: #21295C;
+    font-weight: 700; font-size: 11px;
+    margin-bottom: 2px;
+  }
+  .tab-btn.active .tab-num,
+  .tab-btn.done .tab-num { background: rgba(255,255,255,0.25); color: white; }
+
+  .tab-label { font-size: 12.5px; font-weight: 600; letter-spacing: 0.1px; }
+  .tab-sub   { font-size: 10.5px; opacity: 0.75; }
+  .tab-btn.active .tab-sub,
+  .tab-btn.done   .tab-sub { opacity: 0.95; }
+
+  /* Tab content panels */
+  .stage-tab-content { display: none; }
+  .stage-tab-content.tab-visible { display: block; }
+
+  /* ─── "Step N of 5" banner at the top of every panel ──────────── */
+  .step-indicator {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px;
+    margin: 14px 0 16px;
+    background: linear-gradient(135deg, #21295C 0%, #2E3A7B 100%);
+    color: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(33,41,92,0.18);
+  }
+  .step-indicator .step-num-big {
+    flex: 0 0 auto;
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.18);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 700;
+    border: 2px solid rgba(255,255,255,0.4);
+  }
+  .step-indicator .step-text {
+    flex: 1; min-width: 0;
+  }
+  .step-indicator .step-of {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 2px;
+    opacity: 0.75; margin-bottom: 2px;
+  }
+  .step-indicator .step-name {
+    font-size: 18px; font-weight: 700; line-height: 1.2;
+  }
+  .step-indicator .step-hint {
+    font-size: 12px; opacity: 0.9; margin-top: 4px;
+  }
+  .step-indicator .step-state-chip {
+    flex: 0 0 auto;
+    background: rgba(255,255,255,0.15);
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 11px; font-weight: 600;
+    border: 1px solid rgba(255,255,255,0.25);
+  }
+
+  /* Dashboard step indicator — different colour scheme */
+  .step-indicator.dash {
+    background: linear-gradient(135deg, #065A82 0%, #1C7293 100%);
+  }
+
+  /* ─── Progress bar below tab nav ─────────────────────────────── */
+  .pipeline-progress {
+    display: flex;
+    height: 4px;
+    background: #EAEEF5;
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .pipeline-progress-seg {
+    flex: 1;
+    background: #EAEEF5;
+    transition: background .3s ease;
+    position: relative;
+  }
+  .pipeline-progress-seg + .pipeline-progress-seg { margin-left: 2px; }
+  .pipeline-progress-seg.done    { background: #0F8A4D; }
+  .pipeline-progress-seg.active  { background: #21295C; animation: pulseProgress 1.8s ease-in-out infinite; }
+  @keyframes pulseProgress {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.5; }
+  }
+  /* Smooth fade on switch */
+  .stage-tab-content.tab-visible { animation: tabFadeIn .25s ease both; }
+  @keyframes tabFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ─── Dashboard styles ───────────────────────────────────────────────── */
+  .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .dash-card {
+    background: white;
+    border: 1px solid #E1E5EE;
+    border-radius: 12px;
+    padding: 16px;
+    transition: all .18s ease;
+  }
+  .dash-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(33,41,92,0.08); border-color: #C2CCE0; }
+  .dash-card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #6A7591; font-weight: 600; margin-bottom: 6px; }
+  .dash-card-value { font-size: 22px; font-weight: 700; color: #21295C; line-height: 1.15; }
+  .dash-card-sub   { font-size: 11px; color: #6A7591; margin-top: 4px; }
+
+  .dash-section-header {
+    font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+    color: #21295C; margin: 24px 0 10px;
+    padding-bottom: 6px; border-bottom: 2px solid #E1E5EE;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .dash-timeline { position: relative; padding-left: 20px; margin-top: 12px; }
+  .dash-timeline::before {
+    content: ''; position: absolute; left: 6px; top: 6px; bottom: 6px;
+    width: 2px; background: linear-gradient(to bottom, #21295C 0%, #4ECDC4 100%);
+  }
+  .dash-timeline-item {
+    position: relative; padding: 6px 0 10px 16px;
+    border-bottom: 1px dashed #E5E9F0;
+  }
+  .dash-timeline-item:last-child { border-bottom: none; }
+  .dash-timeline-item::before {
+    content: ''; position: absolute; left: -18px; top: 10px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: white; border: 2px solid #21295C;
+  }
+  .dash-timeline-item.event-prepay::before  { border-color: #F4A261; background: #FFF4E6; }
+  .dash-timeline-item.event-default::before { border-color: #E76F51; background: #FFE9E4; }
+  .dash-timeline-item.event-writeoff::before{ border-color: #C44536; background: #FFD9D6; }
+  .dash-timeline-item.event-recovery::before{ border-color: #0F8A4D; background: #DFF5E8; }
+  .dash-timeline-item.event-cure::before    { border-color: #4ECDC4; background: #E0F7F5; }
+  .dash-timeline-item.event-drawdown::before{ border-color: #21295C; background: #DDE3F2; }
+  .dash-timeline-item.event-maturity::before{ border-color: #6A7591; background: #E5E9F0; }
+  .dash-timeline-date { font-size: 11px; font-weight: 600; color: #6A7591; }
+  .dash-timeline-title { font-size: 13px; font-weight: 600; color: #21295C; margin-top: 1px; }
+  .dash-timeline-detail { font-size: 11.5px; color: #4B5563; margin-top: 2px; }
+
+  /* ─── Chart styles ────────────────────────────────────────────────── */
+  .dash-charts {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  @media (max-width: 900px) { .dash-charts { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: white;
+    border: 1px solid #E1E5EE;
+    border-radius: 12px;
+    padding: 16px;
+    transition: all .18s ease;
+  }
+  .chart-card:hover { box-shadow: 0 6px 18px rgba(33,41,92,0.07); }
+  .chart-card-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1px; color: #21295C; margin-bottom: 12px;
+  }
+  .chart-card-sub {
+    font-size: 11px; color: #6A7591; margin-top: -8px; margin-bottom: 12px;
+  }
+  .chart-svg { width: 100%; height: auto; display: block; }
+  .chart-axis-text { font-size: 9.5px; fill: #6A7591; font-family: Helvetica, Arial, sans-serif; }
+  .chart-grid-line { stroke: #EAEEF5; stroke-width: 1; stroke-dasharray: 2,3; }
+  .chart-axis-line { stroke: #C2CCE0; stroke-width: 1; }
+  .chart-legend {
+    display: flex; gap: 14px; flex-wrap: wrap;
+    font-size: 11px; color: #4B5563; margin-top: 8px;
+  }
+  .chart-legend-sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
   .mat-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; font-weight:500; font-size:13px; transition:all .15s; cursor:pointer; }
   .mat-btn.primary { background:var(--brand); color:white; }
   .mat-btn.primary:hover { background:var(--brand-800); }
@@ -93,8 +316,60 @@
 
 <main class="max-w-[1400px] mx-auto px-6 py-5 space-y-3">
 
+<!-- ─── Tab navigation — sticky, replaces vertical scroll between stages ─── -->
+<nav class="tab-nav" id="stage-tab-nav" role="tablist" aria-label="Pipeline stages">
+  <button class="tab-btn active" data-tab="stage-1" role="tab" aria-selected="true">
+    <span class="tab-num">1</span>
+    <span class="tab-label">PortF Inbound</span>
+    <span class="tab-sub" id="tabsub-stage-1">Awaiting payload</span>
+  </button>
+  <button class="tab-btn" data-tab="stage-2" role="tab" aria-selected="false">
+    <span class="tab-num">2</span>
+    <span class="tab-label">PCS / Accounting Engine</span>
+    <span class="tab-sub" id="tabsub-stage-2">Awaiting Stage 1</span>
+  </button>
+  <button class="tab-btn" data-tab="stage-3" role="tab" aria-selected="false">
+    <span class="tab-num">3</span>
+    <span class="tab-label">Workday Outbound</span>
+    <span class="tab-sub" id="tabsub-stage-3">Awaiting JEs</span>
+  </button>
+  <button class="tab-btn" data-tab="stage-4" role="tab" aria-selected="false">
+    <span class="tab-num">4</span>
+    <span class="tab-label">Workday Cash Inbound</span>
+    <span class="tab-sub" id="tabsub-stage-4">Awaiting actuals</span>
+  </button>
+  <button class="tab-btn" data-tab="stage-5" role="tab" aria-selected="false">
+    <span class="tab-num">5</span>
+    <span class="tab-label">Reconciliation + Feedback</span>
+    <span class="tab-sub" id="tabsub-stage-5">Awaiting Stage 4</span>
+  </button>
+  <button class="tab-btn" data-tab="dashboard" role="tab" aria-selected="false" style="margin-left:auto">
+    <span class="tab-num">📊</span>
+    <span class="tab-label">Dashboard</span>
+    <span class="tab-sub" id="tabsub-dashboard">Loan overview</span>
+  </button>
+</nav>
+
+<!-- Pipeline progress bar — segment per stage; current step pulses ──────── -->
+<div class="pipeline-progress" id="pipeline-progress" aria-hidden="true">
+  <div class="pipeline-progress-seg active" data-seg="stage-1"></div>
+  <div class="pipeline-progress-seg" data-seg="stage-2"></div>
+  <div class="pipeline-progress-seg" data-seg="stage-3"></div>
+  <div class="pipeline-progress-seg" data-seg="stage-4"></div>
+  <div class="pipeline-progress-seg" data-seg="stage-5"></div>
+</div>
+
 <!-- ===== STAGE 1: PortF Inbound ===== -->
-<section id="stage-1" class="stage-card p-5">
+<section id="stage-1" class="stage-card stage-tab-content tab-visible p-5">
+  <div class="step-indicator">
+    <div class="step-num-big">1</div>
+    <div class="step-text">
+      <div class="step-of">Step 1 of 5 · You are here</div>
+      <div class="step-name">PortF Inbound</div>
+      <div class="step-hint">Load PortF cashflow data — JSON paste, Excel upload, or "Use Active Deal as Sample"</div>
+    </div>
+    <span class="step-state-chip" id="step-state-1">Awaiting payload</span>
+  </div>
   <div class="flex items-start gap-3 mb-3 flex-wrap">
     <span class="stage-num">1</span>
     <div class="flex-1">
@@ -151,7 +426,16 @@
 <div class="stage-arrow"><span class="material-icons-outlined text-[28px]">south</span></div>
 
 <!-- ===== STAGE 2: PCS Accounting Engine ===== -->
-<section id="stage-2" class="stage-card p-5">
+<section id="stage-2" class="stage-card stage-tab-content p-5">
+  <div class="step-indicator">
+    <div class="step-num-big">2</div>
+    <div class="step-text">
+      <div class="step-of">Step 2 of 5 · You are here</div>
+      <div class="step-name">PCS / Investran — Accounting Engine</div>
+      <div class="step-hint">Apply framework (IFRS / US GAAP / ASPE), compute EIR / ECL / FV, generate balanced journal entries</div>
+    </div>
+    <span class="step-state-chip" id="step-state-2">Awaiting Stage 1</span>
+  </div>
   <div class="flex items-start gap-3 mb-3 flex-wrap">
     <span class="stage-num">2</span>
     <div class="flex-1">
@@ -215,6 +499,30 @@
         Priority order if unspecified: <b>Override → PRICE → Generic → Custom</b>.
         IRR/XIRR removed per spec (Folder 1).
         IFRS / ASPE deals use the standard bisection solver and ignore this control.
+      </div>
+    </div>
+    <!-- Section 0-tris — OID / Premium treatment (Transtype #1) ──
+         When PP ≠ FV, the difference is OID (PP<FV) or premium (PP>FV) and
+         accretes to face over the loan's life. Engine generates a separate
+         "Discount Accretion" JE pair distinct from the EIR fee accretion. -->
+    <div id="oid-treatment-section" class="bg-white border border-indigo-200 rounded p-2 mb-3" style="display:none">
+      <div class="flex items-center gap-3 flex-wrap mb-1">
+        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">OID / Premium Treatment</label>
+        <select id="opt-oid-treatment" class="border border-gray-300 rounded px-2 py-1 text-sm bg-white">
+          <option value="auto">Auto — infer from PP vs Face (recommended)</option>
+          <option value="oid">Force OID (discount accretion)</option>
+          <option value="premium">Force premium amortisation</option>
+          <option value="none">None — no OID/premium treatment</option>
+        </select>
+        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">Method</label>
+        <select id="opt-oid-method" class="border border-gray-300 rounded px-2 py-1 text-sm bg-white">
+          <option value="effective-interest">Effective interest (IFRS 9 §B5.4 / ASC 310-20)</option>
+          <option value="straight-line">Straight-line (simpler approximation)</option>
+        </select>
+        <span id="oid-status-chip" class="chip gray text-[10px]">—</span>
+      </div>
+      <div class="text-[11px] text-gray-600">
+        Engine emits a separate <b>Discount Accretion</b> / <b>Premium Amortisation</b> JE pair routing through 421000 income (with offset to 141000 carrying). Distinct from the EIR fee accretion JE so auditors can see each driver. Daily column <code>amortDaily</code> in the schedule view.
       </div>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -402,6 +710,438 @@
           </div>
         </div>
         <div id="mod-events-list" class="text-[11px]"></div>
+      </div>
+
+      <!-- ─────────── Tier 1 Transtype Editor (#3–#12) ─────────── -->
+      <!-- Editable inline injectors for the Tier 1 lifecycle transtypes that
+           previously had no UI affordance. Tier 1 #1 (OID) and #2 (Premium)
+           are already exposed via the Section 0-tris dropdown above; this
+           section covers the remaining Tier 1 events #3–#12. -->
+      <div class="mt-3 pt-3 border-t-2 border-indigo-200">
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="material-icons-outlined text-[16px]" style="color:#4338ca">timeline</span>
+          <h4 class="text-[12px] font-bold text-indigo-900">Tier 1 Transtypes — Loan Lifecycle Events</h4>
+          <span class="text-[10px] text-indigo-700">Mid-period Purchase · Prepayment · Penalty · Default · Write-off · Recovery · Cure · Forbearance · Cap. Costs</span>
+        </div>
+
+        <!-- ─── Transtype #3 — Mid-Period Purchase (accrued interest at trade) ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Mid-Period Purchase</span>
+            <span id="t3-status-chip" class="chip gray text-[10px]">no trade accrual</span>
+            <span class="text-[10px] text-gray-500 italic">Accrued-but-unpaid interest paid to seller at trade date — booked as receivable, clears on next coupon</span>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-1">
+            <div>
+              <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Trade Accrued Interest (paid at trade)</label>
+              <input id="opt-t3-accrued" type="number" min="0" step="100" class="w-full border border-gray-300 rounded px-2 py-1 text-[12px] bg-white" placeholder="e.g. 12500"/>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── Transtype #4 — Prepayment ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Prepayment (voluntary)</span>
+            <span id="t4-status-chip" class="chip gray text-[10px]">no prepayment</span>
+            <span class="text-[10px] text-gray-500 italic">Voluntary early repayment — penalty (if any) auto-applied from #5 schedule below</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Date</label><input id="opt-t4-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Amount</label><input id="opt-t4-amount" type="number" min="0" step="100" placeholder="e.g. 3,000,000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-40"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Reason (optional)</label><input id="opt-t4-reason" type="text" placeholder="e.g. Covenant amendment refi" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-64"/></div>
+            <button id="btn-t4-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">fast_rewind</span>Add prepayment</button>
+            <button id="btn-t4-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t4-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #5 — Prepayment Penalty Schedule ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Prepayment Penalty Schedule</span>
+            <span id="t5-status-chip" class="chip gray text-[10px]">no penalty schedule</span>
+            <span class="text-[10px] text-gray-500 italic">Time-banded penalty rate (e.g. 2.0% Yr1, 1.0% Yr2, 0% thereafter)</span>
+            <div class="ml-auto flex gap-2">
+              <button id="btn-t5-add" class="mat-btn outline !py-1 !px-2 text-[11px]" title="Add default 3-band penalty schedule"><span class="material-icons-outlined text-[14px]">add</span>Add 3-band schedule</button>
+              <button id="btn-t5-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+            </div>
+          </div>
+          <div id="t5-schedule-list" class="text-[11px]"></div>
+        </div>
+
+        <!-- ─── Transtype #6/#7 — Default Interest / Default Fee ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Default Interest &amp; Default Fee</span>
+            <span id="t67-status-chip" class="chip gray text-[10px]">no default event</span>
+            <span class="text-[10px] text-gray-500 italic">Covenant breach triggers penalty rate (+bps) and a one-off default fee</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Date</label><input id="opt-t67-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Default rate (bps)</label><input id="opt-t67-bps" type="number" min="0" step="25" placeholder="e.g. 200" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-28"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Default fee amount</label><input id="opt-t67-fee" type="number" min="0" step="100" placeholder="e.g. 10000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-36"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Reason (optional)</label><input id="opt-t67-reason" type="text" placeholder="e.g. Leverage covenant breach" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-64"/></div>
+            <button id="btn-t67-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">warning</span>Add default event</button>
+            <button id="btn-t67-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t67-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #8 — Write-Off ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Write-Off (Stage 3 derecognition)</span>
+            <span id="t8-status-chip" class="chip gray text-[10px]">no write-off</span>
+            <span class="text-[10px] text-gray-500 italic">Allowance absorbs first, residual hits P&amp;L · IFRS 9 §5.4.4 / ASC 326-20-35-8</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Date</label><input id="opt-t8-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Amount</label><input id="opt-t8-amount" type="number" min="0" step="100" placeholder="default = full balance" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-40"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Reason (optional)</label><input id="opt-t8-reason" type="text" placeholder="e.g. Borrower insolvency" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-64"/></div>
+            <button id="btn-t8-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">cancel</span>Add write-off</button>
+            <button id="btn-t8-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t8-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #9 — Recovery ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Recovery (post-write-off)</span>
+            <span id="t9-status-chip" class="chip gray text-[10px]">no recovery</span>
+            <span class="text-[10px] text-gray-500 italic">Cash recovered after write-off — reverses prior impairment expense</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Date</label><input id="opt-t9-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Recovery amount</label><input id="opt-t9-amount" type="number" min="0" step="100" placeholder="e.g. 2,500,000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-40"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Reason (optional)</label><input id="opt-t9-reason" type="text" placeholder="e.g. Bankruptcy estate distribution" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-64"/></div>
+            <button id="btn-t9-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">savings</span>Add recovery</button>
+            <button id="btn-t9-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t9-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #10 — Cure / Stage Reversal ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Cure (Stage 2→1 or 3→2)</span>
+            <span id="t10-status-chip" class="chip gray text-[10px]">no cure</span>
+            <span class="text-[10px] text-gray-500 italic">Borrower returns to performing — release ECL allowance to P&amp;L</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Date</label><input id="opt-t10-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Release amount</label><input id="opt-t10-amount" type="number" min="0" step="10" placeholder="e.g. 50000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-36"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Reason (optional)</label><input id="opt-t10-reason" type="text" placeholder="e.g. Stage 2 → 1 return to performing" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-64"/></div>
+            <button id="btn-t10-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">healing</span>Add cure</button>
+            <button id="btn-t10-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t10-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #11 — Forbearance ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Forbearance (Payment Holiday)</span>
+            <span id="t11-status-chip" class="chip gray text-[10px]">no forbearance</span>
+            <span class="text-[10px] text-gray-500 italic">Payment holiday — defers expected interest into 40100 reclass</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Date</label><input id="opt-t11-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Deferred interest</label><input id="opt-t11-amount" type="number" min="0" step="100" placeholder="e.g. 175000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-36"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Reason (optional)</label><input id="opt-t11-reason" type="text" placeholder="e.g. 6-month COVID forbearance" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-64"/></div>
+            <button id="btn-t11-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">pause_circle</span>Add forbearance</button>
+            <button id="btn-t11-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t11-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #12 — Capitalised Origination Costs ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Capitalised Origination Costs</span>
+            <span id="t12-status-chip" class="chip gray text-[10px]">no capitalised cost</span>
+            <span class="text-[10px] text-gray-500 italic">Legal / transaction / valuation costs paid at signing — capitalised into 141000 per IFRS 9 §B5.4 / ASC 310-20-25-2</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Date</label><input id="opt-t12-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Amount</label><input id="opt-t12-amount" type="number" min="0" step="100" placeholder="e.g. 150000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-36"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Category</label><input id="opt-t12-category" type="text" placeholder="e.g. legal + transaction" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-48"/></div>
+            <button id="btn-t12-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">receipt_long</span>Add capitalised cost</button>
+            <button id="btn-t12-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t12-events-list" class="text-[11px] mt-1"></div>
+        </div>
+      </div>
+
+      <!-- ─────────── Tier 2 Transtype Editor (#13–#18) ─────────── -->
+      <!-- Editable inline injectors for the six Tier 2 transtypes added
+           after the Tier 1 lifecycle (OID through Capitalised Costs). Each
+           sub-panel shows the current state on the active deal, a status
+           chip, and inline buttons to add a test event so the auditor can
+           watch a JE pair flow through the engine to the DIU export. -->
+      <div class="mt-3 pt-3 border-t-2 border-indigo-200">
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="material-icons-outlined text-[16px]" style="color:#4338ca">swap_horiz</span>
+          <h4 class="text-[12px] font-bold text-indigo-900">Tier 2 Transtypes — Disposal · Restructuring · Timing</h4>
+          <span class="text-[10px] text-indigo-700">Loan Sale · Participation · D4E · Mandatory Prepay · Amort Profile · Trade Date · Multiple events supported where it makes sense</span>
+        </div>
+
+        <!-- ─── Transtype #13 — Loan Sale (Full Derecognition) ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Loan Sale (Full Derecognition)</span>
+            <span id="t13-status-chip" class="chip gray text-[10px]">no sale event</span>
+            <span class="text-[10px] text-gray-500 italic">IFRS 9 §3.2.3 / ASC 860 — derecognise entire loan, recognise gain/loss on disposal</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Sale date</label><input id="opt-t13-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Sale price</label><input id="opt-t13-amount" type="number" min="0" step="100" placeholder="e.g. 9,500,000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-44"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Reason (optional)</label><input id="opt-t13-reason" type="text" placeholder="e.g. Portfolio rebalancing" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-64"/></div>
+            <button id="btn-t13-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">sell</span>Add loan sale</button>
+            <button id="btn-t13-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t13-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #14 — Loan Participation (Partial Sell-Down) ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Loan Participation (Partial Sell-Down)</span>
+            <span id="t14-status-chip" class="chip gray text-[10px]">no participation</span>
+            <span class="text-[10px] text-gray-500 italic">IFRS 9 §3.2.6 — fully proportionate share transfer test</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Date</label><input id="opt-t14-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Fraction sold (%)</label><input id="opt-t14-fraction" type="number" min="1" max="99" step="1" placeholder="e.g. 50" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-24"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Sale price</label><input id="opt-t14-amount" type="number" min="0" step="100" placeholder="e.g. 10,050,000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-44"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Participant (optional)</label><input id="opt-t14-participant" type="text" placeholder="e.g. Pacific Credit Partners" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-52"/></div>
+            <button id="btn-t14-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">pie_chart</span>Add participation</button>
+            <button id="btn-t14-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t14-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #15 — Debt-for-Equity Swap ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Debt-for-Equity Swap</span>
+            <span id="t15-status-chip" class="chip gray text-[10px]">no D4E swap</span>
+            <span class="text-[10px] text-gray-500 italic">IFRIC 19 / ASC 470-50-40 — extinguish loan, recognise equity at FV, restructuring loss</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Swap date</label><input id="opt-t15-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Equity fair value</label><input id="opt-t15-equityfv" type="number" min="0" step="100" placeholder="e.g. 9,000,000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-44"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Shares received (optional)</label><input id="opt-t15-shares" type="number" min="0" step="1" placeholder="e.g. 1500000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-36"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Reason (optional)</label><input id="opt-t15-reason" type="text" placeholder="e.g. Restructuring agreement" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-64"/></div>
+            <button id="btn-t15-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">swap_horizontal_circle</span>Add D4E swap</button>
+            <button id="btn-t15-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t15-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #16 — Mandatory Prepayment (Covenant-Triggered) ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Mandatory Prepayment (Covenant-Triggered)</span>
+            <span id="t16-status-chip" class="chip gray text-[10px]">no mandatory prepay</span>
+            <span class="text-[10px] text-gray-500 italic">Change-of-control · excess cash flow · asset sale · IPO · insurance — usually waives penalty</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Date</label><input id="opt-t16-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Amount</label><input id="opt-t16-amount" type="number" min="0" step="100" placeholder="default = full balance" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-44"/></div>
+            <div>
+              <label class="text-[10px] uppercase text-gray-600 block">Trigger reason</label>
+              <select id="t16-trigger-select" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white">
+                <option value="changeOfControl">Change-of-control</option>
+                <option value="excessCashFlow">Excess cash flow sweep</option>
+                <option value="assetSale">Asset sale proceeds</option>
+                <option value="ipo">IPO proceeds</option>
+                <option value="insurance">Insurance / condemnation</option>
+              </select>
+            </div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Reason (optional)</label><input id="opt-t16-reason" type="text" placeholder="e.g. Acquired by Globex" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-52"/></div>
+            <button id="btn-t16-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">fast_rewind</span>Add mandatory prepay</button>
+            <button id="btn-t16-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t16-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #17 — Amortisation Profile ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Amortisation Profile</span>
+            <span id="t17-status-chip" class="chip gray text-[10px]">bullet (default)</span>
+            <span class="text-[10px] text-gray-500 italic">Engine auto-generates the principalSchedule from the profile spec</span>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-1">
+            <div>
+              <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Profile Kind</label>
+              <select id="opt-amort-profile-kind" class="w-full border border-gray-300 rounded px-2 py-1 text-[12px] bg-white">
+                <option value="bullet">Bullet (single repayment at maturity)</option>
+                <option value="levelPrincipal">Level Principal (equal $X each period)</option>
+                <option value="annuity">Annuity (equal PMT, P+I combined)</option>
+                <option value="ioBalloon">IO + Balloon (interest-only then bullet)</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Frequency</label>
+              <select id="opt-amort-profile-freq" class="w-full border border-gray-300 rounded px-2 py-1 text-[12px] bg-white">
+                <option value="M">Monthly</option>
+                <option value="Q">Quarterly</option>
+                <option value="S">Semi-annual</option>
+                <option value="A">Annual</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">IO Months (ioBalloon)</label>
+              <input id="opt-amort-profile-io" type="number" min="0" step="1" class="w-full border border-gray-300 rounded px-2 py-1 text-[12px] bg-white" placeholder="0"/>
+            </div>
+            <div>
+              <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Balloon Amount</label>
+              <input id="opt-amort-profile-balloon" type="number" min="0" step="100" class="w-full border border-gray-300 rounded px-2 py-1 text-[12px] bg-white" placeholder="0"/>
+            </div>
+          </div>
+          <div class="text-[11px] text-gray-600 mt-2">Profile expands at <code>buildSchedule()</code> entry; only fires when <code>principalSchedule[]</code> has no explicit paydowns. User-supplied schedules always win.</div>
+        </div>
+
+        <!-- ─── Transtype #19 — Period-End Reversing Entries ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Period-End Reversing Entries</span>
+            <span id="t19-status-chip" class="chip gray text-[10px]">disabled</span>
+            <span class="text-[10px] text-gray-500 italic">Standard month-end-close pattern — accrual JEs auto-reverse on day 1 of next period</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div>
+              <label class="text-[10px] uppercase text-gray-600 block">Policy</label>
+              <select id="opt-t19-policy" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white">
+                <option value="false">Off — accruals stay on the books</option>
+                <option value="true">On — every accrual gets a reversing twin on next day</option>
+              </select>
+            </div>
+          </div>
+          <div class="text-[11px] text-gray-600 mt-2">When enabled, the engine scans each accrual JE posted on <code>summary.periodEnd</code> (interest, PIK, fee, default int/fee, EIR accretion, non-use fee) and emits a flipped DR/CR twin on day 1 of the next period with a <code>Reversing — </code> prefix. The cash receipt JE then books the full amount to income in the new period.</div>
+        </div>
+
+        <!-- ─── Transtype #18 — Trade-Date Accounting ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Trade vs Settlement Date Accounting</span>
+            <span id="t18-status-chip" class="chip gray text-[10px]">settlement-date (default)</span>
+            <span class="text-[10px] text-gray-500 italic">IFRS 9 §B3.1.5 — recognise asset on trade date or settlement date</span>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-1">
+            <div>
+              <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Method</label>
+              <select id="opt-trade-method" class="w-full border border-gray-300 rounded px-2 py-1 text-[12px] bg-white">
+                <option value="settlementDate">Settlement-date (default for loans)</option>
+                <option value="tradeDate">Trade-date (with unsettled trade payable)</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Trade Date</label>
+              <input id="opt-trade-date" type="date" class="w-full border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/>
+            </div>
+            <div>
+              <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mb-1 block">Settle Date (read-only)</label>
+              <input id="opt-trade-settle" type="date" disabled class="w-full border border-gray-200 rounded px-2 py-1 text-[12px] bg-gray-50 text-gray-500"/>
+            </div>
+          </div>
+          <div class="text-[11px] text-gray-600 mt-2">When method = trade-date AND tradeDate &lt; settle: engine emits a pre-recognition pair (DR 141000 / CR 232000) on trade date and its reversal on settle. Net asset balance after settlement is unchanged.</div>
+        </div>
+
+        <!-- ─── Transtype #20 — Hedge De-Designation ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Hedge De-Designation</span>
+            <span id="t20-status-chip" class="chip gray text-[10px]">no de-designation</span>
+            <span class="text-[10px] text-gray-500 italic">IFRS 9 §6.5.6 — discontinue hedge accounting; OCI amortises to P&amp;L over remaining life</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">De-designation date</label><input id="opt-t20-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Reason (optional)</label><input id="opt-t20-reason" type="text" placeholder="e.g. Portfolio realignment" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-64"/></div>
+            <button id="btn-t20-set" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">link_off</span>Set de-designation</button>
+            <button id="btn-t20-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div class="text-[11px] text-gray-600 mt-2">Requires the deal to have a hedge designated. Engine freezes new OCI accumulation and starts daily straight-line amortisation of the existing CFH reserve from this date through maturity. Reclass JEs land in the dedicated "Hedge Reserve Reclass — De-Designation Amortisation" transtype.</div>
+        </div>
+
+        <!-- ─── Transtype #21 — CFH Reclassification Surfacing ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">CFH Reclassification Transtype</span>
+            <span id="t21-status-chip" class="chip gray text-[10px]">n/a — no hedge on deal</span>
+            <span class="text-[10px] text-gray-500 italic">Read-only — splits CFH reserve recycling from raw coupon income in P&amp;L disclosure</span>
+          </div>
+          <div id="t21-info" class="text-[11px] text-gray-600 mt-2">When this deal's hedge reserve is reclassified to P&amp;L, the JE lands on a dedicated transtype that distinguishes "CFH Reserve Recycling" (settlement-driven, IFRS 9 §6.5.11) from "Hedge Reserve Reclass — De-Designation Amortisation" (post de-designation, IFRS 9 §6.5.6). Both route to <code>421000</code> but with separate transtype labels for IFRS 7 §24A-B disclosures.</div>
+        </div>
+
+        <!-- ─── Transtype #22 — FX Hedge of Loan Principal ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">FX Hedge of Loan Principal</span>
+            <span id="t22-status-chip" class="chip gray text-[10px]">n/a — no FXP hedge on deal</span>
+            <span class="text-[10px] text-gray-500 italic">IFRS 9 §6.5.16(c) — OCI routes to FX Hedge Reserve (370000), basis to Cost of Hedging (375000)</span>
+          </div>
+          <div id="t22-info" class="text-[11px] text-gray-600 mt-2">When this deal's hedge has <code>type: 'FXP'</code> or <code>subType: 'fxPrincipal'</code>, the OCI emission routes to a dedicated FX Hedge Reserve account instead of the generic CFH Reserve (360000). The JE label includes "(FX Principal)" so reports can isolate FX-hedge OCI from interest-rate-hedge OCI.</div>
+        </div>
+
+        <!-- ─── Transtype #23 — Allowance Reversal (Without Stage Change) ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Allowance Reversal — Model Recalibration</span>
+            <span id="t23-status-chip" class="chip gray text-[10px]">no model reversal</span>
+            <span class="text-[10px] text-gray-500 italic">Same mechanic as cure (#10) — distinct transtype for IFRS 7 §35F ECL roll-forward</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Date</label><input id="opt-t23-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Release amount</label><input id="opt-t23-amount" type="number" min="0" step="100" placeholder="e.g. 50000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-36"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Reason (optional)</label><input id="opt-t23-reason" type="text" placeholder="e.g. Macro overlay recalibration" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-64"/></div>
+            <button id="btn-t23-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">tune</span>Add reversal</button>
+            <button id="btn-t23-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t23-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #24 — Loan-Loss Recovery Allocation ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Recovery Allocation Buckets</span>
+            <span id="t24-status-chip" class="chip gray text-[10px]">no allocated recovery</span>
+            <span class="text-[10px] text-gray-500 italic">IFRS 7 §35K — split recovery cash between principal / default int / default fee / legal</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div><label class="text-[10px] uppercase text-gray-600 block">Date</label><input id="opt-t24-date" type="date" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Principal</label><input id="opt-t24-principal" type="number" min="0" step="100" placeholder="e.g. 1800000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-32"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Default Int</label><input id="opt-t24-defint" type="number" min="0" step="100" placeholder="e.g. 600000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-32"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Default Fee</label><input id="opt-t24-deffee" type="number" min="0" step="100" placeholder="e.g. 450000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-32"/></div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Legal</label><input id="opt-t24-legal" type="number" min="0" step="100" placeholder="e.g. 150000" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white w-28"/></div>
+            <button id="btn-t24-add" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">account_tree</span>Add allocated recovery</button>
+            <button id="btn-t24-clear" class="mat-btn outline !py-1 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">clear</span>Clear</button>
+          </div>
+          <div id="t24-events-list" class="text-[11px] mt-1"></div>
+        </div>
+
+        <!-- ─── Transtype #25 — Revolver Origination Cost Deferral ─── -->
+        <div class="bg-white border border-indigo-200 rounded p-2 mb-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="text-[11px] font-bold text-indigo-900">Revolver Origination Cost Deferral</span>
+            <span id="t25-status-chip" class="chip gray text-[10px]">maturity basis (default)</span>
+            <span class="text-[10px] text-gray-500 italic">ASC 310-20-25-19 — revolver origination costs amortise over commitment period, not maturity</span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap mt-1">
+            <div>
+              <label class="text-[10px] uppercase text-gray-600 block">Deferral Basis</label>
+              <select id="opt-t25-basis" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white">
+                <option value="maturity">Maturity (term-loan default)</option>
+                <option value="commitment">Commitment period (revolver — ASC 310-20-25-19)</option>
+              </select>
+            </div>
+            <div><label class="text-[10px] uppercase text-gray-600 block">Availability End (read-only)</label><input id="opt-t25-availend" type="date" disabled class="border border-gray-200 rounded px-2 py-1 text-[12px] bg-gray-50 text-gray-500"/></div>
+          </div>
+          <div class="text-[11px] text-gray-600 mt-2">When basis = commitment AND <code>availabilityEnd</code> is set, the engine emits a memo JE on settlement documenting the policy choice. The actual amortisation flows through the existing EIR mechanism — capitalised costs into 141000 carrying still happen on day 1 (#12), but reports show the shorter amort period.</div>
+        </div>
       </div>
 
       <!-- ─── PIK Override — contractual data, not accounting policy ─── -->
@@ -690,7 +1430,16 @@
 <div class="stage-arrow"><span class="material-icons-outlined text-[28px]">south</span></div>
 
 <!-- ===== STAGE 3: Workday Outbound (DIU) ===== -->
-<section id="stage-3" class="stage-card p-5">
+<section id="stage-3" class="stage-card stage-tab-content p-5">
+  <div class="step-indicator">
+    <div class="step-num-big">3</div>
+    <div class="step-text">
+      <div class="step-of">Step 3 of 5 · You are here</div>
+      <div class="step-name">Workday GL Outbound</div>
+      <div class="step-hint">Wrap journal entries into a DIU batch with a deterministic external key, then post to Workday</div>
+    </div>
+    <span class="step-state-chip" id="step-state-3">Awaiting JEs</span>
+  </div>
   <div class="flex items-start gap-3 mb-3 flex-wrap">
     <span class="stage-num">3</span>
     <div class="flex-1">
@@ -716,7 +1465,16 @@
 <div class="stage-arrow"><span class="material-icons-outlined text-[28px]">south</span></div>
 
 <!-- ===== STAGE 4: Workday Inbound (Actuals) ===== -->
-<section id="stage-4" class="stage-card p-5">
+<section id="stage-4" class="stage-card stage-tab-content p-5">
+  <div class="step-indicator">
+    <div class="step-num-big">4</div>
+    <div class="step-text">
+      <div class="step-of">Step 4 of 5 · You are here</div>
+      <div class="step-name">Workday Actual Cash — Inbound</div>
+      <div class="step-hint">Pull or synthesise actual cash settlements from Workday for the posted batch</div>
+    </div>
+    <span class="step-state-chip" id="step-state-4">Awaiting actuals</span>
+  </div>
   <div class="flex items-start gap-3 mb-3 flex-wrap">
     <span class="stage-num">4</span>
     <div class="flex-1">
@@ -749,7 +1507,16 @@
 <div class="stage-arrow"><span class="material-icons-outlined text-[28px]">south</span></div>
 
 <!-- ===== STAGE 5: Reconciliation + PortF Feedback ===== -->
-<section id="stage-5" class="stage-card p-5">
+<section id="stage-5" class="stage-card stage-tab-content p-5">
+  <div class="step-indicator">
+    <div class="step-num-big">5</div>
+    <div class="step-text">
+      <div class="step-of">Step 5 of 5 · You are here</div>
+      <div class="step-name">Reconciliation &amp; Feedback to PortF</div>
+      <div class="step-hint">Match PCS expected vs Workday actual line by line; route breaks back to PortF deal team</div>
+    </div>
+    <span class="step-state-chip" id="step-state-5">Awaiting Stage 4</span>
+  </div>
   <div class="flex items-start gap-3 mb-3 flex-wrap">
     <span class="stage-num">5</span>
     <div class="flex-1">
@@ -807,6 +1574,31 @@
   </div>
   <div class="text-[11px] text-gray-500 mt-3 leading-relaxed">
     PwC's risk methodology layer (IFRS 9 ECL, PD/LGD/EAD, RWA, stress testing) sits alongside this pipeline — risk inputs come from PortF deal data; outputs flow back into PortF for versioning and into PCS for ECL provisioning JEs (<code>470000 / 145000</code>).
+  </div>
+</section>
+
+<!-- ===== DASHBOARD: Loan-level overview ===== -->
+<section id="dashboard" class="stage-card stage-tab-content p-5">
+  <div class="step-indicator dash">
+    <div class="step-num-big">📊</div>
+    <div class="step-text">
+      <div class="step-of">Loan Overview · You are here</div>
+      <div class="step-name">Dashboard</div>
+      <div class="step-hint">Single-page snapshot of the loaded deal — KPIs, charts, lifecycle timeline, pipeline progress</div>
+    </div>
+    <span class="step-state-chip" id="step-state-dashboard">Live view</span>
+  </div>
+  <div class="flex items-start gap-3 mb-3 flex-wrap">
+    <span class="material-icons-outlined text-[26px]" style="color:#21295C">dashboard</span>
+    <div class="flex-1">
+      <h2 class="text-base font-bold">Loan Dashboard</h2>
+      <p class="text-[12px] text-gray-600 mt-1">
+        Single-deal overview: contractual snapshot, lifecycle events, journal-entry coverage, and accounting framework — all derived from the active deal selected at the top of the page.
+      </p>
+    </div>
+  </div>
+  <div id="dashboard-content" class="mt-4">
+    <div class="text-[12px] text-gray-500 italic">Pick a deal from the Active Deal dropdown to see its dashboard.</div>
   </div>
 </section>
 
@@ -2575,6 +3367,9 @@ function applyTreatmentFromForm(){
       inst.eirOverride = isNaN(v) ? null : v;
     }
   }
+  // OID treatment + method (Section 0-tris)
+  if($('opt-oid-treatment')) inst.oidTreatment = $('opt-oid-treatment').value;
+  if($('opt-oid-method'))    inst.oidMethod    = $('opt-oid-method').value;
   syncFrameworkChip(inst);
   inst.ifrs = inst.ifrs || {};
   // Classification + recognition
@@ -2774,6 +3569,28 @@ function syncFrameworkChip(inst){
     const selected = $('opt-eir-method') ? $('opt-eir-method').value : 'method2';
     eirOverrideWrap.style.display = (isUSGAAP && selected === 'override') ? '' : 'none';
   }
+  // OID Treatment section — visible only for US GAAP deals (Transtype #1)
+  const oidSection = $('oid-treatment-section');
+  if(oidSection) oidSection.style.display = isUSGAAP ? '' : 'none';
+  const oidChip = $('oid-status-chip');
+  if(oidChip && inst){
+    const pp = inst.purchasePrice || 0, fv = inst.faceValue || 0;
+    let t = (inst.oidTreatment || 'auto');
+    if(t === 'auto'){
+      t = (pp < fv - 0.01) ? 'oid' : (pp > fv + 0.01) ? 'premium' : 'none';
+    }
+    const oidAmt = fv - pp;
+    if(t === 'oid'){
+      oidChip.className = 'chip green text-[10px]';
+      oidChip.textContent = 'OID active · ' + (inst.currency || 'USD') + ' ' + Math.abs(oidAmt).toLocaleString();
+    } else if(t === 'premium'){
+      oidChip.className = 'chip amber text-[10px]';
+      oidChip.textContent = 'Premium active · ' + (inst.currency || 'USD') + ' ' + Math.abs(oidAmt).toLocaleString();
+    } else {
+      oidChip.className = 'chip gray text-[10px]';
+      oidChip.textContent = 'No OID/premium · PP = Face';
+    }
+  }
 }
 
 // Populate the treatment form from the instrument's current state
@@ -2786,6 +3603,9 @@ function loadTreatmentForm(){
   if($('opt-eir-method')) $('opt-eir-method').value = inst.eirMethod || 'method2';
   if($('opt-eir-override')) $('opt-eir-override').value =
       (typeof inst.eirOverride === 'number') ? inst.eirOverride : '';
+  // OID dropdowns (Section 0-tris · US GAAP only)
+  if($('opt-oid-treatment')) $('opt-oid-treatment').value = inst.oidTreatment || 'auto';
+  if($('opt-oid-method'))    $('opt-oid-method').value    = inst.oidMethod || 'effective-interest';
   syncFrameworkChip(inst);
   $('opt-ifrs9-class').value     = inst.ifrs?.ifrs9Classification || 'AmortisedCost';
   $('opt-business-model').value  = inst.ifrs?.businessModel        || 'HoldToCollect';
@@ -2870,6 +3690,8 @@ function loadTreatmentForm(){
   }
   $('treatment-modified-chip').classList.toggle('hidden', !M.treatmentDirty[inst.id]);
   renderModEventsList();
+  renderTier1StatusChips(inst);   // Tier 1 transtype chips + event lists (#3–#12)
+  renderTier2StatusChips(inst);   // Tier 2 transtype chips + event lists (#13–#18)
 }
 
 // ----- Modification event injector ------------------------------------
@@ -3011,6 +3833,814 @@ function clearMods(){
     toast('Cleared all modification events');
     onTreatmentChange();
   }
+}
+
+// ─── Tier 2 transtype injectors (#13–#18) ───────────────────────────
+// Each injector mutates the active instrument's principalSchedule, marks
+// the deal dirty so the Reset chip shows, re-renders the event list, and
+// triggers a downstream recalculation via onTreatmentChange().
+
+// Helper — compute a date X% through the life of the loan
+function lifecycleDate(inst, pct){
+  const s = new Date(inst.settlementDate).getTime();
+  const m = new Date(inst.maturityDate).getTime();
+  return new Date(s + (m - s) * pct).toISOString().slice(0, 10);
+}
+
+// Transtype #13 — Loan Sale (Full Derecognition). Reads date + sale price + reason.
+function addLoanSaleTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.principalSchedule = inst.principalSchedule || [];
+  inst.principalSchedule = inst.principalSchedule.filter(e => e.type !== 'loanSale');
+  const date   = readStr('opt-t13-date')   || lifecycleDate(inst, 0.30);
+  const sale   = readNum('opt-t13-amount') ?? Math.round((inst.faceValue || 0) * 0.95);
+  const reason = readStr('opt-t13-reason') || 'Loan sale to third party (IFRS 9 §3.2.3 full derecog)';
+  inst.principalSchedule.push({
+    date, type:'loanSale', salePrice: sale, eventId:'TEST_LS', status:'actual', reason
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('Loan sale added at ' + date + ' · $' + (sale/1e6).toFixed(2) + 'm');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Transtype #14 — Loan Participation. Accumulates (sell 25% to one party, 30% to another).
+function addParticipationTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.principalSchedule = inst.principalSchedule || [];
+  const date        = readStr('opt-t14-date')        || lifecycleDate(inst, 0.25);
+  const fractionPct = readNum('opt-t14-fraction')    ?? 50;
+  const fraction    = Math.max(0.01, Math.min(0.99, fractionPct/100));
+  const salePrice   = readNum('opt-t14-amount')      ?? Math.round((inst.faceValue || 0) * fraction);
+  const participant = readStr('opt-t14-participant') || 'Test Participant';
+  inst.principalSchedule.push({
+    date, type:'participation', fraction, salePrice, participant,
+    eventId: uniqueEventId('TEST_PT'), status:'actual',
+    reason: fractionPct + '% participation (IFRS 9 §3.2.6 fully proportionate share)'
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast(fractionPct + '% participation added at ' + date + ' · proceeds $' + (salePrice/1e6).toFixed(2) + 'm');
+  clearInputs('opt-t14-date','opt-t14-fraction','opt-t14-amount','opt-t14-participant');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Transtype #15 — Debt-for-Equity Swap. Reads date + equity FV + shares + reason.
+function addD4ESwapTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.principalSchedule = inst.principalSchedule || [];
+  inst.principalSchedule = inst.principalSchedule.filter(e => e.type !== 'debtEquitySwap');
+  const date     = readStr('opt-t15-date')     || lifecycleDate(inst, 0.50);
+  const equityFV = readNum('opt-t15-equityfv') ?? Math.round((inst.faceValue || 0) * 0.60);
+  const shares   = readNum('opt-t15-shares')   || undefined;
+  const reason   = readStr('opt-t15-reason')   || 'D4E swap — borrower issues equity to extinguish loan (IFRIC 19)';
+  inst.principalSchedule.push({
+    date, type:'debtEquitySwap', equityFairValue: equityFV, equityShares: shares,
+    eventId:'TEST_D4E', status:'actual', reason
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('D4E swap added at ' + date + ' · equity FV $' + (equityFV/1e6).toFixed(2) + 'm');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Transtype #16 — Mandatory Prepayment. Accumulates (annual ECF sweeps + ad-hoc events).
+function addMandatoryPrepayTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  const trigger = $('t16-trigger-select')?.value || 'changeOfControl';
+  inst.principalSchedule = inst.principalSchedule || [];
+  const date   = readStr('opt-t16-date')   || lifecycleDate(inst, 0.40);
+  const amount = readNum('opt-t16-amount') ?? (inst.faceValue || 0);
+  const reason = readStr('opt-t16-reason') || 'Mandatory prepayment — ' + trigger;
+  inst.principalSchedule.push({
+    date, type:'mandatoryPrepayment', amount, trigger,
+    eventId: uniqueEventId('TEST_MP'), status:'actual', reason
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('Mandatory prepayment added at ' + date + ' · $' + (amount/1e6).toFixed(2) + 'm · ' + trigger);
+  clearInputs('opt-t16-date','opt-t16-amount','opt-t16-reason');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Generic clear for any Tier 2 event type (loanSale | participation | debtEquitySwap | mandatoryPrepayment)
+function clearTier2Events(eventType){
+  const inst = currentInstrument();
+  if(!inst || !inst.principalSchedule) return;
+  const before = inst.principalSchedule.length;
+  inst.principalSchedule = inst.principalSchedule.filter(e => e.type !== eventType);
+  if(inst.principalSchedule.length === before) return;
+  M.treatmentDirty[inst.id] = true;
+  toast('Cleared all ' + eventType + ' events');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// ─── Tier 2 #20 — Hedge De-Designation ───
+function setHedgeDeDesignation(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  if(!inst.hedge){
+    toast('This deal has no hedge designated — cannot de-designate.');
+    return;
+  }
+  const date = readStr('opt-t20-date');
+  if(!date){ toast('Please pick a de-designation date'); return; }
+  if(date < inst.settlementDate || date > inst.maturityDate){
+    toast('De-designation date must fall within the loan life'); return;
+  }
+  inst.hedgeDeDesignationDate = date;
+  inst.hedgeDeDesignationReason = readStr('opt-t20-reason') || null;
+  M.treatmentDirty[inst.id] = true;
+  toast('Hedge de-designated on ' + date);
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+function clearHedgeDeDesignation(){
+  const inst = currentInstrument();
+  if(!inst || !inst.hedgeDeDesignationDate) return;
+  delete inst.hedgeDeDesignationDate;
+  delete inst.hedgeDeDesignationReason;
+  M.treatmentDirty[inst.id] = true;
+  toast('Cleared hedge de-designation — hedge accounting resumes');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// ─── Tier 2 #23 — Allowance Reversal (model recalibration) — multi-event ───
+function addAllowanceReversalTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.principalSchedule = inst.principalSchedule || [];
+  const date         = readStr('opt-t23-date')   || lifecycleDate(inst, 0.50);
+  const releaseAmount= readNum('opt-t23-amount') ?? 50_000;
+  const reason       = readStr('opt-t23-reason') || 'Model recalibration — macro overlay weight update (no stage change)';
+  inst.principalSchedule.push({
+    date, type:'allowanceReversal', releaseAmount,
+    eventId: uniqueEventId('TEST_AR'), status:'actual', reason
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('Allowance reversal added at ' + date + ' · release $' + (releaseAmount/1e3).toFixed(2) + 'k');
+  clearInputs('opt-t23-date','opt-t23-amount','opt-t23-reason');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// ─── Tier 2 #24 — Allocated Recovery — multi-event ───
+function addAllocatedRecoveryTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.principalSchedule = inst.principalSchedule || [];
+  const date       = readStr('opt-t24-date')      || lifecycleDate(inst, 0.80);
+  const principal  = readNum('opt-t24-principal') ?? 0;
+  const defaultInt = readNum('opt-t24-defint')    ?? 0;
+  const defaultFee = readNum('opt-t24-deffee')    ?? 0;
+  const legal      = readNum('opt-t24-legal')     ?? 0;
+  const total      = principal + defaultInt + defaultFee + legal;
+  if(total <= 0){ toast('At least one allocation bucket must be > 0'); return; }
+  inst.principalSchedule.push({
+    date, type:'recovery', amount: total,
+    eventId: uniqueEventId('TEST_AREC'), status:'actual',
+    reason: 'Allocated recovery — buckets specified',
+    allocation: { principal, defaultInt, defaultFee, legal }
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('Allocated recovery added at ' + date + ' · total $' + (total/1e6).toFixed(2) + 'm');
+  clearInputs('opt-t24-date','opt-t24-principal','opt-t24-defint','opt-t24-deffee','opt-t24-legal');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+function clearAllocatedRecoveries(){
+  const inst = currentInstrument();
+  if(!inst || !inst.principalSchedule) return;
+  const before = inst.principalSchedule.length;
+  // Only clear recovery events that have an `allocation` field — leave plain recoveries alone
+  inst.principalSchedule = inst.principalSchedule.filter(e => !(e.type === 'recovery' && e.allocation));
+  if(inst.principalSchedule.length === before) return;
+  M.treatmentDirty[inst.id] = true;
+  toast('Cleared all allocated recovery events');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Transtype #17/#18 — Profile + Trade-Date change handler. Reads the four
+// amortProfile inputs + the two trade-date inputs back onto the instrument.
+function onTier2ProfileChange(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  // Amort Profile (#17)
+  const kind = $('opt-amort-profile-kind')?.value || 'bullet';
+  if(kind === 'bullet'){
+    delete inst.amortProfile;
+  } else {
+    inst.amortProfile = {
+      kind,
+      frequency: $('opt-amort-profile-freq')?.value || 'Q',
+      ioMonths:  +($('opt-amort-profile-io')?.value)      || 0,
+      balloon:   +($('opt-amort-profile-balloon')?.value) || 0
+    };
+  }
+  // Trade-date (#18)
+  const tradeMethod = $('opt-trade-method')?.value || 'settlementDate';
+  const tradeDate   = $('opt-trade-date')?.value;
+  if(tradeMethod === 'tradeDate' && tradeDate){
+    inst.tradeAccountingMethod = 'tradeDate';
+    inst.tradeDate = tradeDate;
+  } else {
+    delete inst.tradeAccountingMethod;
+    delete inst.tradeDate;
+  }
+  // Reversing entries (#19)
+  const revPolicy = $('opt-t19-policy')?.value;
+  if(revPolicy === 'true'){
+    inst.useReversingEntries = true;
+  } else {
+    delete inst.useReversingEntries;
+  }
+  // Revolver cost deferral basis (#25)
+  const t25Basis = $('opt-t25-basis')?.value;
+  if(t25Basis === 'commitment'){
+    inst.revolverCostDeferralBasis = 'commitment';
+  } else {
+    delete inst.revolverCostDeferralBasis;
+  }
+  M.treatmentDirty[inst.id] = true;
+  // Repaint the status chips and re-run
+  renderTier2StatusChips(inst);
+  onTreatmentChange();
+}
+
+// Render the Tier 2 status chips + event lists. Called from loadTreatmentForm().
+function renderTier2StatusChips(inst){
+  if(!inst) return;
+  const sched = inst.principalSchedule || [];
+  const fmt = a => '$' + (a/1e6).toFixed(2) + 'm';
+
+  // #13 Loan Sale
+  const sale = sched.find(e => e.type === 'loanSale');
+  const chip13 = $('t13-status-chip'); const list13 = $('t13-events-list');
+  if(sale){
+    if(chip13){ chip13.className = 'chip green text-[10px]'; chip13.textContent = 'sale @ ' + sale.date + ' · ' + fmt(sale.salePrice||0); }
+    if(list13) list13.innerHTML = `<div class="bg-purple-50 border border-purple-200 rounded p-2 mt-1"><b>${sale.date}</b> · sale price <b>${fmt(sale.salePrice||0)}</b> · ${sale.reason || '—'}</div>`;
+  } else {
+    if(chip13){ chip13.className = 'chip gray text-[10px]'; chip13.textContent = 'no sale event'; }
+    if(list13) list13.innerHTML = '<div class="text-gray-400 italic text-[11px]">No loan sale event on this deal.</div>';
+  }
+  if($('opt-t13-date'))   $('opt-t13-date').value   = sale?.date      || '';
+  if($('opt-t13-amount')) $('opt-t13-amount').value = sale?.salePrice || '';
+  if($('opt-t13-reason')) $('opt-t13-reason').value = sale?.reason    || '';
+
+  // #14 Participation — multiple allowed (sell 25% to A, 30% to B, etc.)
+  const parts = sched.filter(e => e.type === 'participation');
+  setMultiChip('t14-status-chip', parts, 'participations', 'no participation');
+  renderMultiEventList('t14-events-list', parts,
+    e => {
+      const pct = ((e.fraction||0)*100).toFixed(0);
+      return `<b>${e.date}</b> · sold <b>${pct}%</b> at <b>${fmt(e.salePrice||0)}</b>${e.participant ? ' to <b>'+e.participant+'</b>' : ''} · ${e.reason || '—'}`;
+    },
+    'No participation event on this deal.',
+    'principalSchedule');
+
+  // #15 D4E
+  const d4e = sched.find(e => e.type === 'debtEquitySwap');
+  const chip15 = $('t15-status-chip'); const list15 = $('t15-events-list');
+  if(d4e){
+    if(chip15){ chip15.className = 'chip green text-[10px]'; chip15.textContent = 'swap @ ' + d4e.date + ' · equity ' + fmt(d4e.equityFairValue||0); }
+    if(list15) list15.innerHTML = `<div class="bg-purple-50 border border-purple-200 rounded p-2 mt-1"><b>${d4e.date}</b> · equity FV <b>${fmt(d4e.equityFairValue||0)}</b> · ${d4e.reason || '—'}</div>`;
+  } else {
+    if(chip15){ chip15.className = 'chip gray text-[10px]'; chip15.textContent = 'no D4E swap'; }
+    if(list15) list15.innerHTML = '<div class="text-gray-400 italic text-[11px]">No D4E swap on this deal.</div>';
+  }
+  if($('opt-t15-date'))     $('opt-t15-date').value     = d4e?.date            || '';
+  if($('opt-t15-equityfv')) $('opt-t15-equityfv').value = d4e?.equityFairValue || '';
+  if($('opt-t15-shares'))   $('opt-t15-shares').value   = d4e?.equityShares    || '';
+  if($('opt-t15-reason'))   $('opt-t15-reason').value   = d4e?.reason          || '';
+
+  // #16 Mandatory prepay — multiple allowed (annual ECF sweeps + ad-hoc events)
+  const mands = sched.filter(e => e.type === 'mandatoryPrepayment');
+  setMultiChip('t16-status-chip', mands, 'mandatory prepayments', 'no mandatory prepay');
+  renderMultiEventList('t16-events-list', mands,
+    e => `<b>${e.date}</b> · trigger <b>${e.trigger||'covenant'}</b> · amount <b>${fmt(e.amount||0)}</b> · ${e.reason || '—'}`,
+    'No mandatory prepayment on this deal.',
+    'principalSchedule');
+
+  // #17 Amort Profile
+  const prof = inst.amortProfile;
+  const chip17 = $('t17-status-chip');
+  if(chip17){
+    if(prof && prof.kind && prof.kind !== 'bullet'){
+      chip17.className = 'chip green text-[10px]';
+      const freqLabel = ({M:'monthly',Q:'quarterly',S:'semi',A:'annual'}[prof.frequency]) || 'quarterly';
+      chip17.textContent = prof.kind + ' · ' + freqLabel + (prof.ioMonths ? ' · ' + prof.ioMonths + 'mo IO' : '');
+    } else {
+      chip17.className = 'chip gray text-[10px]'; chip17.textContent = 'bullet (default)';
+    }
+  }
+  if($('opt-amort-profile-kind'))    $('opt-amort-profile-kind').value    = prof?.kind     || 'bullet';
+  if($('opt-amort-profile-freq'))    $('opt-amort-profile-freq').value    = prof?.frequency|| 'Q';
+  if($('opt-amort-profile-io'))      $('opt-amort-profile-io').value      = prof?.ioMonths || '';
+  if($('opt-amort-profile-balloon')) $('opt-amort-profile-balloon').value = prof?.balloon  || '';
+
+  // #18 Trade-date
+  const tradeMethod = inst.tradeAccountingMethod || 'settlementDate';
+  const tradeDate   = inst.tradeDate || '';
+  const chip18 = $('t18-status-chip');
+  if(chip18){
+    if(tradeMethod === 'tradeDate' && tradeDate && tradeDate < inst.settlementDate){
+      const days = Math.round((new Date(inst.settlementDate).getTime() - new Date(tradeDate).getTime()) / 86400000);
+      chip18.className = 'chip green text-[10px]'; chip18.textContent = 'trade-date · T+' + days + ' · ' + tradeDate;
+    } else {
+      chip18.className = 'chip gray text-[10px]'; chip18.textContent = 'settlement-date (default)';
+    }
+  }
+  if($('opt-trade-method')) $('opt-trade-method').value = tradeMethod;
+  if($('opt-trade-date'))   $('opt-trade-date').value   = tradeDate;
+  if($('opt-trade-settle')) $('opt-trade-settle').value = inst.settlementDate || '';
+
+  // #19 Reversing entries policy
+  const chip19 = $('t19-status-chip');
+  if(chip19){
+    if(inst.useReversingEntries){
+      chip19.className = 'chip green text-[10px]'; chip19.textContent = 'enabled · auto-reverses periodEnd accruals';
+    } else {
+      chip19.className = 'chip gray text-[10px]'; chip19.textContent = 'disabled';
+    }
+  }
+  if($('opt-t19-policy')) $('opt-t19-policy').value = inst.useReversingEntries ? 'true' : 'false';
+
+  // #20 Hedge de-designation
+  const chip20 = $('t20-status-chip');
+  if(chip20){
+    if(inst.hedgeDeDesignationDate){
+      chip20.className = 'chip green text-[10px]';
+      chip20.textContent = 'de-designated @ ' + inst.hedgeDeDesignationDate;
+    } else if(!inst.hedge){
+      chip20.className = 'chip gray text-[10px]';
+      chip20.textContent = 'n/a — no hedge on deal';
+    } else {
+      chip20.className = 'chip gray text-[10px]';
+      chip20.textContent = 'hedge active — no de-designation';
+    }
+  }
+  if($('opt-t20-date'))   $('opt-t20-date').value   = inst.hedgeDeDesignationDate   || '';
+  if($('opt-t20-reason')) $('opt-t20-reason').value = inst.hedgeDeDesignationReason || '';
+
+  // #21 CFH reclass — read-only status indicator
+  const chip21 = $('t21-status-chip');
+  if(chip21){
+    if(!inst.hedge){
+      chip21.className = 'chip gray text-[10px]'; chip21.textContent = 'n/a — no hedge on deal';
+    } else if(inst.hedgeDeDesignationDate){
+      chip21.className = 'chip blue text-[10px]'; chip21.textContent = 'de-designation amortisation transtype active';
+    } else {
+      chip21.className = 'chip green text-[10px]'; chip21.textContent = 'settlement-reclass transtype active';
+    }
+  }
+
+  // #22 FX hedge of principal — read-only status indicator
+  const chip22 = $('t22-status-chip');
+  if(chip22){
+    const isFXP = inst.hedge && (inst.hedge.type === 'FXP' || inst.hedge.subType === 'fxPrincipal');
+    if(isFXP){
+      chip22.className = 'chip green text-[10px]';
+      chip22.textContent = 'active — OCI → FX Hedge Reserve (370000)';
+    } else {
+      chip22.className = 'chip gray text-[10px]';
+      chip22.textContent = 'n/a — no FXP hedge on deal';
+    }
+  }
+
+  // #23 Allowance reversal (model recalibration) — multi-event
+  const ars = sched.filter(e => e.type === 'allowanceReversal');
+  setMultiChip('t23-status-chip', ars, 'model reversals', 'no model reversal');
+  renderMultiEventList('t23-events-list', ars,
+    e => `<b>${e.date}</b> · release <b>${fmtK(e.releaseAmount||0)}</b> · ${e.reason || '—'}`,
+    'No allowance reversal on this deal.',
+    'principalSchedule');
+
+  // #24 Allocated recovery — multi-event (only recovery events with allocation)
+  const arecs = sched.filter(e => e.type === 'recovery' && e.allocation);
+  setMultiChip('t24-status-chip', arecs, 'allocated recoveries', 'no allocated recovery');
+  renderMultiEventList('t24-events-list', arecs,
+    e => {
+      const a = e.allocation || {};
+      const parts = [];
+      if(a.principal)  parts.push('Principal ' + fmtK(a.principal));
+      if(a.defaultInt) parts.push('Default Int ' + fmtK(a.defaultInt));
+      if(a.defaultFee) parts.push('Default Fee ' + fmtK(a.defaultFee));
+      if(a.legal)      parts.push('Legal ' + fmtK(a.legal));
+      return `<b>${e.date}</b> · total <b>${fmt(e.amount||0)}</b> · ${parts.join(' · ')} · ${e.reason || '—'}`;
+    },
+    'No allocated recovery on this deal.',
+    'principalSchedule');
+
+  // #25 Revolver cost deferral basis
+  const chip25 = $('t25-status-chip');
+  if(chip25){
+    if(inst.revolverCostDeferralBasis === 'commitment'){
+      chip25.className = 'chip green text-[10px]';
+      chip25.textContent = 'commitment basis · ' + (inst.availabilityEnd || 'no availability end');
+    } else {
+      chip25.className = 'chip gray text-[10px]';
+      chip25.textContent = 'maturity basis (default)';
+    }
+  }
+  if($('opt-t25-basis'))    $('opt-t25-basis').value    = inst.revolverCostDeferralBasis === 'commitment' ? 'commitment' : 'maturity';
+  if($('opt-t25-availend')) $('opt-t25-availend').value = inst.availabilityEnd || '';
+}
+
+// ─── Tier 1 transtype injectors (#3–#12) ─────────────────────────────
+// Same pattern as Tier 2: mutate active inst, mark dirty, re-render chip
+// + event list, trigger downstream recalculation.
+
+// Transtype #3 — Mid-period purchase / trade accrued interest. Direct
+// numeric field on the instrument (no event list).
+function onTier1TradeAccruedChange(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  const v = $('opt-t3-accrued')?.value;
+  if(v === '' || v == null){
+    delete inst.tradeAccruedInterest;
+  } else {
+    inst.tradeAccruedInterest = +v || 0;
+  }
+  M.treatmentDirty[inst.id] = true;
+  renderTier1StatusChips(inst);
+  onTreatmentChange();
+}
+
+// Helper — read a numeric input field, return null if empty (so caller can fall back to defaults)
+function readNum(id){
+  const v = $(id)?.value;
+  if(v === '' || v == null) return null;
+  const n = parseFloat(v);
+  return isFinite(n) ? n : null;
+}
+function readStr(id){
+  const v = $(id)?.value;
+  return (v && v.trim()) ? v.trim() : null;
+}
+// Helper — generate a unique eventId so multiple inject clicks accumulate
+// instead of overwriting each other. Stable enough for one demo session.
+let __evtCounter = 0;
+function uniqueEventId(prefix){
+  __evtCounter++;
+  return prefix + '_' + Date.now().toString(36) + '_' + __evtCounter;
+}
+// Helper — clear all input fields in a given panel after a successful inject
+// so the form is ready for "add another".
+function clearInputs(...ids){
+  for(const id of ids){ const el = $(id); if(el) el.value = ''; }
+}
+// Helper — remove a single event by its eventId from the deal's principalSchedule
+// or defaultEvents array. Wired up to the per-event "Remove" buttons in the
+// rendered event lists.
+function removeEventById(eventId, container){
+  const inst = currentInstrument();
+  if(!inst || !eventId) return;
+  const arr = (container === 'defaultEvents') ? inst.defaultEvents : inst.principalSchedule;
+  if(!arr) return;
+  const idx = arr.findIndex(e => e.eventId === eventId);
+  if(idx < 0) return;
+  arr.splice(idx, 1);
+  M.treatmentDirty[inst.id] = true;
+  toast('Removed event ' + eventId);
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+// Helper — set a status chip based on the count of events. Green when ≥1,
+// gray when 0. Used by all multi-event Tier 1 / Tier 2 panels.
+function setMultiChip(chipId, events, plural, emptyMsg){
+  const chip = $(chipId);
+  if(!chip) return;
+  const n = events ? events.length : 0;
+  if(n > 0){
+    chip.className = 'chip green text-[10px]';
+    chip.textContent = n + ' ' + (n === 1 ? plural.replace(/s$/,'') : plural);
+  } else {
+    chip.className = 'chip gray text-[10px]';
+    chip.textContent = emptyMsg;
+  }
+}
+// Helper — render a list of multiple events with a per-event Remove button.
+// Each event card is purple-tinted and includes its date + key details.
+function renderMultiEventList(listId, events, formatEvent, emptyMsg, container){
+  const el = $(listId);
+  if(!el) return;
+  if(!events || !events.length){
+    el.innerHTML = '<div class="text-gray-400 italic text-[11px]">' + emptyMsg + '</div>';
+    return;
+  }
+  const rows = events.map(e => `
+    <div class="bg-purple-50 border border-purple-200 rounded p-2 mt-1 flex items-start gap-2">
+      <div class="flex-1">${formatEvent(e)}</div>
+      <button class="mat-btn outline !py-0.5 !px-2 text-[10px] shrink-0"
+              onclick="removeEventById('${e.eventId}', '${container}')"
+              title="Remove this event"><span class="material-icons-outlined text-[12px]">close</span></button>
+    </div>`).join('');
+  el.innerHTML = rows;
+}
+
+// Transtype #4 — Prepayment. Accumulates: multiple prepayments allowed.
+function addPrepaymentTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.principalSchedule = inst.principalSchedule || [];
+  const date   = readStr('opt-t4-date')   || lifecycleDate(inst, 0.40);
+  const amount = readNum('opt-t4-amount') ?? Math.round((inst.faceValue || 0) * 0.30);
+  const reason = readStr('opt-t4-reason') || 'Voluntary prepayment · injected from Treatment panel';
+  inst.principalSchedule.push({
+    date, type:'prepayment', amount, eventId: uniqueEventId('TEST_PP'),
+    status:'actual', reason
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('Prepayment added at ' + date + ' · $' + (amount/1e6).toFixed(2) + 'm');
+  clearInputs('opt-t4-date','opt-t4-amount','opt-t4-reason');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Transtype #5 — Prepayment Penalty Schedule. Inject a standard 3-band
+// step-down: 2.0% Yr1, 1.0% Yr2, 0% thereafter (relative to settle).
+function addPrepaymentPenaltyTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  const settle = new Date(inst.settlementDate);
+  const yr1End = new Date(settle.getFullYear()+1, settle.getMonth(), settle.getDate()).toISOString().slice(0,10);
+  const yr2End = new Date(settle.getFullYear()+2, settle.getMonth(), settle.getDate()).toISOString().slice(0,10);
+  inst.prepaymentPenaltySchedule = [
+    { from: inst.settlementDate, to: yr1End, ratePct: 0.020, note:'Year 1 — 2.0%' },
+    { from: yr1End,              to: yr2End, ratePct: 0.010, note:'Year 2 — 1.0%' },
+    { from: yr2End,              to: null,   ratePct: 0.000, note:'Year 3+ — no penalty' }
+  ];
+  M.treatmentDirty[inst.id] = true;
+  toast('Added 3-band penalty schedule · 2.0% / 1.0% / 0%');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+function clearPrepaymentPenaltySchedule(){
+  const inst = currentInstrument();
+  if(!inst || !inst.prepaymentPenaltySchedule?.length) return;
+  inst.prepaymentPenaltySchedule = [];
+  M.treatmentDirty[inst.id] = true;
+  toast('Cleared prepayment penalty schedule');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Transtypes #6/#7 — Default event (interest rate kick + one-off fee). Accumulates.
+function addDefaultEventTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.defaultEvents = inst.defaultEvents || [];
+  const date   = readStr('opt-t67-date')  || lifecycleDate(inst, 0.40);
+  const bps    = readNum('opt-t67-bps')   ?? 200;
+  const fee    = readNum('opt-t67-fee')   ?? 10_000;
+  const reason = readStr('opt-t67-reason')|| 'Default event — covenant breach';
+  inst.defaultEvents.push({
+    date, defaultRateBps: bps, defaultFeeAmount: fee,
+    eventId: uniqueEventId('TEST_DEF'), status:'actual', reason
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('Default event added at ' + date + ' · +' + bps + ' bps + $' + (fee/1e3).toFixed(2) + 'k fee');
+  clearInputs('opt-t67-date','opt-t67-bps','opt-t67-fee','opt-t67-reason');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+function clearDefaultEvents(){
+  const inst = currentInstrument();
+  if(!inst || !inst.defaultEvents?.length) return;
+  inst.defaultEvents = [];
+  M.treatmentDirty[inst.id] = true;
+  toast('Cleared all default events');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Transtype #8 — Write-off. Accumulates (e.g. partial write-offs over multiple periods).
+function addWriteOffTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.principalSchedule = inst.principalSchedule || [];
+  const date   = readStr('opt-t8-date')   || lifecycleDate(inst, 0.60);
+  const amount = readNum('opt-t8-amount') ?? (inst.faceValue || 0);
+  const reason = readStr('opt-t8-reason') || 'Write-off (Stage 3 credit-impaired)';
+  inst.principalSchedule.push({
+    date, type:'writeOff', amount, eventId: uniqueEventId('TEST_WO'),
+    status:'actual', reason
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('Write-off added at ' + date + ' · $' + (amount/1e6).toFixed(2) + 'm');
+  clearInputs('opt-t8-date','opt-t8-amount','opt-t8-reason');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Transtype #9 — Recovery. Accumulates.
+function addRecoveryTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.principalSchedule = inst.principalSchedule || [];
+  const date   = readStr('opt-t9-date')   || lifecycleDate(inst, 0.75);
+  const amount = readNum('opt-t9-amount') ?? Math.round((inst.faceValue || 0) * 0.25);
+  const reason = readStr('opt-t9-reason') || 'Cash recovery post-write-off';
+  inst.principalSchedule.push({
+    date, type:'recovery', amount, eventId: uniqueEventId('TEST_REC'),
+    status:'actual', reason
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('Recovery added at ' + date + ' · $' + (amount/1e6).toFixed(2) + 'm');
+  clearInputs('opt-t9-date','opt-t9-amount','opt-t9-reason');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Transtype #10 — Cure. Accumulates.
+function addCureTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.principalSchedule = inst.principalSchedule || [];
+  const date          = readStr('opt-t10-date')   || lifecycleDate(inst, 0.70);
+  const releaseAmount = readNum('opt-t10-amount') ?? Math.round((inst.faceValue || 0) * 0.005);
+  const reason        = readStr('opt-t10-reason') || 'Cure — Stage 2→1 return to performing';
+  inst.principalSchedule.push({
+    date, type:'cure', releaseAmount, eventId: uniqueEventId('TEST_CURE'),
+    status:'actual', reason
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('Cure added at ' + date + ' · release $' + (releaseAmount/1e3).toFixed(2) + 'k');
+  clearInputs('opt-t10-date','opt-t10-amount','opt-t10-reason');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Transtype #11 — Forbearance. Accumulates.
+function addForbearanceTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.principalSchedule = inst.principalSchedule || [];
+  const date = readStr('opt-t11-date') || lifecycleDate(inst, 0.40);
+  const annualRate = (inst.coupon?.fixedRate || 0)
+                   + (inst.coupon?.floatingRate || 0)
+                   + (inst.coupon?.spread || 0);
+  const deferredAmount = readNum('opt-t11-amount') ?? Math.round((inst.faceValue || 0) * annualRate * 0.5);
+  const reason         = readStr('opt-t11-reason') || 'Payment holiday — IFRS 9 §B5.5.13';
+  inst.principalSchedule.push({
+    date, type:'forbearance', deferredAmount, eventId: uniqueEventId('TEST_FBR'),
+    status:'actual', reason
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('Forbearance added at ' + date + ' · deferred $' + (deferredAmount/1e3).toFixed(2) + 'k');
+  clearInputs('opt-t11-date','opt-t11-amount','opt-t11-reason');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Transtype #12 — Capitalised origination costs. Accumulates (different cost categories).
+function addCapitalisedCostTest(){
+  const inst = currentInstrument();
+  if(!inst) return;
+  inst.principalSchedule = inst.principalSchedule || [];
+  const date     = readStr('opt-t12-date')     || inst.settlementDate;
+  const amount   = readNum('opt-t12-amount')   ?? 150_000;
+  const category = readStr('opt-t12-category') || 'legal + transaction + valuation';
+  inst.principalSchedule.push({
+    date, type:'capitalisedCost', amount, category,
+    eventId: uniqueEventId('TEST_CC'), status:'actual',
+    reason:'Capitalised origination costs · IFRS 9 §B5.4 / ASC 310-20-25-2'
+  });
+  M.treatmentDirty[inst.id] = true;
+  toast('Capitalised cost added at ' + date + ' · $' + (amount/1e3).toFixed(2) + 'k');
+  clearInputs('opt-t12-date','opt-t12-amount','opt-t12-category');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Generic clear for any Tier 1 event type living in principalSchedule
+function clearTier1Events(eventType){
+  const inst = currentInstrument();
+  if(!inst || !inst.principalSchedule) return;
+  const before = inst.principalSchedule.length;
+  inst.principalSchedule = inst.principalSchedule.filter(e => e.type !== eventType);
+  if(inst.principalSchedule.length === before) return;
+  M.treatmentDirty[inst.id] = true;
+  toast('Cleared all ' + eventType + ' events');
+  loadTreatmentForm();
+  onTreatmentChange();
+}
+
+// Render Tier 1 status chips + event lists. Called from loadTreatmentForm().
+function renderTier1StatusChips(inst){
+  if(!inst) return;
+  const sched = inst.principalSchedule || [];
+  const fmt = a => '$' + (a/1e6).toFixed(2) + 'm';
+  const fmtK = a => '$' + (a/1e3).toFixed(2) + 'k';
+
+  // #3 Trade accrued interest
+  const chip3 = $('t3-status-chip');
+  const accInput = $('opt-t3-accrued');
+  const acc = inst.tradeAccruedInterest;
+  if(chip3){
+    if(typeof acc === 'number' && acc > 0){
+      chip3.className = 'chip green text-[10px]';
+      chip3.textContent = 'paid ' + fmtK(acc) + (inst.tradeDate ? ' @ ' + inst.tradeDate : '');
+    } else {
+      chip3.className = 'chip gray text-[10px]';
+      chip3.textContent = 'no trade accrual';
+    }
+  }
+  if(accInput) accInput.value = (typeof acc === 'number' && acc > 0) ? acc : '';
+
+  // Helper to render a one-event panel
+  function renderOneEventPanel(chipId, listId, evt, chipFn, listFn, emptyChip, emptyList){
+    const chip = $(chipId); const list = $(listId);
+    if(evt){
+      if(chip){ chip.className = 'chip green text-[10px]'; chip.textContent = chipFn(evt); }
+      if(list) list.innerHTML = '<div class="bg-purple-50 border border-purple-200 rounded p-2 mt-1">' + listFn(evt) + '</div>';
+    } else {
+      if(chip){ chip.className = 'chip gray text-[10px]'; chip.textContent = emptyChip; }
+      if(list) list.innerHTML = '<div class="text-gray-400 italic text-[11px]">' + emptyList + '</div>';
+    }
+  }
+
+  // #4 Prepayment — multiple allowed
+  const pps = sched.filter(e => e.type === 'prepayment');
+  setMultiChip('t4-status-chip', pps, 'prepayments', 'no prepayment');
+  renderMultiEventList('t4-events-list', pps,
+    e => `<b>${e.date}</b> · amount <b>${fmt(e.amount||0)}</b> · ${e.reason || '—'}`,
+    'No prepayment events on this deal.',
+    'principalSchedule');
+
+  // #5 Prepayment penalty schedule (table, not event)
+  const penSched = inst.prepaymentPenaltySchedule || [];
+  const chip5 = $('t5-status-chip'); const list5 = $('t5-schedule-list');
+  if(penSched.length){
+    if(chip5){ chip5.className = 'chip green text-[10px]'; chip5.textContent = penSched.length + ' band' + (penSched.length===1?'':'s'); }
+    if(list5){
+      const rows = penSched.map(b => `<tr>
+        <td class="left text-[11px] py-1 px-2">${b.from || '—'}</td>
+        <td class="left text-[11px] py-1 px-2">${b.to   || 'open-ended'}</td>
+        <td class="left text-[11px] py-1 px-2 font-mono">${((b.ratePct||b.rate||0)*100).toFixed(2)}%</td>
+        <td class="left text-[11px] py-1 px-2 text-gray-500">${b.note || ''}</td>
+      </tr>`).join('');
+      list5.innerHTML = `<table class="data" style="font-size:11px;width:100%"><thead><tr><th class="left">From</th><th class="left">To</th><th class="left">Rate</th><th class="left">Note</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+  } else {
+    if(chip5){ chip5.className = 'chip gray text-[10px]'; chip5.textContent = 'no penalty schedule'; }
+    if(list5) list5.innerHTML = '<div class="text-gray-400 italic text-[11px]">No prepayment penalty schedule on this deal.</div>';
+  }
+
+  // #6/#7 Default events — multiple allowed
+  const defs = inst.defaultEvents || [];
+  setMultiChip('t67-status-chip', defs, 'default events', 'no default event');
+  renderMultiEventList('t67-events-list', defs,
+    e => `<b>${e.date}</b> · +<b>${e.defaultRateBps || 0} bps</b> · fee <b>${fmtK(e.defaultFeeAmount || 0)}</b> · ${e.reason || '—'}`,
+    'No default event on this deal.',
+    'defaultEvents');
+
+  // #8 Write-off — multiple allowed (partial write-offs over multiple periods)
+  const wos = sched.filter(e => e.type === 'writeOff');
+  setMultiChip('t8-status-chip', wos, 'write-offs', 'no write-off');
+  renderMultiEventList('t8-events-list', wos,
+    e => `<b>${e.date}</b> · amount <b>${fmt(e.amount||0)}</b> · ${e.reason || '—'}`,
+    'No write-off event on this deal.',
+    'principalSchedule');
+
+  // #9 Recovery — multiple allowed
+  const recs = sched.filter(e => e.type === 'recovery');
+  setMultiChip('t9-status-chip', recs, 'recoveries', 'no recovery');
+  renderMultiEventList('t9-events-list', recs,
+    e => `<b>${e.date}</b> · cash recovered <b>${fmt(e.amount||0)}</b> · ${e.reason || '—'}`,
+    'No recovery event on this deal.',
+    'principalSchedule');
+
+  // #10 Cure — multiple allowed
+  const cures = sched.filter(e => e.type === 'cure');
+  setMultiChip('t10-status-chip', cures, 'cure events', 'no cure');
+  renderMultiEventList('t10-events-list', cures,
+    e => `<b>${e.date}</b> · allowance release <b>${fmtK(e.releaseAmount||0)}</b> · ${e.reason || '—'}`,
+    'No cure event on this deal.',
+    'principalSchedule');
+
+  // #11 Forbearance — multiple allowed
+  const fbrs = sched.filter(e => e.type === 'forbearance');
+  setMultiChip('t11-status-chip', fbrs, 'forbearance events', 'no forbearance');
+  renderMultiEventList('t11-events-list', fbrs,
+    e => `<b>${e.date}</b> · deferred interest <b>${fmtK(e.deferredAmount||0)}</b> · ${e.reason || '—'}`,
+    'No forbearance event on this deal.',
+    'principalSchedule');
+
+  // #12 Capitalised costs — multiple allowed (different categories paid at different times)
+  const ccs = sched.filter(e => e.type === 'capitalisedCost');
+  setMultiChip('t12-status-chip', ccs, 'capitalised costs', 'no capitalised cost');
+  renderMultiEventList('t12-events-list', ccs,
+    e => `<b>${e.date}</b> · amount <b>${fmtK(e.amount||0)}</b> · ${e.category || '—'} · ${e.reason || '—'}`,
+    'No capitalised cost on this deal.',
+    'principalSchedule');
 }
 
 // Treatment changed — apply, recalculate everything downstream
@@ -5229,6 +6859,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // Classification
     'opt-framework',
     'opt-eir-method','opt-eir-override',
+    'opt-oid-treatment','opt-oid-method',
     'opt-ifrs9-class','opt-business-model','opt-sppi','opt-fv-level',
     // ECL primary
     'opt-ecl-stage','opt-pd','opt-lgd','opt-compute-ecl',
@@ -5249,6 +6880,49 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('btn-mod-add-nonsub')?.addEventListener('click', addNonSubstantialMod);
   $('btn-mod-add-sub')?.addEventListener('click', addSubstantialMod);
   $('btn-mod-clear')?.addEventListener('click', clearMods);
+  // ─── Tier 1 transtype injectors (#3–#12) ───
+  $('opt-t3-accrued')?.addEventListener('input',  onTier1TradeAccruedChange);
+  $('opt-t3-accrued')?.addEventListener('change', onTier1TradeAccruedChange);
+  $('btn-t4-add')?.addEventListener('click',  addPrepaymentTest);
+  $('btn-t4-clear')?.addEventListener('click', () => clearTier1Events('prepayment'));
+  $('btn-t5-add')?.addEventListener('click',  addPrepaymentPenaltyTest);
+  $('btn-t5-clear')?.addEventListener('click', clearPrepaymentPenaltySchedule);
+  $('btn-t67-add')?.addEventListener('click', addDefaultEventTest);
+  $('btn-t67-clear')?.addEventListener('click', clearDefaultEvents);
+  $('btn-t8-add')?.addEventListener('click',  addWriteOffTest);
+  $('btn-t8-clear')?.addEventListener('click', () => clearTier1Events('writeOff'));
+  $('btn-t9-add')?.addEventListener('click',  addRecoveryTest);
+  $('btn-t9-clear')?.addEventListener('click', () => clearTier1Events('recovery'));
+  $('btn-t10-add')?.addEventListener('click', addCureTest);
+  $('btn-t10-clear')?.addEventListener('click', () => clearTier1Events('cure'));
+  $('btn-t11-add')?.addEventListener('click', addForbearanceTest);
+  $('btn-t11-clear')?.addEventListener('click', () => clearTier1Events('forbearance'));
+  $('btn-t12-add')?.addEventListener('click', addCapitalisedCostTest);
+  $('btn-t12-clear')?.addEventListener('click', () => clearTier1Events('capitalisedCost'));
+  // ─── Tier 2 transtype injectors (#13–#18) ───
+  $('btn-t13-add')?.addEventListener('click', addLoanSaleTest);
+  $('btn-t13-clear')?.addEventListener('click', () => clearTier2Events('loanSale'));
+  $('btn-t14-add')?.addEventListener('click', addParticipationTest);
+  $('btn-t14-clear')?.addEventListener('click', () => clearTier2Events('participation'));
+  $('btn-t15-add')?.addEventListener('click', addD4ESwapTest);
+  $('btn-t15-clear')?.addEventListener('click', () => clearTier2Events('debtEquitySwap'));
+  $('btn-t16-add')?.addEventListener('click', addMandatoryPrepayTest);
+  $('btn-t16-clear')?.addEventListener('click', () => clearTier2Events('mandatoryPrepayment'));
+  // Amort profile + trade-date + reversing-entries + revolver-basis — same change handler
+  ['opt-amort-profile-kind','opt-amort-profile-freq','opt-amort-profile-io','opt-amort-profile-balloon',
+   'opt-trade-method','opt-trade-date',
+   'opt-t19-policy','opt-t25-basis']
+    .forEach(id => {
+      $(id)?.addEventListener('change', onTier2ProfileChange);
+      $(id)?.addEventListener('input',  onTier2ProfileChange);
+    });
+  // ─── Tier 2 #19–#25 injectors ───
+  $('btn-t20-set')?.addEventListener('click',  setHedgeDeDesignation);
+  $('btn-t20-clear')?.addEventListener('click', clearHedgeDeDesignation);
+  $('btn-t23-add')?.addEventListener('click',  addAllowanceReversalTest);
+  $('btn-t23-clear')?.addEventListener('click', () => clearTier1Events('allowanceReversal'));
+  $('btn-t24-add')?.addEventListener('click',  addAllocatedRecoveryTest);
+  $('btn-t24-clear')?.addEventListener('click', clearAllocatedRecoveries);
   // Daily schedule view
   $('schedule-filter')?.addEventListener('change', renderScheduleTable);
   $('btn-schedule-csv')?.addEventListener('click', downloadScheduleCSV);
@@ -5358,6 +7032,536 @@ document.addEventListener('DOMContentLoaded', ()=>{
   };
   document.addEventListener('keydown', e => { if(e.key === 'Escape' && $('json-modal').style.display !== 'none') closeJsonModal(); });
 });
+
+/* ============================================================================
+   Tab navigation + Dashboard renderer
+   ----------------------------------------------------------------------------
+   Replaces the previous vertical-scroll layout with a sticky tab nav at top.
+   • Click any tab → only that stage panel is visible.
+   • Tab buttons mirror the stage status chips so you see Stage progress at a
+     glance even when looking at a different tab.
+   • Dashboard tab summarises the loaded deal (KPIs, lifecycle timeline, JE
+     coverage) — derived live from currentInstrument() + the engine output.
+   ============================================================================ */
+(function(){
+  const TAB_IDS = ['stage-1','stage-2','stage-3','stage-4','stage-5','dashboard'];
+
+  function switchTab(tabId){
+    if(!TAB_IDS.includes(tabId)) tabId = 'stage-1';
+    // Use 'tab-visible' for the panel visibility class so it doesn't collide with
+    // the .active class that setStage() applies to the same elements for pipeline
+    // status styling (blue border / shadow). Tab buttons keep .active because
+    // they're separate elements with no naming conflict.
+    document.querySelectorAll('.stage-tab-content').forEach(s => s.classList.remove('tab-visible'));
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.classList.remove('active');
+      b.setAttribute('aria-selected', 'false');
+    });
+    const panel = document.getElementById(tabId);
+    const btn   = document.querySelector('.tab-btn[data-tab="' + tabId + '"]');
+    if(panel) panel.classList.add('tab-visible');
+    if(btn){ btn.classList.add('active'); btn.setAttribute('aria-selected', 'true'); }
+    // Render dashboard live every time it's shown
+    if(tabId === 'dashboard') renderDashboard();
+    // Persist in URL hash so refresh keeps the tab + supports deep links
+    if(window.history && window.history.replaceState){
+      window.history.replaceState(null, '', '#' + tabId);
+    }
+    // Scroll to top of the tab so the user sees the header
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Wire click handlers
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.tab-btn[data-tab]');
+    if(btn) switchTab(btn.dataset.tab);
+  });
+
+  // Honour deep link in URL hash on first load
+  function bootstrap(){
+    const h = (window.location.hash || '').replace('#','');
+    if(h && TAB_IDS.includes(h)) switchTab(h);
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', bootstrap);
+  } else { bootstrap(); }
+
+  /* ─── Mirror stage statuses onto tab subtitles ──────────────────────── */
+  // Watch the existing status chips and update the matching tab-sub text.
+  // The stage chips already get text content updates from the existing engine
+  // flow (e.g. "Loaded · 2,559 days"), so we just observe and copy.
+  const STAGE_STATUS_MAP = {
+    'stage-1': 'portf-status',
+    'stage-2': 'acct-status',
+    'stage-3': 'workday-out-status',
+    'stage-4': 'workday-in-status',
+    'stage-5': 'recon-status'
+  };
+  function syncTabStatus(){
+    // Find which stage is currently the active one in the pipeline (has class 'active' on the card)
+    let activeStageNum = 0;
+    for(const tabId of Object.keys(STAGE_STATUS_MAP)){
+      const chip = document.getElementById(STAGE_STATUS_MAP[tabId]);
+      const sub  = document.getElementById('tabsub-' + tabId);
+      const btn  = document.querySelector('.tab-btn[data-tab="' + tabId + '"]');
+      const card = document.getElementById(tabId);
+      const stepStateChip = document.getElementById('step-state-' + tabId.split('-')[1]);
+      const text = (chip && chip.textContent || '').trim();
+      // Mirror the live status chip onto the tab subtitle and the in-panel step state chip
+      if(sub && text) sub.textContent = text;
+      if(stepStateChip && text) stepStateChip.textContent = text;
+      // Color the tab green when its corresponding stage card has class 'done'
+      if(btn && card){
+        if(card.classList.contains('done')) btn.classList.add('done');
+        else btn.classList.remove('done');
+      }
+      // Track which stage card has 'active' (next-in-line) to drive the progress bar
+      if(card && card.classList.contains('active') && !card.classList.contains('done')){
+        const n = parseInt(tabId.split('-')[1], 10);
+        if(n > activeStageNum) activeStageNum = n;
+      }
+    }
+    // Update the pipeline progress bar segments
+    document.querySelectorAll('.pipeline-progress-seg').forEach(seg => {
+      seg.classList.remove('done', 'active');
+      const stageId = seg.dataset.seg;
+      const card = document.getElementById(stageId);
+      if(!card) return;
+      if(card.classList.contains('done')) seg.classList.add('done');
+      else if(card.classList.contains('active')) seg.classList.add('active');
+    });
+    // If nothing is active yet (fresh load), seed stage-1 as the active step
+    if(activeStageNum === 0){
+      document.querySelector('.pipeline-progress-seg[data-seg="stage-1"]')?.classList.add('active');
+    }
+  }
+  // Observe DOM mutations on the chips so the tab subs update automatically
+  function attachObserver(id){
+    const el = document.getElementById(id);
+    if(!el) return;
+    new MutationObserver(syncTabStatus).observe(el, { childList: true, subtree: true, characterData: true, attributes: true });
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', () => {
+      Object.values(STAGE_STATUS_MAP).forEach(attachObserver);
+      ['stage-1','stage-2','stage-3','stage-4','stage-5'].forEach(id => {
+        const card = document.getElementById(id);
+        if(card) new MutationObserver(syncTabStatus).observe(card, { attributes: true, attributeFilter: ['class'] });
+      });
+      syncTabStatus();
+    });
+  } else {
+    Object.values(STAGE_STATUS_MAP).forEach(attachObserver);
+    ['stage-1','stage-2','stage-3','stage-4','stage-5'].forEach(id => {
+      const card = document.getElementById(id);
+      if(card) new MutationObserver(syncTabStatus).observe(card, { attributes: true, attributeFilter: ['class'] });
+    });
+    setTimeout(syncTabStatus, 50);
+  }
+
+  /* ─── Dashboard renderer ────────────────────────────────────────────── */
+  function fmtMoneyDash(n, ccy){
+    const sym = ccy === 'GBP' ? '£' : ccy === 'USD' ? '$' : ccy === 'EUR' ? '€' : (ccy || '') + ' ';
+    if(n == null || isNaN(n)) return '—';
+    return sym + Math.round(n).toLocaleString('en-GB');
+  }
+  function fmtPctDash(n, dp){
+    if(n == null || isNaN(n)) return '—';
+    return (n * 100).toFixed(dp == null ? 4 : dp) + '%';
+  }
+
+  function renderDashboard(){
+    const out = document.getElementById('dashboard-content');
+    if(!out) return;
+    const inst = (typeof currentInstrument === 'function') ? currentInstrument() : null;
+    if(!inst){
+      out.innerHTML = '<div class="text-[13px] text-gray-500 italic">Pick a deal from the Active Deal dropdown to see its dashboard.</div>';
+      return;
+    }
+
+    const ccy   = inst.currency || 'GBP';
+    const fw    = (typeof frameworkOf === 'function') ? frameworkOf(inst) : { label:'IFRS', chipClass:'blue', ecl:{ name:'IFRS 9 §5.5' } };
+    const eir   = (typeof computeEIR === 'function') ? computeEIR(inst) : null;
+    const eirVal = eir ? (eir.effectiveYield != null ? eir.effectiveYield : eir.couponRate) : null;
+
+    let sched = [], summary = null;
+    try {
+      if(typeof buildSchedule === 'function') sched = buildSchedule(inst);
+      if(sched.length && typeof summarize === 'function') summary = summarize(sched, inst.settlementDate, inst.maturityDate);
+    } catch(_) { /* dashboard tolerates partial engine state */ }
+
+    const lastRow = sched[sched.length - 1];
+
+    // ── KPI cards ────────────────────────────────────────────────────
+    const kpiCards = [
+      { label: 'Active Deal',        value: inst.deal,                   sub: inst.legalEntity || '' },
+      { label: 'Framework',          value: '📋 ' + fw.label,            sub: fw.ecl.name },
+      { label: 'Face Value',         value: fmtMoneyDash(inst.faceValue, ccy), sub: 'Currency · ' + ccy },
+      { label: 'Carrying Value',     value: lastRow ? fmtMoneyDash(lastRow.carryingValue, ccy) : '—',
+                                      sub: 'Closing · ' + (inst.maturityDate || '?') },
+      { label: 'Coupon',             value: inst.coupon && inst.coupon.fixedRate ? fmtPctDash(inst.coupon.fixedRate, 4)
+                                            : (inst.coupon && inst.coupon.type) || '—',
+                                      sub: (inst.coupon && inst.coupon.type) || '' },
+      { label: 'Effective Yield',    value: fmtPctDash(eirVal, 4),       sub: eir ? (eir.eirMethodLabel || eir.method || '') : '' },
+      { label: 'Settlement → Maturity', value: (inst.settlementDate || '?') + ' → ' + (inst.maturityDate || '?'),
+                                      sub: sched.length ? sched.length + ' days' : '' },
+      { label: 'Total Interest (life)', value: summary ? fmtMoneyDash(summary.totalCashAccrual, ccy) : '—',
+                                      sub: summary && summary.totalDefaultInterest ? '+ default $' + Math.round(summary.totalDefaultInterest).toLocaleString() : '' }
+    ];
+
+    let kpiHTML = '<div class="dash-grid">';
+    for(const k of kpiCards){
+      kpiHTML += `<div class="dash-card">
+        <div class="dash-card-label">${k.label}</div>
+        <div class="dash-card-value">${k.value}</div>
+        ${k.sub ? `<div class="dash-card-sub">${k.sub}</div>` : ''}
+      </div>`;
+    }
+    kpiHTML += '</div>';
+
+    // ── Lifecycle timeline ──────────────────────────────────────────
+    const events = [];
+    events.push({ date: inst.settlementDate, type: 'drawdown', title: 'Origination · Loan settles', detail: 'Initial recognition · ' + fmtMoneyDash(inst.faceValue, ccy) + ' face' });
+    (inst.principalSchedule || []).forEach(e => {
+      if(e.date === inst.settlementDate && e.type === 'draw') return;
+      if(e.type === 'draw')       events.push({ date: e.date, type: 'drawdown',  title: 'Drawdown',                detail: fmtMoneyDash(e.amount, ccy) + (e.reason ? ' · ' + e.reason : '') });
+      if(e.type === 'paydown' || e.type === 'repayment')
+                                  events.push({ date: e.date, type: 'maturity',  title: 'Scheduled Repayment',     detail: fmtMoneyDash(e.amount, ccy) });
+      if(e.type === 'prepayment') events.push({ date: e.date, type: 'prepay',    title: 'Prepayment',              detail: fmtMoneyDash(e.amount, ccy) + (e.reason ? ' · ' + e.reason : '') });
+      if(e.type === 'mandatoryPrepayment') events.push({ date: e.date, type: 'prepay', title: 'Mandatory Prepayment (Covenant Trigger)', detail: fmtMoneyDash(e.amount, ccy) + ' · ' + (e.trigger || 'covenant') + (e.reason ? ' · ' + e.reason : '') });
+      if(e.type === 'writeOff')   events.push({ date: e.date, type: 'writeoff',  title: 'Write-Off',               detail: fmtMoneyDash(e.amount, ccy) + (e.reason ? ' · ' + e.reason : '') });
+      if(e.type === 'recovery')   events.push({ date: e.date, type: 'recovery',  title: 'Recovery',                detail: fmtMoneyDash(e.amount, ccy) + (e.reason ? ' · ' + e.reason : '') });
+      if(e.type === 'cure')       events.push({ date: e.date, type: 'cure',      title: 'ECL Cure / Stage Reversal', detail: 'Allowance release ' + fmtMoneyDash(e.releaseAmount || 0, ccy) + (e.reason ? ' · ' + e.reason : '') });
+      if(e.type === 'forbearance')events.push({ date: e.date, type: 'default',   title: 'Forbearance Start',       detail: 'Deferred ' + fmtMoneyDash(e.deferredAmount || 0, ccy) + (e.reason ? ' · ' + e.reason : '') });
+      if(e.type === 'capitalisedCost') events.push({ date: e.date, type: 'drawdown', title: 'Capitalised Origination Costs', detail: fmtMoneyDash(e.amount, ccy) + (e.category ? ' · ' + e.category : '') });
+      if(e.type === 'loanSale')   events.push({ date: e.date, type: 'writeoff',  title: 'Loan Sale (Full Derecognition)', detail: 'Sale price ' + fmtMoneyDash(e.salePrice || e.amount || 0, ccy) + (e.reason ? ' · ' + e.reason : '') });
+      if(e.type === 'participation') events.push({ date: e.date, type: 'prepay',  title: 'Loan Participation (Partial Sell-Down)', detail: ((e.fraction||0)*100).toFixed(0) + '% sold at ' + fmtMoneyDash(e.salePrice || 0, ccy) + (e.participant ? ' to ' + e.participant : '') });
+      if(e.type === 'debtEquitySwap') events.push({ date: e.date, type: 'writeoff', title: 'Debt-for-Equity Swap (IFRIC 19)', detail: 'Equity FV ' + fmtMoneyDash(e.equityFairValue || 0, ccy) + (e.reason ? ' · ' + e.reason : '') });
+    });
+    (inst.defaultEvents || []).forEach(e => {
+      events.push({ date: e.date, type: 'default', title: 'Default Event',
+                    detail: 'Default rate +' + (e.defaultRateBps || 0) + ' bps · default fee ' + fmtMoneyDash(e.defaultFeeAmount || 0, ccy) + (e.reason ? ' · ' + e.reason : '') });
+    });
+    if(inst.maturityDate) events.push({ date: inst.maturityDate, type: 'maturity', title: 'Maturity', detail: 'Final repayment due' });
+    events.sort((a,b) => (a.date || '').localeCompare(b.date || ''));
+
+    let timelineHTML = '<div class="dash-section-header"><span class="material-icons-outlined text-[18px]">timeline</span>Lifecycle Timeline</div><div class="dash-timeline">';
+    for(const e of events){
+      timelineHTML += `<div class="dash-timeline-item event-${e.type}">
+        <div class="dash-timeline-date">${e.date || '—'}</div>
+        <div class="dash-timeline-title">${e.title}</div>
+        ${e.detail ? `<div class="dash-timeline-detail">${e.detail}</div>` : ''}
+      </div>`;
+    }
+    timelineHTML += '</div>';
+
+    // ── Stage progress ──────────────────────────────────────────────
+    let stageHTML = '<div class="dash-section-header"><span class="material-icons-outlined text-[18px]">view_kanban</span>Pipeline Progress</div><div class="dash-grid">';
+    const stages = [
+      { id: 'stage-1', title: '1 · PortF Inbound',        chip: 'portf-status' },
+      { id: 'stage-2', title: '2 · Accounting Engine',    chip: 'acct-status' },
+      { id: 'stage-3', title: '3 · Workday Outbound',     chip: 'workday-out-status' },
+      { id: 'stage-4', title: '4 · Workday Cash Inbound', chip: 'workday-in-status' },
+      { id: 'stage-5', title: '5 · Reconciliation',       chip: 'recon-status' }
+    ];
+    for(const s of stages){
+      const chip = document.getElementById(s.chip);
+      const text = chip ? (chip.textContent || '').trim() : '—';
+      const card = document.getElementById(s.id);
+      const done = card && card.classList.contains('done');
+      stageHTML += `<div class="dash-card" style="cursor:pointer" onclick="document.querySelector('.tab-btn[data-tab=\\'${s.id}\\']')?.click()">
+        <div class="dash-card-label">${s.title}</div>
+        <div class="dash-card-value" style="font-size:14px;color:${done ? '#0F8A4D' : '#21295C'}">${text}</div>
+        <div class="dash-card-sub" style="margin-top:6px"><span class="chip ${done?'green':'blue'}">${done ? '✓ done' : 'in progress'}</span></div>
+      </div>`;
+    }
+    stageHTML += '</div>';
+
+    // ── JE coverage summary (when accounting has run) ───────────────
+    let jeHTML = '';
+    if(typeof M !== 'undefined' && Array.isArray(M.acctJournals) && M.acctJournals.length){
+      const tt = {};
+      for(const j of M.acctJournals){
+        const k = j.transactionType || 'unlabelled';
+        tt[k] = (tt[k] || 0) + Math.abs(j.amountLE || 0);
+      }
+      const entries = Object.entries(tt).sort((a,b) => b[1] - a[1]).slice(0, 10);
+      jeHTML = '<div class="dash-section-header"><span class="material-icons-outlined text-[18px]">receipt_long</span>Top Transaction Types (by amount)</div><div class="dash-grid">';
+      for(const [tt, amt] of entries){
+        jeHTML += `<div class="dash-card">
+          <div class="dash-card-label">${tt}</div>
+          <div class="dash-card-value" style="font-size:16px">${fmtMoneyDash(amt, ccy)}</div>
+        </div>`;
+      }
+      jeHTML += '</div>';
+    }
+
+    // ── Charts: balance, quarterly cashflow, maturity ladder, days-gauge ──
+    const chartsHTML = renderDashboardCharts(inst, sched, summary, ccy);
+
+    out.innerHTML = kpiHTML + chartsHTML + timelineHTML + stageHTML + jeHTML;
+  }
+
+  /* ─── SVG chart helpers ─────────────────────────────────────────────── */
+
+  // Aggregate daily rows into quarterly buckets keyed by YYYY-Qn.
+  function aggregateQuarterly(sched){
+    const buckets = new Map();
+    for(const r of sched){
+      if(!r.date) continue;
+      const d = new Date(r.date + 'T12:00:00');
+      const q = Math.floor(d.getMonth() / 3) + 1;
+      const key = d.getFullYear() + '-Q' + q;
+      if(!buckets.has(key)){
+        buckets.set(key, {
+          key, year: d.getFullYear(), quarter: q,
+          startDate: r.date,
+          endBalance: 0, endCarrying: 0,
+          interest: 0, pik: 0, defaultInt: 0, fees: 0,
+          draws: 0, paydowns: 0, prepays: 0, writeOffs: 0, sales: 0
+        });
+      }
+      const b = buckets.get(key);
+      b.endBalance  = r.balance || 0;
+      b.endCarrying = r.carryingValue || 0;
+      b.interest   += (r.dailyCash || 0);
+      b.pik        += (r.dailyPik || 0);
+      b.defaultInt += (r.dailyDefaultInterest || 0);
+      b.fees       += (r.dailyFees || 0);
+      b.draws      += (r.draw || 0);
+      b.paydowns   += (r.paydown || 0);
+      b.prepays    += (r.prepayment || 0);
+      b.writeOffs  += (r.writeOff || 0);
+      b.sales      += (r.loanSale || 0);   // Transtype #13 — sale proceeds
+      b.endDate     = r.date;
+    }
+    return [...buckets.values()];
+  }
+
+  // SVG path string for a line of {x,y} points
+  function svgLinePath(points){
+    return points.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(2) + ',' + p.y.toFixed(2)).join(' ');
+  }
+
+  // 1. CARRYING VALUE OVER TIME — area + line
+  function chartBalanceTimeline(sched, ccy, inst){
+    if(!sched || !sched.length) return '';
+    const W = 640, H = 240, padL = 60, padR = 14, padT = 16, padB = 36;
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+    const quarterly = aggregateQuarterly(sched);
+    if(!quarterly.length) return '';
+    const maxVal = Math.max(
+      ...quarterly.map(q => Math.max(q.endBalance, q.endCarrying))
+    ) || 1;
+    const xStep = innerW / Math.max(1, quarterly.length - 1);
+    const yScale = v => padT + innerH - (v / maxVal) * innerH;
+
+    const balancePts  = quarterly.map((q, i) => ({ x: padL + i * xStep, y: yScale(q.endBalance) }));
+    const carryingPts = quarterly.map((q, i) => ({ x: padL + i * xStep, y: yScale(q.endCarrying) }));
+
+    // Y-axis ticks
+    const yTicks = [0, 0.25, 0.5, 0.75, 1.0].map(f => ({ val: maxVal * f, y: yScale(maxVal * f) }));
+    // X-axis labels: every Nth quarter (max ~6 labels)
+    const labelStep = Math.max(1, Math.ceil(quarterly.length / 6));
+
+    // Event markers
+    const events = (inst.principalSchedule || []).concat(inst.defaultEvents || []);
+    const markerPts = events.map(e => {
+      const idx = quarterly.findIndex(q => (e.date || '').slice(0, 7) >= q.key.slice(0, 4) + '-' + String((q.quarter-1)*3+1).padStart(2,'0'));
+      if(idx < 0) return null;
+      let color = '#21295C';
+      if(e.type === 'prepayment') color = '#F4A261';
+      else if(e.type === 'writeOff') color = '#C44536';
+      else if(e.type === 'recovery') color = '#0F8A4D';
+      else if(e.type === 'cure') color = '#4ECDC4';
+      else if(e.type === 'loanSale') color = '#8E44AD';
+      else if(e.type === 'defaultRateBps' || e.defaultRateBps) color = '#E76F51';
+      return { x: padL + idx * xStep, y: yScale(quarterly[idx].endBalance), color, label: e.type || 'event' };
+    }).filter(Boolean);
+
+    return `<div class="chart-card" style="grid-column:span 2">
+      <div class="chart-card-title">Balance & Carrying Value Over Time</div>
+      <div class="chart-card-sub">Quarterly snapshot · ${quarterly.length} periods</div>
+      <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <!-- Grid lines -->
+        ${yTicks.map(t => `<line class="chart-grid-line" x1="${padL}" y1="${t.y}" x2="${W-padR}" y2="${t.y}"/>`).join('')}
+        <!-- Y-axis labels -->
+        ${yTicks.map(t => `<text class="chart-axis-text" x="${padL-6}" y="${t.y+3}" text-anchor="end">${fmtMoneyDash(t.val, ccy)}</text>`).join('')}
+        <!-- Axes -->
+        <line class="chart-axis-line" x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+innerH}"/>
+        <line class="chart-axis-line" x1="${padL}" y1="${padT+innerH}" x2="${W-padR}" y2="${padT+innerH}"/>
+        <!-- Carrying value area -->
+        <path d="${svgLinePath(carryingPts)} L${padL + (carryingPts.length-1)*xStep},${padT+innerH} L${padL},${padT+innerH} Z" fill="rgba(78,205,196,0.18)"/>
+        <!-- Balance line -->
+        <path d="${svgLinePath(balancePts)}" fill="none" stroke="#21295C" stroke-width="2"/>
+        <!-- Carrying value line -->
+        <path d="${svgLinePath(carryingPts)}" fill="none" stroke="#1C7293" stroke-width="2" stroke-dasharray="4,3"/>
+        <!-- Event markers -->
+        ${markerPts.map(m => `<circle cx="${m.x}" cy="${m.y}" r="4.5" fill="${m.color}" stroke="white" stroke-width="2"><title>${m.label}</title></circle>`).join('')}
+        <!-- X-axis labels -->
+        ${quarterly.map((q, i) => i % labelStep === 0 || i === quarterly.length-1
+          ? `<text class="chart-axis-text" x="${padL + i*xStep}" y="${H-padB+14}" text-anchor="middle">${q.key}</text>` : '').join('')}
+      </svg>
+      <div class="chart-legend">
+        <span><span class="chart-legend-sw" style="background:#21295C"></span>Drawn balance</span>
+        <span><span class="chart-legend-sw" style="background:#1C7293;background:linear-gradient(90deg,#1C7293 50%,transparent 50%,transparent 100%);background-size:6px 100%"></span>Carrying value (gross of ECL)</span>
+        <span><span class="chart-legend-sw" style="background:#F4A261"></span>Prepayment</span>
+        <span><span class="chart-legend-sw" style="background:#C44536"></span>Write-off</span>
+        <span><span class="chart-legend-sw" style="background:#0F8A4D"></span>Recovery</span>
+      </div>
+    </div>`;
+  }
+
+  // 2. QUARTERLY CASHFLOW COMPOSITION — stacked bars
+  function chartQuarterlyCashflow(sched, ccy){
+    if(!sched || !sched.length) return '';
+    const quarterly = aggregateQuarterly(sched).filter(q => (q.interest + q.fees + q.pik + q.defaultInt) > 0);
+    if(!quarterly.length) return '';
+    // Take at most 16 quarters (4 years) — pick evenly spaced
+    const stride = Math.max(1, Math.ceil(quarterly.length / 16));
+    const buckets = quarterly.filter((_, i) => i % stride === 0).slice(0, 16);
+    const W = 640, H = 220, padL = 60, padR = 10, padT = 16, padB = 40;
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+    const maxTotal = Math.max(...buckets.map(b => b.interest + b.fees + b.pik + b.defaultInt)) || 1;
+    const barW = innerW / buckets.length * 0.7;
+    const yTicks = [0, 0.25, 0.5, 0.75, 1.0].map(f => ({ val: maxTotal * f, y: padT + innerH - (f * innerH) }));
+
+    let bars = '';
+    buckets.forEach((b, i) => {
+      const x = padL + (i + 0.5) * (innerW / buckets.length) - barW/2;
+      let stack = padT + innerH;
+      const segments = [
+        { val: b.interest,   color: '#21295C', label: 'Cash interest' },
+        { val: b.pik,        color: '#4ECDC4', label: 'PIK interest' },
+        { val: b.defaultInt, color: '#E76F51', label: 'Default interest' },
+        { val: b.fees,       color: '#F4A261', label: 'Fees' }
+      ];
+      for(const seg of segments){
+        if(seg.val < 0.01) continue;
+        const h = (seg.val / maxTotal) * innerH;
+        bars += `<rect x="${x}" y="${stack - h}" width="${barW}" height="${h}" fill="${seg.color}"><title>${seg.label}: ${fmtMoneyDash(seg.val, ccy)}</title></rect>`;
+        stack -= h;
+      }
+    });
+
+    return `<div class="chart-card">
+      <div class="chart-card-title">Quarterly Income Composition</div>
+      <div class="chart-card-sub">Showing ${buckets.length} of ${quarterly.length} quarters · stacked by source</div>
+      <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        ${yTicks.map(t => `<line class="chart-grid-line" x1="${padL}" y1="${t.y}" x2="${W-padR}" y2="${t.y}"/>`).join('')}
+        ${yTicks.map(t => `<text class="chart-axis-text" x="${padL-6}" y="${t.y+3}" text-anchor="end">${fmtMoneyDash(t.val, ccy)}</text>`).join('')}
+        <line class="chart-axis-line" x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+innerH}"/>
+        <line class="chart-axis-line" x1="${padL}" y1="${padT+innerH}" x2="${W-padR}" y2="${padT+innerH}"/>
+        ${bars}
+        ${buckets.map((b, i) => i % 2 === 0 || i === buckets.length-1
+          ? `<text class="chart-axis-text" x="${padL + (i+0.5)*(innerW/buckets.length)}" y="${H-padB+14}" text-anchor="middle">${b.key}</text>` : '').join('')}
+      </svg>
+      <div class="chart-legend">
+        <span><span class="chart-legend-sw" style="background:#21295C"></span>Cash interest</span>
+        <span><span class="chart-legend-sw" style="background:#4ECDC4"></span>PIK</span>
+        <span><span class="chart-legend-sw" style="background:#E76F51"></span>Default</span>
+        <span><span class="chart-legend-sw" style="background:#F4A261"></span>Fees</span>
+      </div>
+    </div>`;
+  }
+
+  // 3. MATURITY LADDER — horizontal bars of principal cashflows by quarter
+  function chartMaturityLadder(sched, ccy, inst){
+    if(!sched || !sched.length) return '';
+    const quarterly = aggregateQuarterly(sched);
+    // Bucket principal flows (draws + paydowns + prepays + writeOffs at maturity)
+    const principalRows = quarterly.filter(q =>
+      Math.abs(q.draws) + Math.abs(q.paydowns) + Math.abs(q.prepays) + Math.abs(q.writeOffs) + Math.abs(q.sales || 0) > 0.01
+    );
+    if(!principalRows.length) return '';
+    const W = 360, H = Math.max(160, principalRows.length * 28 + 40);
+    const padL = 90, padR = 14, padT = 8, padB = 24;
+    const innerW = W - padL - padR;
+    const maxAbs = Math.max(...principalRows.map(q => Math.max(Math.abs(q.draws), q.paydowns, q.prepays, q.writeOffs, Math.abs(q.sales || 0)))) || 1;
+
+    let rows = '';
+    principalRows.forEach((q, i) => {
+      const y = padT + i * 28;
+      const segments = [];
+      if(q.draws > 0)     segments.push({ val: q.draws,    color: '#21295C', label: 'Drawdown' });
+      if(q.paydowns > 0)  segments.push({ val: q.paydowns, color: '#0F8A4D', label: 'Repayment' });
+      if(q.prepays > 0)   segments.push({ val: q.prepays,  color: '#F4A261', label: 'Prepayment' });
+      if(q.writeOffs > 0) segments.push({ val: q.writeOffs,color: '#C44536', label: 'Write-off' });
+      if(q.sales > 0)     segments.push({ val: q.sales,    color: '#8E44AD', label: 'Loan Sale' });
+      let x = padL;
+      for(const s of segments){
+        const w = (s.val / maxAbs) * innerW;
+        rows += `<rect x="${x}" y="${y+4}" width="${w}" height="18" fill="${s.color}" rx="3"><title>${s.label}: ${fmtMoneyDash(s.val, ccy)}</title></rect>`;
+        x += w + 1;
+      }
+      const total = segments.reduce((s,seg) => s + seg.val, 0);
+      rows += `<text class="chart-axis-text" x="${padL-6}" y="${y+16}" text-anchor="end">${q.key}</text>`;
+      rows += `<text class="chart-axis-text" x="${x + 6}" y="${y+16}">${fmtMoneyDash(total, ccy)}</text>`;
+    });
+
+    return `<div class="chart-card">
+      <div class="chart-card-title">Principal Ladder</div>
+      <div class="chart-card-sub">Drawdowns, repayments, prepays, write-offs by quarter</div>
+      <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${rows}</svg>
+      <div class="chart-legend">
+        <span><span class="chart-legend-sw" style="background:#21295C"></span>Draw</span>
+        <span><span class="chart-legend-sw" style="background:#0F8A4D"></span>Repay</span>
+        <span><span class="chart-legend-sw" style="background:#F4A261"></span>Prepay</span>
+        <span><span class="chart-legend-sw" style="background:#C44536"></span>Write-off</span>
+      </div>
+    </div>`;
+  }
+
+  // 4. DAYS TO MATURITY — circular gauge
+  function chartDaysGauge(inst, sched){
+    if(!inst || !inst.maturityDate) return '';
+    const now = new Date();
+    const settle = new Date(inst.settlementDate + 'T12:00:00');
+    const mat    = new Date(inst.maturityDate + 'T12:00:00');
+    const totalDays = Math.max(1, Math.round((mat - settle) / 86400000));
+    const elapsed = Math.max(0, Math.min(totalDays, Math.round((now - settle) / 86400000)));
+    const remaining = Math.max(0, totalDays - elapsed);
+    const pct = elapsed / totalDays;
+
+    const cx = 90, cy = 90, r = 70;
+    const circ = 2 * Math.PI * r;
+    const stroke = circ * pct;
+
+    return `<div class="chart-card">
+      <div class="chart-card-title">Time to Maturity</div>
+      <div class="chart-card-sub">Today vs settlement → maturity</div>
+      <svg class="chart-svg" viewBox="0 0 180 180" preserveAspectRatio="xMidYMid meet" style="max-width:200px;margin:0 auto;display:block">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#EAEEF5" stroke-width="14"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#21295C" stroke-width="14"
+                stroke-dasharray="${stroke} ${circ}" stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
+        <text x="${cx}" y="${cy-6}" text-anchor="middle" font-size="22" font-weight="700" fill="#21295C">${(pct*100).toFixed(1)}%</text>
+        <text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="11" fill="#6A7591">elapsed</text>
+      </svg>
+      <div style="text-align:center;margin-top:8px;font-size:12px;color:#21295C">
+        <b>${elapsed.toLocaleString()}</b> days elapsed · <b>${remaining.toLocaleString()}</b> remaining
+      </div>
+      <div style="text-align:center;font-size:11px;color:#6A7591;margin-top:2px">
+        ${inst.settlementDate} → ${inst.maturityDate}
+      </div>
+    </div>`;
+  }
+
+  function renderDashboardCharts(inst, sched, summary, ccy){
+    if(!sched || !sched.length){
+      return '<div class="text-[12px] text-gray-500 italic mt-3">Run accounting (Stage 2) to populate charts.</div>';
+    }
+    return '<div class="dash-section-header" style="margin-top:24px"><span class="material-icons-outlined text-[18px]">show_chart</span>Charts</div>'
+      + '<div class="dash-charts">'
+      +   chartBalanceTimeline(sched, ccy, inst)
+      +   chartQuarterlyCashflow(sched, ccy)
+      +   chartMaturityLadder(sched, ccy, inst)
+      +   chartDaysGauge(inst, sched)
+      + '</div>';
+  }
+
+  // Expose for the EIR Trace and other dynamic re-renders
+  window.renderDashboard = renderDashboard;
+})();
 
 /* ============================================================================
    IFRS 9 §B5.4 — EIR Calculation Trace popup

@@ -1181,16 +1181,24 @@ const INSTRUMENTS = [
     legalEntity:'NWF North America Credit', leid: 47,
     deal:'Hudson Manufacturing Senior Notes',
     position:'NWF 100% Bilateral Position · Hudson Manufacturing',
-    incomeSecurity:'Hudson Manufacturing Senior Secured Notes (USD 40m, 5.75% fixed, US GAAP / CECL)',
+    incomeSecurity:'Hudson Manufacturing Senior Secured Notes (USD 40m, 5.75% fixed, OID + EIR fee · US GAAP / CECL)',
     counterpartyId:'HUD001',
     transactionId:'HUD001',
     bilateralFlag:'Bilateral',
     agentName:'JPMorgan New York',
     currency:'USD',
     accountingFramework:'USGAAP',            // ← framework set at deal origination
-    faceValue:    40_000_000,
-    purchasePrice: 40_000_000,
+    faceValue:    40_000_000,                // par at maturity
+    purchasePrice: 39_500_000,               // purchased at $0.9875 = $500k OID
     commitment:   40_000_000,
+    // ---- OID treatment (Transtype #1) ----
+    // PP < FV creates $500k Original Issue Discount.
+    // Treatment: 'auto' (engine infers oid from PP vs FV)
+    // Method:    effective-interest (IFRS 9 §B5.4 / ASC 310-20-35-26 compliant)
+    // Engine separates OID accretion from EIR fee accretion in journal output —
+    // see "Discount Accretion" vs "EIR Fee Accretion" transtypes in Stage 2.
+    oidTreatment:'auto',
+    oidMethod:'effective-interest',
     settlementDate:'2026-06-01',
     availabilityEnd:'2026-06-01',
     maturityDate:   '2031-06-01',
@@ -1340,6 +1348,1157 @@ const INSTRUMENTS = [
     fees: [],
     ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed:true, businessModel:'HoldToCollect', ecLStage:1, pdAnnual:0.01, lgd:0.45, qFactor:1.10 },
     preset:'Interest AT Random · Method 3 generic-formula proof · expected EIR ≈ 16.83% (Method 3) / 16.06% (Method 1)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Harbor Manufacturing — Premium Amortisation demo (Transtype #2)
+    //
+    // Counterpart to Hudson (which demos OID where PP < Face). Harbor is
+    // purchased at $40.5m for $40m face — a $500k premium that AMORTISES
+    // over the loan's life. Engine produces a "Premium Amortization" JE pair
+    // (income leg DR 421000 / offset CR 141000) — opposite sign to OID.
+    //
+    //   • $40m senior notes · 6.00% coupon · 5Y bullet · ACT/360
+    //   • $500k premium (purchased above par)
+    //   • US GAAP / CECL · no upfront fee (clean premium-only demo)
+    // ----------------------------------------------------------------
+    id:'harborSeniorNotes',
+    positionId:'POS-NWF-HARBOR-USG', securityId:'SEC-HARBOR-MFG-USG',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Harbor Manufacturing Senior Notes — Premium',
+    position:'NWF 100% Bilateral Position · Harbor Manufacturing',
+    incomeSecurity:'Harbor Manufacturing Senior Notes (USD 40m, 6.00% fixed, purchased at premium · US GAAP)',
+    counterpartyId:'HBR001',
+    transactionId:'HBR001',
+    bilateralFlag:'Bilateral',
+    agentName:'Wells Fargo',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    faceValue:    40_000_000,
+    purchasePrice: 40_500_000,               // purchased ABOVE par → $500k premium
+    commitment:   40_000_000,
+    settlementDate:'2026-07-01',
+    availabilityEnd:'2026-07-01',
+    maturityDate:   '2031-07-01',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis:'ACT/360',
+    businessDayConvention:'modifiedFollowing',
+    holidayCalendar:'usFederal',
+    skipHolidays:false,
+    coupon: { type:'Fixed', fixedRate: 0.0600, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-07-01', type:'draw', amount: 40_000_000, drawdownId:'HBR001_D1', status:'forecast' }
+    ],
+    // Premium treatment (Transtype #2). Auto-resolves to 'premium' since PP > FV.
+    oidTreatment:'auto',
+    oidMethod:'effective-interest',
+    fees: [],                                  // no upfront fee → clean premium-only demo
+    ifrs: {
+      ifrs9Classification:'AmortisedCost',
+      sppiPassed: true,
+      businessModel:'HoldToCollect',
+      ecLStage: 1,
+      pdAnnual: 0.0050,
+      lgd:      0.30,
+      qFactor:  1.00
+    },
+    preset:'Harbor Manufacturing · USD 40m premium-purchase demo · US GAAP / Premium Amortisation (Transtype #2)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Cascade Industries — Mid-Period Purchase demo (Transtype #3)
+    //
+    // NWF acquires a senior note on the secondary market 90 days after the
+    // last coupon. Buyer must pay seller for the accrued-but-unpaid interest
+    // at the trade date. Engine emits a JE pair on tradeDate:
+    //   DR 113000 Interest Receivable (purchased)
+    //   CR 111000 Cash                (paid to seller)
+    // The receivable then clears on the next coupon when NWF receives the
+    // full semi-annual coupon.
+    //
+    //   • $25m senior notes · 6.50% coupon · semi-annual · ACT/360
+    //   • Originally issued 2025-09-01; NWF purchases on 2026-03-01 (= 91 days
+    //     into the 2026-03 semi-annual period after the 2025-12-01 coupon).
+    //   • Accrued interest = $25m × 6.50% × 91/360 = $410,694.44
+    // ----------------------------------------------------------------
+    id:'cascadeIndustries',
+    positionId:'POS-NWF-CASC-USG', securityId:'SEC-CASC-MIDPER-USG',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Cascade Industries Senior Notes — Mid-Period Purchase',
+    position:'NWF 100% Bilateral Position · Cascade Industries',
+    incomeSecurity:'Cascade Industries Senior Notes (USD 25m, 6.50% fixed, secondary purchase · US GAAP)',
+    counterpartyId:'CSC001',
+    transactionId:'CSC001',
+    bilateralFlag:'Bilateral',
+    agentName:'Goldman Sachs',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    faceValue:    25_000_000,
+    purchasePrice: 25_000_000,                  // bought at par on secondary market
+    commitment:   25_000_000,
+    settlementDate:'2026-03-01',                // NWF takes the position
+    availabilityEnd:'2026-03-01',
+    maturityDate:   '2030-09-01',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis:'ACT/360',
+    businessDayConvention:'modifiedFollowing',
+    holidayCalendar:'usFederal',
+    skipHolidays:false,
+    coupon: { type:'Fixed', fixedRate: 0.0650, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-03-01', type:'draw', amount: 25_000_000, drawdownId:'CSC001_D1', status:'actual' }
+    ],
+    // ── Transtype #3 — Mid-period purchase ──
+    // 91 days since last coupon (2025-12-01) × 6.50% × $25m / 360 = $410,694.44
+    tradeDate: '2026-03-01',
+    tradeAccruedInterest: 410_694.44,
+    oidTreatment:'none',                       // bought at par — no OID
+    oidMethod:'effective-interest',
+    fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost',
+      sppiPassed: true,
+      businessModel:'HoldToCollect',
+      ecLStage: 1,
+      pdAnnual: 0.0055,
+      lgd:      0.35,
+      qFactor:  1.05
+    },
+    preset:'Cascade Industries · USD 25m mid-period purchase demo · US GAAP / Accrued Interest at Trade (Transtype #3)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Driftwood Resorts — Prepayment demo (Transtype #4)
+    //
+    // 5Y bullet term loan that gets partially prepaid mid-life. Borrower
+    // pays down $15m of a $25m balance 24 months into the loan (refinance).
+    // Engine emits a "Loan Prepayment" JE pair (DR Cash / CR Loan asset),
+    // distinct from the scheduled "Loan Repayment" transtype, so reports
+    // can identify prepayments separately.
+    //
+    //   • $25m face · 7.00% fixed · 5Y bullet · ACT/360
+    //   • Settle 2026-04-15 · mature 2031-04-15
+    //   • Prepayment of $15m on 2028-04-15 (24 months in, leaves $10m balance)
+    // ----------------------------------------------------------------
+    id:'driftwoodResorts',
+    positionId:'POS-NWF-DRIFT-USG', securityId:'SEC-DRIFT-PREPAY-USG',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Driftwood Resorts Term Loan — Prepayment Demo',
+    position:'NWF 100% Bilateral Position · Driftwood Resorts',
+    incomeSecurity:'Driftwood Resorts Term Loan (USD 25m, 7.00% fixed, with mid-life prepayment · US GAAP)',
+    counterpartyId:'DWR001',
+    transactionId:'DWR001',
+    bilateralFlag:'Bilateral',
+    agentName:'Bank of America',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    faceValue:    25_000_000,
+    purchasePrice: 25_000_000,
+    commitment:   25_000_000,
+    settlementDate:'2026-04-15',
+    availabilityEnd:'2026-04-15',
+    maturityDate:   '2031-04-15',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis:'ACT/360',
+    businessDayConvention:'modifiedFollowing',
+    holidayCalendar:'usFederal',
+    skipHolidays:false,
+    coupon: { type:'Fixed', fixedRate: 0.0700, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    principalRepayment:'AtMaturity',
+    // ── Transtype #4 — Prepayment event in the principalSchedule ──
+    principalSchedule: [
+      { date:'2026-04-15', type:'draw',       amount: 25_000_000, drawdownId:'DWR001_D1', status:'actual'   },
+      { date:'2028-04-15', type:'prepayment', amount: 15_000_000, eventId:  'DWR001_P1', status:'forecast', reason:'voluntary refinance' }
+    ],
+    // ── Transtype #5 — Prepayment penalty schedule ──
+    // Standard "step-down" pattern: higher penalty in early years to compensate
+    // the lender for lost yield; tapers to zero as the loan matures.
+    //   Year 1  (2026-04-15 → 2027-04-14): 1.50%
+    //   Year 2  (2027-04-15 → 2028-04-14): 1.00%
+    //   Year 3  (2028-04-15 → 2029-04-14): 0.50%
+    //   Year 4+ (2029-04-15 → maturity):   0.00% (no penalty)
+    // Driftwood's prepayment on 2028-04-15 falls in Year 3 → penalty = $15m × 0.5% = $75,000
+    prepaymentPenaltySchedule: [
+      { from:'2026-04-15', to:'2027-04-14', ratePct: 0.0150 },
+      { from:'2027-04-15', to:'2028-04-14', ratePct: 0.0100 },
+      { from:'2028-04-15', to:'2029-04-14', ratePct: 0.0050 },
+      { from:'2029-04-15', to:'2031-04-15', ratePct: 0.0000 }
+    ],
+    oidTreatment:'none',
+    oidMethod:'effective-interest',
+    fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost',
+      sppiPassed: true,
+      businessModel:'HoldToCollect',
+      ecLStage: 1,
+      pdAnnual: 0.0070,
+      lgd:      0.40,
+      qFactor:  1.00
+    },
+    preset:'Driftwood Resorts · USD 25m with $15m prepayment in 2028 · US GAAP / Prepayment (Transtype #4)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Obsidian Holdings — Default Interest demo (Transtype #6)
+    //
+    // Senior secured term loan that goes into payment default 24 months into
+    // its 5-year life. From the default event date forward, the borrower owes
+    // additional "default interest" at coupon rate + 4.00% (penalty spread)
+    // plus a $50k one-time default fee.
+    //
+    //   • $20m face · 5.50% coupon · 5Y bullet · ACT/360
+    //   • Settle 2026-05-01 · mature 2031-05-01
+    //   • Default event 2028-05-01 (Year 2 anniversary)
+    //     - Default rate spread: 400 bps over coupon (i.e., 9.50% all-in)
+    //     - Default fee:         $50,000 one-time
+    //   • Migrated to Stage 3 (credit-impaired) per IFRS 9 §5.5
+    // ----------------------------------------------------------------
+    id:'obsidianHoldings',
+    positionId:'POS-NWF-OBSI-USG', securityId:'SEC-OBSI-DEFAULT-USG',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Obsidian Holdings Senior Notes — Default Interest Demo',
+    position:'NWF 100% Bilateral Position · Obsidian Holdings',
+    incomeSecurity:'Obsidian Holdings Senior Notes (USD 20m, 5.50% fixed → default 2028-05-01, +400bps default rate · US GAAP)',
+    counterpartyId:'OBS001',
+    transactionId:'OBS001',
+    bilateralFlag:'Bilateral',
+    agentName:'Citi',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    faceValue:    20_000_000,
+    purchasePrice: 20_000_000,
+    commitment:   20_000_000,
+    settlementDate:'2026-05-01',
+    availabilityEnd:'2026-05-01',
+    maturityDate:   '2031-05-01',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis:'ACT/360',
+    businessDayConvention:'modifiedFollowing',
+    holidayCalendar:'usFederal',
+    skipHolidays:false,
+    coupon: { type:'Fixed', fixedRate: 0.0550, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-05-01', type:'draw', amount: 20_000_000, drawdownId:'OBS001_D1', status:'actual' }
+    ],
+    // ── Transtype #6 — Default Interest event ──
+    // Engine accrues balance × (defaultRateBps/10000) × dcf each day in the
+    // [date, endDate] window, and books the one-time defaultFeeAmount on the
+    // event date itself. Distinct JE pairs ("Default Interest Income" /
+    // "Default Interest Receivable") routed to 421000 / 113000.
+    defaultEvents: [
+      {
+        date:        '2028-05-01',          // payment default — Year 2 anniversary
+        endDate:     '2031-05-01',          // through maturity (no cure)
+        defaultRateBps: 400,                // 4.00% additional over coupon
+        defaultFeeAmount: 50_000,           // one-time $50k default fee
+        reason:      'Missed scheduled semi-annual coupon payment',
+        coveredByCovenants: ['Section 7.2 — Payment Default', 'Section 7.5 — Default Interest']
+      }
+    ],
+    oidTreatment:'none',
+    oidMethod:'effective-interest',
+    fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost',
+      sppiPassed: true,
+      businessModel:'HoldToCollect',
+      ecLStage: 3,                          // credit-impaired
+      pdAnnual: 0.1500,                     // 15% — very high default risk
+      lgd:      0.40,
+      qFactor:  1.20
+    },
+    preset:'Obsidian Holdings · USD 20m default at Year 2 · US GAAP / Default Interest +400bps + $50k fee (Transtype #6)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Quartz Holdings — Write-Off demo (Transtype #8)
+    //
+    // Senior term loan whose recovery efforts fail. Goes into default at Year 2,
+    // ECL allowance is built up to $5m (Stage 3 lifetime ECL), then written off
+    // at Year 4 when collections are abandoned.
+    //
+    //   • $15m face · 6.00% coupon · 5Y bullet · ACT/360
+    //   • Default 2028-02-01 (Year 2 anniversary, +300 bps default rate)
+    //   • Write-off 2030-02-01 (Year 4, full $15m carrying)
+    //   • ECL allowance pre-write-off ≈ $5m → absorbs first $5m
+    //   • Residual $10m hits 470000 Impairment Expense as P&L charge
+    // ----------------------------------------------------------------
+    id:'quartzHoldings',
+    positionId:'POS-NWF-QRTZ-USG', securityId:'SEC-QRTZ-WRITEOFF-USG',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Quartz Holdings Term Loan — Write-Off Demo',
+    position:'NWF 100% Bilateral Position · Quartz Holdings',
+    incomeSecurity:'Quartz Holdings Term Loan (USD 15m, 6.00% fixed, default→write-off · US GAAP)',
+    counterpartyId:'QRT001',
+    transactionId:'QRT001',
+    bilateralFlag:'Bilateral',
+    agentName:'Morgan Stanley',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    faceValue:    15_000_000,
+    purchasePrice: 15_000_000,
+    commitment:   15_000_000,
+    settlementDate:'2026-02-01',
+    availabilityEnd:'2026-02-01',
+    maturityDate:   '2031-02-01',
+    accrualDayCountExclusive: false,
+    paydateDayCountInclusive: true,
+    interestPreviousDay: false,
+    dayBasis:'ACT/360',
+    businessDayConvention:'modifiedFollowing',
+    holidayCalendar:'usFederal',
+    skipHolidays:false,
+    coupon: { type:'Fixed', fixedRate: 0.0600, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    principalRepayment:'AtMaturity',
+    // Draw at signing + write-off at Year 4 (Transtype #8)
+    principalSchedule: [
+      { date:'2026-02-01', type:'draw',     amount: 15_000_000, drawdownId:'QRT001_D1', status:'actual'   },
+      { date:'2030-02-01', type:'writeOff', amount: 15_000_000, eventId:  'QRT001_W1', status:'actual',
+        reason:'Recovery efforts exhausted; collateral realisation incomplete; borrower in Chapter 7' }
+    ],
+    defaultEvents: [
+      { date:'2028-02-01', endDate:'2030-02-01', defaultRateBps: 300, defaultFeeAmount: 30_000,
+        reason:'Missed coupon payment; covenant breach' }
+    ],
+    oidTreatment:'none',
+    oidMethod:'effective-interest',
+    fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost',
+      sppiPassed: true,
+      businessModel:'HoldToCollect',
+      ecLStage: 3,                          // credit-impaired, lifetime ECL
+      pdAnnual: 0.0800,                     // 8% — tuned so allowance ≈ $5m at write-off
+      lgd:      0.20,                       //  → 0.08 × 0.20 × 15m × ~4y × 1.0 ≈ $4.8m
+      qFactor:  1.00
+    },
+    preset:'Quartz Holdings · USD 15m default → write-off in Year 4 · US GAAP / Write-Off (Transtype #8)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Garnet Industries — Sudden Default Write-Off demo (Transtype #8 partial)
+    //
+    // Performing Stage 1 loan that suddenly writes off due to a one-event
+    // catastrophe (fraud / fire / bankruptcy filing) before the lender has
+    // accumulated significant allowance. The Stage 1 12-month ECL only covers
+    // a small fraction; the bulk hits P&L as an immediate impairment expense.
+    //
+    //   • $10m face · 5.00% coupon · 5Y bullet · ACT/360
+    //   • Stage 1 with PD 0.5% × LGD 35% → ~$17.5k allowance after 1 year
+    //   • Catastrophic write-off after 18 months: allowance covers tiny portion,
+    //     residual ≈ $10m hits 470000 Impairment Expense
+    //
+    // Shows the OTHER branch of the write-off split logic: residual P&L charge
+    // when allowance is insufficient.
+    // ----------------------------------------------------------------
+    id:'garnetIndustries',
+    positionId:'POS-NWF-GRNT-USG', securityId:'SEC-GRNT-SUDDEN-USG',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Garnet Industries Term Loan — Sudden Write-Off Demo',
+    position:'NWF 100% Bilateral Position · Garnet Industries',
+    incomeSecurity:'Garnet Industries Term Loan (USD 10m, 5.00%, sudden write-off · US GAAP)',
+    counterpartyId:'GAR001',
+    transactionId:'GAR001',
+    bilateralFlag:'Bilateral',
+    agentName:'Wells Fargo',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    faceValue:    10_000_000,
+    purchasePrice: 10_000_000,
+    commitment:   10_000_000,
+    settlementDate:'2026-03-01',
+    availabilityEnd:'2026-03-01',
+    maturityDate:   '2031-03-01',
+    dayBasis:'ACT/360',
+    holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.0500, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' },
+    type:'simpleDaily',
+    principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-03-01', type:'draw',     amount: 10_000_000, drawdownId:'GAR001_D1', status:'actual'   },
+      { date:'2027-09-01', type:'writeOff', amount: 10_000_000, eventId:  'GAR001_W1', status:'actual',
+        reason:'Sudden bankruptcy filing — Chapter 7 — no recoverable collateral' },
+      // ── Transtype #9 — Recovery 12 months later ──
+      // Bankruptcy estate distributes $1.2m to NWF after asset realisation.
+      // Credited to 470000 Impairment (reverses portion of prior write-off charge).
+      { date:'2028-09-01', type:'recovery', amount: 1_200_000,  eventId:  'GAR001_R1', status:'actual',
+        reason:'Bankruptcy estate distribution — pro-rata recovery on Chapter 7 claim' }
+    ],
+    // No defaultEvents — the borrower goes from performing to bankrupt in one event.
+    oidTreatment:'none',
+    fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost',
+      sppiPassed: true,
+      businessModel:'HoldToCollect',
+      ecLStage: 1,                          // performing — 12-month ECL only
+      pdAnnual: 0.0050,                     // 0.5% — low default expectation
+      lgd:      0.35,
+      qFactor:  1.00
+    },
+    preset:'Garnet Industries · USD 10m sudden write-off with minimal allowance · US GAAP / Write-Off residual (Transtype #8)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Topaz Foods — Stage Cure demo (Transtype #10)
+    //
+    // Stage 1 performing loan that drops to Stage 3 mid-life after a covenant
+    // breach, accumulates a $2.5m allowance, then cures back to Stage 2 a year
+    // later. ECL allowance is released back to P&L.
+    //
+    //   • $12m face · 5.50% coupon · 5Y bullet · ACT/360
+    //   • Cure event 2029-05-01: releases $2.5m allowance back to P&L
+    // ----------------------------------------------------------------
+    id:'topazFoods',
+    positionId:'POS-NWF-TPZ-USG', securityId:'SEC-TPZ-CURE-USG',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Topaz Foods Term Loan — Cure Demo',
+    position:'NWF 100% Bilateral Position · Topaz Foods',
+    incomeSecurity:'Topaz Foods Term Loan (USD 12m, 5.50% fixed, Stage 3 cure · US GAAP)',
+    counterpartyId:'TPZ001', transactionId:'TPZ001', bilateralFlag:'Bilateral', agentName:'PNC Bank',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    faceValue:    12_000_000, purchasePrice: 12_000_000, commitment: 12_000_000,
+    settlementDate:'2026-05-01', maturityDate:'2031-05-01',
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.0550, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-05-01', type:'draw', amount: 12_000_000, drawdownId:'TPZ001_D1', status:'actual' },
+      // ── Transtype #10 — Cure event releases $2.5m of allowance ──
+      { date:'2029-05-01', type:'cure', releaseAmount: 2_500_000, eventId:'TPZ001_C1', status:'actual',
+        fromStage: 3, toStage: 2, reason:'Covenant cure — leverage ratio back within band; payments current' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+      ecLStage: 3, pdAnnual: 0.10, lgd: 0.30, qFactor: 1.0
+    },
+    preset:'Topaz Foods · USD 12m cure releases $2.5m allowance back to P&L · US GAAP / Cure (Transtype #10)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Sapphire Logistics — Forbearance demo (Transtype #11)
+    //
+    // 5Y term loan that gets a 6-month interest holiday in Year 3 due to
+    // pandemic-style stress. The expected deferred interest is reclassified
+    // from regular Interest Receivable into a Deferred Interest sub-account.
+    //
+    //   • $18m face · 6.00% coupon · 5Y bullet · ACT/360
+    //   • Forbearance start 2028-07-01 with $540k of expected deferral
+    //     ($18m × 6% × 6/12 = $540k)
+    // ----------------------------------------------------------------
+    id:'sapphireLogistics',
+    positionId:'POS-NWF-SPH-USG', securityId:'SEC-SPH-FORBEAR-USG',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Sapphire Logistics Term Loan — Forbearance Demo',
+    position:'NWF 100% Bilateral Position · Sapphire Logistics',
+    incomeSecurity:'Sapphire Logistics Term Loan (USD 18m, 6.00% fixed, 6-mo forbearance · US GAAP)',
+    counterpartyId:'SPH001', transactionId:'SPH001', bilateralFlag:'Bilateral', agentName:'KeyBank',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    faceValue: 18_000_000, purchasePrice: 18_000_000, commitment: 18_000_000,
+    settlementDate:'2026-06-01', maturityDate:'2031-06-01',
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.0600, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-06-01', type:'draw', amount: 18_000_000, drawdownId:'SPH001_D1', status:'actual' },
+      // ── Transtype #11 — Forbearance start: reclass expected deferred interest ──
+      { date:'2028-07-01', type:'forbearance', deferredAmount: 540_000, eventId:'SPH001_F1', status:'actual',
+        endDate:'2029-01-01', holidayType:'interestHoliday',
+        reason:'Pandemic-stress 6-month interest holiday — accrual continues, cash settlement deferred' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+      ecLStage: 2, pdAnnual: 0.025, lgd: 0.35, qFactor: 1.10
+    },
+    preset:'Sapphire Logistics · USD 18m with 6-mo forbearance · US GAAP / Deferred Interest Reclass (Transtype #11)'
+  },
+  {
+    // ----------------------------------------------------------------
+    // Emerald Pharma — Capitalised Origination Costs demo (Transtype #12)
+    //
+    // Senior secured term loan where NWF incurs $150k of legal, due-diligence,
+    // and structuring costs at origination. Under IFRS 9 §B5.4 / ASC 310-20-25-2
+    // these are CAPITALISED into the loan's carrying value (rather than expensed
+    // immediately), increasing day-1 carrying and reducing effective yield.
+    //
+    //   • $22m face · 5.25% coupon · 5Y bullet · ACT/360
+    //   • $150k capitalised origination costs paid on signing
+    // ----------------------------------------------------------------
+    id:'emeraldPharma',
+    positionId:'POS-NWF-EMR-USG', securityId:'SEC-EMR-CAPCOST-USG',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Emerald Pharma Term Loan — Capitalised Costs Demo',
+    position:'NWF 100% Bilateral Position · Emerald Pharma',
+    incomeSecurity:'Emerald Pharma Term Loan (USD 22m, 5.25% fixed, $150k capitalised costs · US GAAP)',
+    counterpartyId:'EMR001', transactionId:'EMR001', bilateralFlag:'Bilateral', agentName:'Truist',
+    currency:'USD',
+    accountingFramework:'USGAAP',
+    faceValue: 22_000_000, purchasePrice: 22_000_000, commitment: 22_000_000,
+    settlementDate:'2026-08-01', maturityDate:'2031-08-01',
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.0525, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-08-01', type:'draw', amount: 22_000_000, drawdownId:'EMR001_D1', status:'actual' },
+      // ── Transtype #12 — Capitalised origination costs paid at signing ──
+      { date:'2026-08-01', type:'capitalisedCost', amount: 150_000, eventId:'EMR001_CC1', status:'actual',
+        category:'legal + transaction + valuation', reason:'IFRS 9 §B5.4 / ASC 310-20-25-2 — costs incremental to origination' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+      ecLStage: 1, pdAnnual: 0.005, lgd: 0.30, qFactor: 1.0
+    },
+    preset:'Emerald Pharma · USD 22m with $150k capitalised origination costs · US GAAP / IFRS 9 §B5.4 (Transtype #12)'
+  },
+  // ───────────────────── Maple Heights Term Loan ─────────────────────
+  // Transtype #13 — Loan Sale (Full Derecognition)
+  //
+  // NWF originates a $10m bilateral term loan to Maple Heights, then sells
+  // it 18 months later (mid-life) to a competing lender for $9.5m cash —
+  // a $500k loss on disposal. Per IFRS 9 §3.2.3 / ASC 860 the entire
+  // carrying value is derecognised; cash flows in; difference flows to
+  // P&L as Realised Loss on Loan Sale.
+  //
+  //   • $10m face · 4.50% fixed · 5Y bullet · ACT/360
+  //   • Sold on 2027-02-01 for $9.50m → $500k loss
+  // ----------------------------------------------------------------
+  {
+    id:'mapleHeightsTermLoan',
+    positionId:'POS-NWF-MPL-IFRS', securityId:'SEC-MPL-LOANSALE-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF EMEA Credit', leid: 41,
+    deal:'Maple Heights Term Loan — Loan Sale Demo',
+    position:'NWF 100% Bilateral Position · Maple Heights',
+    incomeSecurity:'Maple Heights Term Loan (USD 10m, 4.50% fixed · IFRS 9 §3.2.3 — Full Sale at Loss)',
+    counterpartyId:'MPL001', transactionId:'MPL001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 10_000_000, purchasePrice: 10_000_000, commitment: 10_000_000,
+    settlementDate:'2025-08-01', maturityDate:'2030-08-01',
+    dayBasis:'ACT/360', holidayCalendar:'none',
+    coupon: { type:'Fixed', fixedRate: 0.0450, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2025-08-01', type:'draw',     amount: 10_000_000, drawdownId:'MPL001_D1', status:'actual' },
+      // ── Transtype #13 — Loan sold to competing lender at $500k loss ──
+      { date:'2027-02-01', type:'loanSale', salePrice:  9_500_000, eventId:'MPL001_LS1', status:'actual',
+        reason:'Portfolio rebalance — full sale to Pacific Credit Partners (IFRS 9 §3.2.3 full derecog)' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+      ecLStage: 1, pdAnnual: 0.008, lgd: 0.35, qFactor: 1.0
+    },
+    preset:'Maple Heights · USD 10m bilateral · sold mid-life at $500k loss · IFRS 9 §3.2.3 (Transtype #13)'
+  },
+  // ─────────────────── Cedar Ridge Senior Term Loan ───────────────────
+  // Transtype #14 — Loan Participation / Partial Sell-Down
+  //
+  // NWF originates a $20m bilateral term loan to Cedar Ridge then,
+  // 12 months later, sells a 50% participation interest to Pacific
+  // Credit Partners for $10.05m cash — a $50k gain on the participated
+  // half. Per IFRS 9 §3.2.6 "fully proportionate share" transfer test,
+  // derecognise the participated proportion only; keep the remaining
+  // 50% on balance sheet accruing.
+  //
+  //   • $20m face · 4.75% fixed · 4Y bullet · ACT/360
+  //   • Sells 50% on 2026-06-15 for $10.05m → $50k gain on sold half
+  // ----------------------------------------------------------------
+  {
+    id:'cedarRidgeParticipation',
+    positionId:'POS-NWF-CDR-IFRS', securityId:'SEC-CDR-PARTIC-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Cedar Ridge Senior Term Loan — Participation Demo',
+    position:'NWF 50% Bilateral Position (post-participation) · Cedar Ridge',
+    incomeSecurity:'Cedar Ridge Senior Term Loan (USD 20m, 4.75% fixed · IFRS 9 §3.2.6 — 50% Participation)',
+    counterpartyId:'CDR001', transactionId:'CDR001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 20_000_000, purchasePrice: 20_000_000, commitment: 20_000_000,
+    settlementDate:'2025-06-15', maturityDate:'2029-06-15',
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.0475, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2025-06-15', type:'draw', amount: 20_000_000, drawdownId:'CDR001_D1', status:'actual' },
+      // ── Transtype #14 — 50% participation sold to Pacific Credit Partners at small gain ──
+      { date:'2026-06-15', type:'participation', fraction: 0.50, salePrice: 10_050_000,
+        eventId:'CDR001_PT1', status:'actual',
+        participant:'Pacific Credit Partners',
+        reason:'Risk diversification — fully proportionate participation (IFRS 9 §3.2.6 pass)' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+      ecLStage: 1, pdAnnual: 0.006, lgd: 0.30, qFactor: 1.0
+    },
+    preset:'Cedar Ridge · USD 20m bilateral · 50% participation at $50k gain · IFRS 9 §3.2.6 (Transtype #14)'
+  },
+  // ───────────────── Birchwood Industries Term Loan ─────────────────
+  // Transtype #15 — Debt-for-Equity Swap
+  //
+  // Birchwood Industries (distressed borrower) restructures its $15m
+  // senior loan by issuing common equity in lieu of repayment. The
+  // equity received has an independently appraised fair value of $9m
+  // — a $6m restructuring loss per IFRIC 19 / ASC 470-50-40.
+  //
+  //   • $15m face · 6.25% fixed · 3Y bullet · ACT/360
+  //   • Swap event on 2026-12-01: equityFairValue $9m → $6m loss
+  // ----------------------------------------------------------------
+  {
+    id:'birchwoodD4ESwap',
+    positionId:'POS-NWF-BCH-IFRS', securityId:'SEC-BCH-D4ESWAP-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF EMEA Credit', leid: 41,
+    deal:'Birchwood Industries — Debt-for-Equity Swap Demo',
+    position:'NWF Bilateral Position · Birchwood Industries',
+    incomeSecurity:'Birchwood Industries Senior Term Loan (USD 15m, 6.25% fixed · IFRIC 19 — D4E Swap)',
+    counterpartyId:'BCH001', transactionId:'BCH001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 15_000_000, purchasePrice: 15_000_000, commitment: 15_000_000,
+    settlementDate:'2025-12-01', maturityDate:'2028-12-01',
+    dayBasis:'ACT/360', holidayCalendar:'none',
+    coupon: { type:'Fixed', fixedRate: 0.0625, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2025-12-01', type:'draw', amount: 15_000_000, drawdownId:'BCH001_D1', status:'actual' },
+      // ── Transtype #15 — Distressed borrower issues equity in lieu of repayment ──
+      { date:'2026-12-01', type:'debtEquitySwap', equityFairValue: 9_000_000, equityShares: 1_500_000,
+        eventId:'BCH001_D4E1', status:'actual',
+        reason:'Restructuring — borrower issues common equity to extinguish loan obligation (IFRIC 19)' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+      ecLStage: 2, pdAnnual: 0.085, lgd: 0.55, qFactor: 1.5
+    },
+    preset:'Birchwood · USD 15m bilateral · D4E swap with $6m restructuring loss · IFRIC 19 (Transtype #15)'
+  },
+  // ─────────────────── Granite Logistics Term Loan ───────────────────
+  // Transtype #16 — Mandatory Prepayment (Change-of-Control)
+  //
+  // Granite Logistics is acquired by Globex Holdings 18 months into the
+  // term. The credit agreement's change-of-control clause requires
+  // mandatory prepayment of the full outstanding principal within 30 days.
+  // No prepayment penalty (waived under change-of-control covenant).
+  //
+  //   • $12m face · 5.00% fixed · 5Y bullet · ACT/360
+  //   • Mandatory full prepayment on 2027-02-01 (change-of-control trigger)
+  // ----------------------------------------------------------------
+  {
+    id:'graniteLogisticsCoC',
+    positionId:'POS-NWF-GRN-IFRS', securityId:'SEC-GRN-MANPREPAY-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Granite Logistics Term Loan — Mandatory Prepayment Demo',
+    position:'NWF 100% Bilateral Position · Granite Logistics',
+    incomeSecurity:'Granite Logistics Term Loan (USD 12m, 5.00% fixed · Change-of-Control Mandatory Prepayment)',
+    counterpartyId:'GRN001', transactionId:'GRN001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 12_000_000, purchasePrice: 12_000_000, commitment: 12_000_000,
+    settlementDate:'2025-08-01', maturityDate:'2030-08-01',
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.0500, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2025-08-01', type:'draw', amount: 12_000_000, drawdownId:'GRN001_D1', status:'actual' },
+      // ── Transtype #16 — Change-of-control triggers mandatory full prepayment, no penalty ──
+      { date:'2027-02-01', type:'mandatoryPrepayment', amount: 12_000_000,
+        trigger:'changeOfControl', eventId:'GRN001_MP1', status:'actual',
+        reason:'Granite acquired by Globex Holdings — change-of-control mandatory prepayment per Section 7.3' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: {
+      ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+      ecLStage: 1, pdAnnual: 0.004, lgd: 0.30, qFactor: 1.0
+    },
+    preset:'Granite Logistics · USD 12m · change-of-control mandatory prepayment · Transtype #16'
+  },
+  // ──────────────── Aspen Health Term Loan — Level Principal ────────────────
+  // Transtype #17a — Level Principal Amortisation
+  //
+  //   • $10m face · 4.75% fixed · 5Y · quarterly level principal
+  //   • 20 quarterly paydowns of $500k each (auto-generated by profile)
+  // ----------------------------------------------------------------
+  {
+    id:'aspenHealthLevelPrincipal',
+    positionId:'POS-NWF-ASP-IFRS', securityId:'SEC-ASP-LEVELP-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Aspen Health Term Loan — Level Principal Amort',
+    position:'NWF Bilateral Position · Aspen Health',
+    incomeSecurity:'Aspen Health Term Loan (USD 10m, 4.75% fixed · level principal · Transtype #17a)',
+    counterpartyId:'ASP001', transactionId:'ASP001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 10_000_000, purchasePrice: 10_000_000, commitment: 10_000_000,
+    settlementDate:'2025-09-01', maturityDate:'2030-09-01',
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.0475, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'Periodic',
+    // ── Transtype #17a — Engine auto-generates 20 quarterly $500k paydowns ──
+    amortProfile: { kind:'levelPrincipal', frequency:'Q', ioMonths:0, balloon:0 },
+    principalSchedule: [
+      { date:'2025-09-01', type:'draw', amount: 10_000_000, drawdownId:'ASP001_D1', status:'actual' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+            ecLStage: 1, pdAnnual: 0.005, lgd: 0.30, qFactor: 1.0 },
+    preset:'Aspen Health · USD 10m · 5Y quarterly level principal · Transtype #17a'
+  },
+  // ──────────────── Beacon Tower Term Loan — Annuity ────────────────
+  // Transtype #17b — Annuity (Equal Total Payment)
+  //
+  //   • $8m face · 5.50% fixed · 4Y · quarterly annuity
+  //   • Engine computes annuity PMT, principal portion declines per period
+  // ----------------------------------------------------------------
+  {
+    id:'beaconTowerAnnuity',
+    positionId:'POS-NWF-BCN-IFRS', securityId:'SEC-BCN-ANNUITY-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF EMEA Credit', leid: 41,
+    deal:'Beacon Tower Term Loan — Annuity Amort',
+    position:'NWF Bilateral Position · Beacon Tower',
+    incomeSecurity:'Beacon Tower Term Loan (USD 8m, 5.50% fixed · annuity · Transtype #17b)',
+    counterpartyId:'BCN001', transactionId:'BCN001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 8_000_000, purchasePrice: 8_000_000, commitment: 8_000_000,
+    settlementDate:'2025-10-01', maturityDate:'2029-10-01',
+    dayBasis:'ACT/360', holidayCalendar:'none',
+    coupon: { type:'Fixed', fixedRate: 0.0550, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'Periodic',
+    // ── Transtype #17b — Engine auto-generates 16 quarterly annuity paydowns ──
+    amortProfile: { kind:'annuity', frequency:'Q', ioMonths:0, balloon:0 },
+    principalSchedule: [
+      { date:'2025-10-01', type:'draw', amount: 8_000_000, drawdownId:'BCN001_D1', status:'actual' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+            ecLStage: 1, pdAnnual: 0.006, lgd: 0.32, qFactor: 1.0 },
+    preset:'Beacon Tower · USD 8m · 4Y quarterly annuity · Transtype #17b'
+  },
+  // ──────────────── Halcyon Bridge — IO with Balloon ────────────────
+  // Transtype #17c — Interest-Only with Balloon Repayment
+  //
+  //   • $25m face · 6.00% fixed · 2Y · 24 months IO + $25m balloon
+  //   • Common for bridge / project finance — no intermediate principal
+  // ----------------------------------------------------------------
+  {
+    id:'halcyonBridgeIOBalloon',
+    positionId:'POS-NWF-HAL-IFRS', securityId:'SEC-HAL-IOBALLOON-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF EMEA Credit', leid: 41,
+    deal:'Halcyon Bridge Loan — IO with Balloon',
+    position:'NWF Bilateral Position · Halcyon Bridge',
+    incomeSecurity:'Halcyon Bridge Loan (USD 25m, 6.00% fixed · IO+balloon · Transtype #17c)',
+    counterpartyId:'HAL001', transactionId:'HAL001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 25_000_000, purchasePrice: 25_000_000, commitment: 25_000_000,
+    settlementDate:'2026-01-15', maturityDate:'2028-01-15',
+    dayBasis:'ACT/360', holidayCalendar:'none',
+    coupon: { type:'Fixed', fixedRate: 0.0600, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    // ── Transtype #17c — Single balloon at maturity, no intermediate paydowns ──
+    amortProfile: { kind:'ioBalloon', frequency:'Q', ioMonths:24, balloon:0 },
+    principalSchedule: [
+      { date:'2026-01-15', type:'draw', amount: 25_000_000, drawdownId:'HAL001_D1', status:'actual' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+            ecLStage: 1, pdAnnual: 0.008, lgd: 0.40, qFactor: 1.0 },
+    preset:'Halcyon Bridge · USD 25m · 2Y interest-only with balloon · Transtype #17c'
+  },
+  // ─────────────────── Ironwood Pacific Term Loan ───────────────────
+  // Transtype #18 — Trade vs Settlement Date Accounting
+  //
+  // NWF agrees to buy a $7.5m secondary-market loan position on trade
+  // date 2026-04-01, with settlement T+7 on 2026-04-08. Under trade-date
+  // accounting (IFRS 9 §B3.1.5), NWF recognises the loan asset on trade
+  // date with an offsetting unsettled-trade-payable. On settlement the
+  // payable unwinds against cash.
+  //
+  //   • $7.5m face · 4.85% fixed · 3Y bullet · ACT/360
+  //   • Trade date 2026-04-01, settle 2026-04-08 (T+7)
+  // ----------------------------------------------------------------
+  {
+    id:'ironwoodPacificTrade',
+    positionId:'POS-NWF-IRN-IFRS', securityId:'SEC-IRN-TRADESETTLE-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Ironwood Pacific Term Loan — Trade-Date Accounting Demo',
+    position:'NWF Secondary Position · Ironwood Pacific',
+    incomeSecurity:'Ironwood Pacific Term Loan (USD 7.5m, 4.85% fixed · T+7 trade-date accounting · IFRS 9 §B3.1.5)',
+    counterpartyId:'IRN001', transactionId:'IRN001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 7_500_000, purchasePrice: 7_500_000, commitment: 7_500_000,
+    // ── Transtype #18 — Trade vs settlement date ──
+    tradeDate:'2026-04-01',
+    settlementDate:'2026-04-08',
+    tradeAccountingMethod:'tradeDate',
+    maturityDate:'2029-04-08',
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.0485, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-04-08', type:'draw', amount: 7_500_000, drawdownId:'IRN001_D1', status:'actual',
+        note:'Cash settles on T+7; trade-date recognition booked separately' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+            ecLStage: 1, pdAnnual: 0.005, lgd: 0.30, qFactor: 1.0 },
+    preset:'Ironwood Pacific · USD 7.5m · T+7 trade-vs-settlement · IFRS 9 §B3.1.5 (Transtype #18)'
+  },
+  // ─────────────────── Juniper Park Term Loan ───────────────────
+  // Transtype #19 — Period-End Reversing Entries
+  //
+  // Standard month-end-close pattern: every accrual JE posted on period-end
+  // gets a mirrored "Reversing — …" entry on day 1 of the next period that
+  // cancels it. When the cash receipt actually hits, the full coupon books
+  // to income in the new period rather than half-and-half across periods.
+  //
+  //   • $8m face · 5.25% fixed · 3Y bullet · ACT/360
+  //   • useReversingEntries: true → engine emits reversing twin pairs
+  // ----------------------------------------------------------------
+  {
+    id:'juniperParkReversingEntries',
+    positionId:'POS-NWF-JNP-IFRS', securityId:'SEC-JNP-REVERSE-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Juniper Park Term Loan — Reversing Entries Demo',
+    position:'NWF Bilateral Position · Juniper Park',
+    incomeSecurity:'Juniper Park Term Loan (USD 8m, 5.25% fixed · auto-reversing accruals · Transtype #19)',
+    counterpartyId:'JNP001', transactionId:'JNP001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 8_000_000, purchasePrice: 8_000_000, commitment: 8_000_000,
+    settlementDate:'2026-03-01', maturityDate:'2029-03-01',
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.0525, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    // ── Transtype #19 — Auto-reversing accrual policy ──
+    useReversingEntries: true,
+    principalSchedule: [
+      { date:'2026-03-01', type:'draw', amount: 8_000_000, drawdownId:'JNP001_D1', status:'actual' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+            ecLStage: 1, pdAnnual: 0.004, lgd: 0.30, qFactor: 1.0 },
+    preset:'Juniper Park · USD 8m · auto-reversing accruals (Transtype #19)'
+  },
+  // ─────────────────── Kestrel Wind Farm Term Loan ───────────────────
+  // Transtype #20 — Hedge De-Designation
+  //
+  // NWF originally designates an IRS as a CFH against the floating-rate
+  // coupon. Two years in, hedge accounting is voluntarily discontinued
+  // (e.g. portfolio realignment, risk policy change). Per IFRS 9 §6.5.6:
+  //   • Stop accruing new effective-hedge OCI from de-designation date
+  //   • Amortise the EXISTING OCI reserve linearly to P&L over remaining life
+  //
+  //   • $15m face · SONIA + 300bps · 5Y bullet · CFH IRS
+  //   • De-designation on 2027-06-30 (~2 years in, ~3 years remain)
+  // ----------------------------------------------------------------
+  {
+    id:'kestrelWindFarmDeDesignation',
+    positionId:'POS-NWF-KST-IFRS', securityId:'SEC-KST-DEDED-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF Sustainable Infrastructure', leid: 42,
+    deal:'Kestrel Wind Farm — Hedge De-Designation Demo',
+    position:'NWF Bilateral Position · Kestrel Wind Farm (CFH discontinued)',
+    incomeSecurity:'Kestrel Wind Farm Term Loan (USD 15m, SONIA+300 · CFH de-designated · IFRS 9 §6.5.6)',
+    counterpartyId:'KST001', transactionId:'KST001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 15_000_000, purchasePrice: 15_000_000, commitment: 15_000_000,
+    settlementDate:'2025-06-30', maturityDate:'2030-06-30',
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'SONIA', fixedRate: 0, floatingRate: 0, spread: 0.030, floor:null, cap:null },
+    rfr: { index:'SONIA', baseRate: 0.0475, lookbackDays: 5 },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2025-06-30', type:'draw', amount: 15_000_000, drawdownId:'KST001_D1', status:'actual' }
+    ],
+    // ── CFH hedge that builds OCI reserve until de-designation ──
+    hedge: {
+      type:'CFH',
+      notional: 15_000_000,
+      fixedRate: 0.0525,
+      floatingRate: 0.0475,
+      effectivenessRatio: 0.95,
+      fairValueSchedule: [
+        { date:'2025-06-30', mtm:        0 },
+        { date:'2026-06-30', mtm:   75_000 },
+        { date:'2027-06-30', mtm:  150_000 },   // freeze point
+        { date:'2028-06-30', mtm:  225_000 },
+        { date:'2029-06-30', mtm:  300_000 },
+        { date:'2030-06-30', mtm:        0 }    // matures with hedged item
+      ]
+    },
+    // ── Transtype #20 — De-designate hedge on 2027-06-30 ──
+    hedgeDeDesignationDate:'2027-06-30',
+    oidTreatment:'none', fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+            ecLStage: 1, pdAnnual: 0.005, lgd: 0.30, qFactor: 1.0 },
+    preset:'Kestrel Wind Farm · USD 15m · CFH de-designated mid-life · IFRS 9 §6.5.6 (Transtype #20)'
+  },
+  // ─────────────────── Larkspur Mining Term Loan ───────────────────
+  // Transtype #22 — FX Hedge of Loan Principal
+  //
+  // GBP-functional NWF entity holds a USD 20m term loan. To hedge the FX
+  // risk on the principal balance, NWF enters an FX forward designated as
+  // a hedge of the FX risk component. Per IFRS 9 §6.5.16(c) / §B6.5.34:
+  // the OCI accumulates in a dedicated FX Hedge Reserve (370000) rather
+  // than the generic CFH Reserve (360000). The currency basis spread
+  // may be separated into a Cost of Hedging Reserve (375000) bucket.
+  //
+  //   • $20m face · SONIA + 250bps · 3Y bullet · FX forward hedge
+  // ----------------------------------------------------------------
+  {
+    id:'larkspurMiningFXHedge',
+    positionId:'POS-NWF-LRK-IFRS', securityId:'SEC-LRK-FXHEDGE-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF EMEA Credit', leid: 41,
+    deal:'Larkspur Mining Term Loan — FX Hedge of Principal Demo',
+    position:'NWF Bilateral Position · Larkspur Mining (USD loan, GBP functional)',
+    incomeSecurity:'Larkspur Mining Term Loan (USD 20m, SONIA+250 · FX hedge of principal · IFRS 9 §6.5.16)',
+    counterpartyId:'LRK001', transactionId:'LRK001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 20_000_000, purchasePrice: 20_000_000, commitment: 20_000_000,
+    settlementDate:'2026-04-01', maturityDate:'2029-04-01',
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'SONIA', fixedRate: 0, floatingRate: 0, spread: 0.025, floor:null, cap:null },
+    rfr: { index:'SONIA', baseRate: 0.0475, lookbackDays: 5 },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-04-01', type:'draw', amount: 20_000_000, drawdownId:'LRK001_D1', status:'actual' }
+    ],
+    // ── Transtype #22 — FX Hedge of Loan Principal ──
+    // FX forward MTM accumulates into FX Hedge Reserve (370000) — dedicated
+    // OCI bucket separate from the generic CFH reserve (360000).
+    hedge: {
+      type:'FXP',                              // FX hedge of Principal
+      subType:'fxPrincipal',                   // explicit subType marker
+      notional: 20_000_000,
+      fixedRate: 1.25,                         // GBP per USD forward rate
+      floatingRate: 1.27,                      // spot at trade
+      effectivenessRatio: 0.95,
+      currencyBasisShare: 0.10,                // ~10% of MTM attributable to basis spread
+      fairValueSchedule: [
+        { date:'2026-04-01', mtm:        0 },
+        { date:'2027-04-01', mtm:  -180_000 },
+        { date:'2028-04-01', mtm:  -120_000 },
+        { date:'2029-04-01', mtm:        0 }   // settles at maturity
+      ]
+    },
+    oidTreatment:'none', fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+            ecLStage: 1, pdAnnual: 0.006, lgd: 0.35, qFactor: 1.0 },
+    preset:'Larkspur Mining · USD 20m · FX hedge of principal · IFRS 9 §6.5.16 (Transtype #22)'
+  },
+  // ─────────────── Marigold Senior Notes (Allowance Reversal) ───────────────
+  // Transtype #23 — Allowance Reversal Without Stage Change
+  //
+  // A Stage 1 loan whose ECL allowance was built up over the first 18 months.
+  // The bank's risk team recalibrates its macro overlay weights and the loan's
+  // ECL drops by $50k — the borrower's stage doesn't change (still Stage 1),
+  // but the model recalibration releases part of the allowance to P&L. The
+  // engine emits a distinct JE pair labelled "model recalibration" so IFRS 7
+  // §35F ECL roll-forward can split this from stage-driven cure movements.
+  //
+  //   • $10m face · 4.50% fixed · 4Y bullet
+  //   • Model recalibration on 2027-09-01 releases $50k of allowance
+  // ----------------------------------------------------------------
+  {
+    id:'marigoldAllowanceReversal',
+    positionId:'POS-NWF-MGD-IFRS', securityId:'SEC-MGD-MODELRECAL-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Marigold Senior Notes — Allowance Reversal Demo',
+    position:'NWF Bilateral Position · Marigold Senior Notes',
+    incomeSecurity:'Marigold Senior Notes (USD 10m, 4.50% fixed · model-driven allowance reversal · Transtype #23)',
+    counterpartyId:'MGD001', transactionId:'MGD001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 10_000_000, purchasePrice: 10_000_000, commitment: 10_000_000,
+    settlementDate:'2026-03-01', maturityDate:'2030-03-01',
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.0450, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2026-03-01', type:'draw', amount: 10_000_000, drawdownId:'MGD001_D1', status:'actual' },
+      // ── Transtype #23 — Model recalibration releases part of allowance ──
+      // (No stage change — borrower stays at Stage 1; macro overlay weights dropped)
+      { date:'2027-09-01', type:'allowanceReversal', releaseAmount: 50_000,
+        eventId:'MGD001_AR1', status:'actual',
+        reason:'Macro overlay recalibration — Q3 2027 model update reduces lifetime PD assumption (no stage change)' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+            ecLStage: 1, pdAnnual: 0.012, lgd: 0.40, qFactor: 1.5 },   // qFactor 1.5 builds allowance
+    preset:'Marigold · USD 10m · model recalibration releases $50k allowance · Transtype #23'
+  },
+  // ─────────────── Nightshade Capital Term Loan ───────────────
+  // Transtype #24 — Loan-Loss Recovery Allocation
+  //
+  // After a $10m write-off at year 2, the bankruptcy estate distributes $3m.
+  // The credit agreement governs allocation: principal first (60%), then
+  // accrued default interest (20%), then default fees (15%), then legal
+  // costs incurred during the proceedings (5%).
+  //
+  //   • $10m face · 5.50% fixed · 5Y bullet · written off at year 2
+  //   • Recovery of $3m at year 3 with bucket allocation per §35K disclosure
+  // ----------------------------------------------------------------
+  {
+    id:'nightshadeCapitalAllocatedRecovery',
+    positionId:'POS-NWF-NSH-IFRS', securityId:'SEC-NSH-ALLOCREC-IFRS',
+    instrumentKind:'loan',
+    legalEntity:'NWF EMEA Credit', leid: 41,
+    deal:'Nightshade Capital — Allocated Recovery Demo',
+    position:'NWF Bilateral Position · Nightshade Capital',
+    incomeSecurity:'Nightshade Capital Term Loan (USD 10m, 5.50% fixed · post-default recovery with bucket allocation · Transtype #24)',
+    counterpartyId:'NSH001', transactionId:'NSH001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'IFRS',
+    faceValue: 10_000_000, purchasePrice: 10_000_000, commitment: 10_000_000,
+    settlementDate:'2025-06-01', maturityDate:'2030-06-01',
+    dayBasis:'ACT/360', holidayCalendar:'none',
+    coupon: { type:'Fixed', fixedRate: 0.0550, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 }, nonUseFee: { enabled:false, rate:0 },
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    principalSchedule: [
+      { date:'2025-06-01', type:'draw',     amount: 10_000_000, drawdownId:'NSH001_D1', status:'actual' },
+      { date:'2027-06-01', type:'writeOff', amount: 10_000_000, eventId:'NSH001_WO1', status:'actual',
+        reason:'Borrower Chapter 11 — full write-off' },
+      // ── Transtype #24 — Allocated recovery distribution from bankruptcy estate ──
+      { date:'2028-06-01', type:'recovery', amount: 3_000_000, eventId:'NSH001_REC1', status:'actual',
+        reason:'Bankruptcy estate first distribution',
+        allocation: {
+          principal:  1_800_000,    // 60%
+          defaultInt:   600_000,    // 20%
+          defaultFee:   450_000,    // 15%
+          legal:        150_000     //  5%
+        }
+      }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+            ecLStage: 3, pdAnnual: 0.45, lgd: 0.60, qFactor: 1.0 },
+    preset:'Nightshade Capital · USD 10m · written off, $3m allocated recovery · Transtype #24'
+  },
+  // ─────────────── Oakhaven Revolving Credit Facility ───────────────
+  // Transtype #25 — Origination Cost Deferral on Revolvers
+  //
+  // Revolving credit facility — borrower can draw, repay, and re-draw during
+  // the 3-year availability period; outstanding balances mature at year 5.
+  // Per ASC 310-20-25-19 / IFRS 9 §B5.4.1: origination costs on revolvers
+  // amortise over the COMMITMENT PERIOD (settlement → availabilityEnd), not
+  // over the underlying loan maturity. Faster amort schedule than a term loan.
+  //
+  //   • $20m commitment · 4.75% fixed on drawn · 3Y availability · 5Y maturity
+  //   • $200k capitalised origination costs amortise over 3-year availability
+  // ----------------------------------------------------------------
+  {
+    id:'oakhavenRevolverDeferral',
+    positionId:'POS-NWF-OAK-IFRS', securityId:'SEC-OAK-REVOLVER-IFRS',
+    instrumentKind:'revolver',
+    legalEntity:'NWF North America Credit', leid: 47,
+    deal:'Oakhaven Revolving Credit Facility — Cost Deferral Demo',
+    position:'NWF Bilateral Position · Oakhaven Revolver',
+    incomeSecurity:'Oakhaven RCF (USD 20m commitment, 4.75% fixed · 3Y avail / 5Y maturity · origination cost over commitment · Transtype #25)',
+    counterpartyId:'OAK001', transactionId:'OAK001', bilateralFlag:'Bilateral', agentName:'NWF',
+    currency:'USD',
+    accountingFramework:'USGAAP',  // ASC 310-20-25-19 is US GAAP territory
+    faceValue: 20_000_000, purchasePrice: 20_000_000, commitment: 20_000_000,
+    settlementDate:'2026-04-01',
+    availabilityEnd:'2029-04-01',  // 3-year availability
+    maturityDate:'2031-04-01',     // 5-year maturity
+    dayBasis:'ACT/360', holidayCalendar:'usFederal',
+    coupon: { type:'Fixed', fixedRate: 0.0475, floatingRate:0, spread:0, floor:null, cap:null },
+    pik: { enabled:false, rate:0 },
+    nonUseFee: { enabled:true, rate: 0.0050 },   // 50bps on undrawn
+    amortization: { method:'none' }, type:'simpleDaily', principalRepayment:'AtMaturity',
+    // ── Transtype #25 — Amortise origination costs over commitment, not maturity ──
+    revolverCostDeferralBasis:'commitment',
+    principalSchedule: [
+      { date:'2026-04-01', type:'draw', amount: 10_000_000, drawdownId:'OAK001_D1', status:'actual', note:'Initial $10m draw against $20m commitment' },
+      // Capitalised origination cost paid at signing
+      { date:'2026-04-01', type:'capitalisedCost', amount: 200_000, eventId:'OAK001_CC1', status:'actual',
+        category:'legal + transaction', reason:'Revolver setup costs — amortise over commitment per ASC 310-20-25-19' }
+    ],
+    oidTreatment:'none', fees: [],
+    ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
+            ecLStage: 1, pdAnnual: 0.004, lgd: 0.30, qFactor: 1.0 },
+    preset:'Oakhaven Revolver · USD 20m · origination cost over commitment period (ASC 310-20-25-19) · Transtype #25'
   }
 ];
 

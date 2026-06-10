@@ -158,6 +158,58 @@ function aggregateChildEIRs(childResults, childRecords, kind){
    Priority order when instr.eirMethod is null/missing:
      override → method2 (PRICE) → method3 → method1.
    ============================================================================ */
+/* ============================================================================
+   OID / Premium treatment (Transtype #1 spec — Option β)
+
+   Translates the user-facing `oidTreatment` and `oidMethod` fields into the
+   existing engine machinery (`amortization.method`). The engine already
+   produces separate JE pairs for fee accretion vs OID/premium accretion — this
+   helper just lets PortF set it via a clean, single field.
+
+     oidTreatment:
+       'auto'    → infer from PP vs FV  (PP<FV → oid, PP>FV → premium, else none)
+       'oid'     → force discount accretion treatment
+       'premium' → force premium amortisation treatment
+       'none'    → no OID/premium treatment
+
+     oidMethod:
+       'effective-interest'  → use existing effectiveInterestFormula path
+       'straight-line'       → use existing straightLine path
+   ============================================================================ */
+function resolveOIDTreatment(instr){
+  if(!instr) return { treatment: 'none', method: 'effective-interest' };
+  const pp = instr.purchasePrice || instr.faceValue || 0;
+  const fv = instr.faceValue || 0;
+  let t = (instr.oidTreatment || 'auto').toLowerCase();
+  if(t === 'auto'){
+    if(pp < fv - 0.01) t = 'oid';
+    else if(pp > fv + 0.01) t = 'premium';
+    else t = 'none';
+  }
+  const m = (instr.oidMethod || 'effective-interest').toLowerCase();
+  return { treatment: t, method: m, oidAmount: fv - pp };
+}
+
+// Ensure `amortization.method` is set to drive the existing accretion logic
+// whenever oidTreatment resolves to oid/premium. This runs lazily on read; we
+// don't mutate the instrument here — the engine's dailyAmort path already
+// keys off amortization.method, so we provide it via a getter when computeEIR
+// or buildSchedule are called.
+function applyOIDOverrideToAmortMethod(instr){
+  const r = resolveOIDTreatment(instr);
+  if(r.treatment === 'none') return instr;
+  // Don't overwrite an explicitly-set non-'none' amortization.method
+  const existing = instr.amortization && instr.amortization.method;
+  if(existing && existing !== 'none') return instr;
+  // effective-interest → solve yield from price (purchasePrice vs face);
+  // straight-line     → totalOID / totalDays
+  const newMethod = r.method === 'straight-line' ? 'straightLine' : 'effectiveInterestPrice';
+  return Object.assign({}, instr, {
+    amortization: Object.assign({}, instr.amortization || {}, { method: newMethod }),
+    _oidResolved: r
+  });
+}
+
 function computeEIRUSGAAP(instr){
   if(!instr) return null;
   const method = instr.eirMethod || 'method2';     // default: PRICE
@@ -416,8 +468,118 @@ function computeEIR(instr){
      carryingValue        (used by effective-interest / straight-line methods)
      cumInterest, cumPIK  (tracker for capitalization)
 -------------------------------------------------- */
+// ─── Transtype #17 — Multiple Amortisation Profiles ────────────────────
+// Expand a high-level amortProfile spec into explicit principalSchedule
+// paydown events. Supported profile kinds:
+//
+//   • 'bullet'         — single repayment at maturity (no-op; default)
+//   • 'levelPrincipal' — equal principal payments across N periods
+//                        E.g. $10m / 20 quarters = $500k each quarter
+//   • 'annuity'        — equal total payments (P+I); engine computes the
+//                        principal carve-out per period using the contract
+//                        rate at start (approximation — real annuity would
+//                        rely on the actual rate at each period date)
+//   • 'ioBalloon'      — interest-only for ioMonths, then full balloon
+//                        at maturity. Common for bridge / project finance.
+//
+// The expander only runs when amortProfile is set AND principalSchedule
+// doesn't already contain explicit paydowns (so user-supplied schedules
+// take precedence — backward compatible with all existing seeds).
+function expandAmortProfile(instr){
+  const prof = instr.amortProfile;
+  if(!prof || !prof.kind || prof.kind === 'bullet') return;
+  const sched = Array.isArray(instr.principalSchedule) ? instr.principalSchedule : [];
+  const hasExplicitPaydown = sched.some(e => e.type === 'paydown' || e.type === 'repayment');
+  if(hasExplicitPaydown) return;   // user already specified — don't double up
+
+  const face = +instr.faceValue || +instr.commitment || 0;
+  if(face <= 0) return;
+  const settle   = new Date(instr.settlementDate);
+  const maturity = new Date(instr.maturityDate);
+  if(isNaN(settle) || isNaN(maturity) || maturity <= settle) return;
+
+  const balloon = Math.max(0, +prof.balloon || 0);
+  const amortAmount = face - balloon;        // amount to amortise across periods
+
+  // Step interval in months between paydowns: 'M'=1, 'Q'=3, 'S'=6, 'A'=12
+  const stepMonths = { M:1, Q:3, S:6, A:12 }[prof.frequency || 'Q'] || 3;
+  const ioMonths   = Math.max(0, +prof.ioMonths || 0);
+  // First amort date: ioMonths after settle (or explicit profile.startDate)
+  const firstAmort = prof.startDate
+    ? new Date(prof.startDate)
+    : new Date(settle.getFullYear(), settle.getMonth() + ioMonths + stepMonths, settle.getDate());
+
+  // Enumerate period-end dates from firstAmort to maturity inclusive
+  const periodDates = [];
+  let d = new Date(firstAmort);
+  while(d < maturity){
+    periodDates.push(new Date(d));
+    d = new Date(d.getFullYear(), d.getMonth() + stepMonths, d.getDate());
+  }
+  const nPeriods = periodDates.length;
+  if(nPeriods === 0){
+    // No room for periodic paydowns — fall through to bullet at maturity
+    sched.push({ date: instr.maturityDate, type:'paydown', amount: face, _generated:true, _profile: prof.kind });
+    instr.principalSchedule = sched;
+    return;
+  }
+
+  // Generate paydowns by kind
+  const paydowns = [];
+  if(prof.kind === 'levelPrincipal'){
+    const perPeriod = amortAmount / nPeriods;
+    periodDates.forEach((pd, i) => {
+      paydowns.push({ date: pd.toISOString().slice(0,10), type:'paydown', amount: round2(perPeriod),
+                      _generated:true, _profile:'levelPrincipal', _idx: i+1 });
+    });
+  } else if(prof.kind === 'annuity'){
+    // Annuity formula: PMT = P × r/(1−(1+r)^-N)  where r = periodic rate
+    const annualRate = (instr.coupon && (instr.coupon.fixedRate || (instr.coupon.floatingRate||0) + (instr.coupon.spread||0))) || 0;
+    const r = annualRate * stepMonths / 12;
+    const PMT = (r === 0) ? (amortAmount / nPeriods) : (amortAmount * r / (1 - Math.pow(1+r, -nPeriods)));
+    let outstanding = amortAmount;
+    periodDates.forEach((pd, i) => {
+      const interestThisPd = outstanding * r;
+      const principalThisPd = Math.max(0, PMT - interestThisPd);
+      const cappedPrincipal = (i === nPeriods - 1) ? outstanding : Math.min(principalThisPd, outstanding);
+      outstanding -= cappedPrincipal;
+      paydowns.push({ date: pd.toISOString().slice(0,10), type:'paydown', amount: round2(cappedPrincipal),
+                      _generated:true, _profile:'annuity', _idx: i+1 });
+    });
+  } else if(prof.kind === 'ioBalloon'){
+    // Single balloon at maturity (no intermediate paydowns).
+    paydowns.push({ date: instr.maturityDate, type:'paydown', amount: round2(face),
+                    _generated:true, _profile:'ioBalloon', _idx: 1 });
+  }
+
+  // Add the balloon repayment at maturity (after the last period paydown) for
+  // levelPrincipal / annuity if balloon > 0
+  if(balloon > 0 && (prof.kind === 'levelPrincipal' || prof.kind === 'annuity')){
+    paydowns.push({ date: instr.maturityDate, type:'paydown', amount: round2(balloon),
+                    _generated:true, _profile: prof.kind + '_balloon' });
+  }
+
+  instr.principalSchedule = sched.concat(paydowns);
+}
+function round2(x){ return Math.round(x * 100) / 100; }
+
 function buildSchedule(instr){
   if(!instr) return [];
+
+  // Resolve OID/Premium treatment first — if oidTreatment is set (or auto
+  // resolves to oid/premium given PP vs FV), apply amortization.method so the
+  // existing dailyAmort path engages. This produces the separate "Discount
+  // Accretion" / "Premium Amortization" JE pair already wired in generateDIU.
+  instr = applyOIDOverrideToAmortMethod(instr);
+
+  // Transtype #17 — Expand any amortProfile into explicit principalSchedule
+  // paydowns. Operates in-place; safe for repeat invocations because the
+  // expander short-circuits when explicit paydowns already exist.
+  if(instr.amortProfile && instr.amortProfile.kind && instr.amortProfile.kind !== 'bullet'){
+    // Clone so we don't mutate the user's INSTRUMENTS entry on repeated calls
+    instr = Object.assign({}, instr, { principalSchedule: (instr.principalSchedule || []).slice() });
+    expandAmortProfile(instr);
+  }
 
   // ---- Multi-tranche / multi-underlying support -------------------------
   // If instr.tranches is non-empty (a loan with fixed + floating tranches in
@@ -521,6 +683,10 @@ function buildSchedule(instr){
   if(initialDraw)            balance = initialDraw.amount;
   else if(hasFutureDraws)    balance = 0;       // facility with deferred drawdown
   else                       balance = instr.faceValue || 0;
+  // BUGFIX: when initialDraw is a `type='draw'` event (not 'initial'), the
+  // loop below would add its amount AGAIN, double-counting the draw. Mark it
+  // so the loop skips it on the matched settle-date row.
+  if(initialDraw && initialDraw.type === 'draw') initialDraw._consumedAsInitial = true;
   let drawnBalance  = balance;
   const commitment  = instr.commitment ?? instr.faceValue;
 
@@ -664,12 +830,12 @@ function buildSchedule(instr){
   // For IFRS9-EIR fees: deferred income at t0 = sum(flat one-off) + 0 (% accrue daily over life)
   let deferredEIRPool = 0;
   for(const f of fees){
-    if(f.ifrs === 'IFRS9-EIR' && f.mode === 'flat' && f.frequency === 'oneOff'){
+    if(/EIR$/.test(f.ifrs || '') && f.mode === 'flat' && f.frequency === 'oneOff'){
       deferredEIRPool += (f.amount || 0);
       // Reduce initial carrying value by the deferred fee (cash received at signing
       // is offset against carrying amount; it accretes back into interest income).
       carryingValue -= (f.amount || 0);
-    } else if(f.ifrs === 'IFRS9-EIR' && f.mode === 'percent' && f.frequency === 'oneOff'){
+    } else if(/EIR$/.test(f.ifrs || '') && f.mode === 'percent' && f.frequency === 'oneOff'){
       const baseAmt = ((b)=>{
         if(b==='commitment') return commitment;
         if(b==='face')       return instr.faceValue || 0;
@@ -708,15 +874,247 @@ function buildSchedule(instr){
   for(let i=0; i<days.length; i++){
     const d = days[i];
 
-    // ----- Apply events first (draws, paydowns) -----
+    // ----- Apply events first (draws, paydowns, prepayments, write-offs, recoveries, cures, forbearance, cap. costs, loan sales) -----
     const evs = eventsOn(d, events);
-    let draw=0, paydown=0, initial=0;
+    let draw=0, paydown=0, prepayment=0, prepayPenalty=0, initial=0;
+    let mandatoryPrepayment=0;                       // Transtype #16 — covenant-triggered portion
+    const mandatoryTriggers = [];                    // Transtype #16 — array of trigger reason codes
+    let writeOff=0, writeOffAllowanceUsed=0, writeOffResidualExpense=0;
+    let recovery=0;
+    let recoveryAllocation=null;        // Transtype #24 — optional bucket split
+    let cureRelease=0;                  // Transtype #10
+    let allowanceReversal=0;            // Transtype #23 — model-driven, no stage change
+    let forbearanceStartDeferred=0;     // Transtype #11 (one-time deferral booking on start date)
+    let capitalisedCost=0;              // Transtype #12 (one-off origination cost paid out)
+    let loanSale=0, loanSaleCV=0, loanSaleGain=0;  // Transtype #13 (cash, carrying derecognised, gain/loss)
+    let participation=0, participationCV=0, participationGain=0;  // Transtype #14 (partial sale)
+    let debtEquitySwap=0, debtEquitySwapCV=0, debtEquitySwapLoss=0;  // Transtype #15 (D4E swap)
+    const dateISO = toISO(d);
     for(const e of evs){
       if(e.type==='initial'){ initial += e.amount; /* already counted into starting balance */ }
-      else if(e.type==='draw'){ draw += e.amount; balance += e.amount; drawnBalance += e.amount; carryingValue += e.amount; }
+      else if(e.type==='draw'){
+        // Skip the draw event that was already consumed by the initialDraw
+        // detection (otherwise balance/carryingValue would double-count).
+        if(e._consumedAsInitial){ draw += e.amount; /* counted into starting balance */ }
+        else { draw += e.amount; balance += e.amount; drawnBalance += e.amount; carryingValue += e.amount; }
+      }
       // 'repayment' is an alias for 'paydown' used by guarantee / equity-fund
       // examples — semantically clearer when reading the schedule.
       else if(e.type==='paydown' || e.type==='repayment'){ paydown += e.amount; balance -= e.amount; drawnBalance -= e.amount; carryingValue -= e.amount; }
+      // Transtype #4 — Prepayment. Same balance / carrying effect as paydown,
+      // tagged separately so generateDIU emits a distinct "Loan Prepayment" JE.
+      else if(e.type==='prepayment'){
+        prepayment += e.amount; balance -= e.amount; drawnBalance -= e.amount; carryingValue -= e.amount;
+        // Transtype #5 — Prepayment penalty.
+        // Look up the applicable rate from instr.prepaymentPenaltySchedule[] and
+        // compute penalty = prepayAmount × rate. If the prepayment event itself
+        // carries a `penaltyRate` field, that overrides the schedule (per-deal
+        // negotiated case).
+        const sched = Array.isArray(instr.prepaymentPenaltySchedule) ? instr.prepaymentPenaltySchedule : [];
+        let rate = 0;
+        if(typeof e.penaltyRate === 'number') rate = e.penaltyRate;
+        else {
+          const band = sched.find(s => (!s.from || s.from <= dateISO) && (!s.to || s.to >= dateISO));
+          if(band) rate = band.ratePct || band.rate || 0;
+        }
+        if(rate > 0) prepayPenalty += e.amount * rate;
+      }
+      // Transtype #16 — Mandatory Prepayment Events. Covenant-triggered
+      // partial or full early repayment (excess cash flow sweep, change-of-
+      // control, asset disposal proceeds, insurance/condemnation, IPO
+      // proceeds). Same balance/carrying effect as a voluntary prepayment,
+      // but tagged separately so DIU emits a distinct transtype carrying
+      // the trigger reason — critical for covenant tracking and lender
+      // reporting. Default: NO penalty income (mandatory prepayments
+      // typically waive penalty by design).
+      //   • trigger: 'excessCashFlow'|'changeOfControl'|'assetSale'|'ipo'|'insurance'
+      //   • penaltyRate: 0 by default — set explicitly if the credit agreement
+      //                  applies a make-whole even on mandatory prepay
+      else if(e.type==='mandatoryPrepayment'){
+        mandatoryPrepayment += e.amount;
+        // Also feed into the overall prepayment bucket so dashboard / cashflow
+        // charts continue to display the principal flow correctly (the voluntary
+        // vs. mandatory split is recovered in DIU via the dedicated row field).
+        prepayment   += e.amount;
+        balance      -= e.amount;
+        drawnBalance -= e.amount;
+        carryingValue-= e.amount;
+        if(e.trigger) mandatoryTriggers.push(e.trigger);
+        // Apply penalty only if the event explicitly carries a rate (rare).
+        if(typeof e.penaltyRate === 'number' && e.penaltyRate > 0){
+          prepayPenalty += e.amount * e.penaltyRate;
+        }
+      }
+      // Transtype #9 — Recovery post-write-off. Cash received from the
+      // borrower (or bankruptcy estate, guarantor, collateral realisation)
+      // AFTER the loan has been written off. Balance / carrying remain zero;
+      // the recovery is recognised as income that reverses prior impairment.
+      // Per IFRS 9 §B5.5.43 / ASC 326-20-30, recoveries are credited to the
+      // same line that absorbed the original write-off (470000 Impairment).
+      else if(e.type==='recovery'){
+        recovery += e.amount;
+        // ── Transtype #24 — Loan-Loss Recovery Allocation ──
+        // Optional `allocation` object splits the recovery across buckets
+        // (principal / default interest / default fees / legal). When present,
+        // generateDIU emits one JE pair per bucket so reports can trace where
+        // the recovered cash actually paid down. If absent, falls through to
+        // the single principal-only JE pair (legacy behaviour).
+        if(e.allocation){
+          // Tag the day's row so generateDIU sees the split (carries through
+          // via the row push at end of loop iteration).
+          recoveryAllocation = recoveryAllocation || { principal:0, defaultInt:0, defaultFee:0, legal:0 };
+          recoveryAllocation.principal  += (+e.allocation.principal  || 0);
+          recoveryAllocation.defaultInt += (+e.allocation.defaultInt || 0);
+          recoveryAllocation.defaultFee += (+e.allocation.defaultFee || 0);
+          recoveryAllocation.legal      += (+e.allocation.legal      || 0);
+        }
+      }
+      // Transtype #10 — Cure / Stage Reversal. Borrower returns to performing
+      // status; the ECL allowance is released back to P&L. `releaseAmount`
+      // specifies how much of the existing allowance to reverse. The engine
+      // releases up to the existing allowance balance, no more.
+      else if(e.type==='cure'){
+        const release = Math.min(eclAllowance, e.releaseAmount || 0);
+        cureRelease  += release;
+        eclAllowance -= release;
+        cumECLChange -= release;
+      }
+      // Transtype #23 — Allowance Reversal (Without Stage Change).
+      // Same mechanic as cure (release ECL allowance to P&L) but driven by a
+      // model recalibration (PD/LGD update, macro overlay change, qFactor
+      // adjustment) rather than a stage migration. Distinct event type so
+      // reports / IFRS 7 §35F disclosures can split "model-driven movements"
+      // from "stage-cure movements" in the ECL roll-forward.
+      else if(e.type==='allowanceReversal'){
+        const release = Math.min(eclAllowance, e.releaseAmount || 0);
+        allowanceReversal += release;
+        eclAllowance      -= release;
+        cumECLChange      -= release;
+      }
+      // Transtype #11 — Forbearance / Payment Holiday. A start-of-period
+      // booking that documents the deferred interest expected during the
+      // holiday window. Subsequent JE flows continue as normal (engine doesn't
+      // suspend accruals — for clean demos the operator/PortF schedules
+      // payments accordingly). The `deferredAmount` is the operator-estimated
+      // interest deferred over the holiday period.
+      else if(e.type==='forbearance'){
+        forbearanceStartDeferred += (e.deferredAmount || 0);
+      }
+      // Transtype #12 — Capitalised origination costs. Costs PAID by NWF at
+      // origination (legal, transaction, valuation) that capitalise into the
+      // loan's carrying value per IFRS 9 §B5.4 / ASC 310-20-25-2. Increases
+      // carrying by the cost amount and reduces day-1 cash by the same.
+      else if(e.type==='capitalisedCost'){
+        capitalisedCost += e.amount;
+        carryingValue   += e.amount;
+      }
+      // Transtype #13 — Loan Sale (full derecognition). Sell the entire loan
+      // to another lender / investor. Compute gain/loss = salePrice − carrying
+      // at the sale date; zero out balance + drawnBalance + carryingValue so
+      // subsequent days produce no further accruals (balance × rate × dcf = 0).
+      // Per IFRS 9 §3.2.3 / ASC 860 derecognition: full transfer of control,
+      // risks and rewards. Any residual ECL allowance is released to P&L below.
+      else if(e.type==='loanSale'){
+        const cvBefore = carryingValue;
+        const sale     = (typeof e.salePrice === 'number') ? e.salePrice
+                        : (typeof e.amount    === 'number') ? e.amount
+                        : carryingValue;
+        loanSale       += sale;
+        loanSaleCV     += cvBefore;
+        loanSaleGain   += (sale - cvBefore);
+        // Release any remaining ECL allowance back to P&L (since the asset
+        // and its credit exposure no longer belong to NWF).
+        if(eclAllowance > 0){
+          cureRelease  += eclAllowance;
+          cumECLChange -= eclAllowance;
+          eclAllowance  = 0;
+        }
+        // Derecognise the asset
+        balance        = 0;
+        drawnBalance   = 0;
+        carryingValue  = 0;
+      }
+      // Transtype #14 — Loan Participation / Partial Sell-Down. NWF sells a
+      // fraction (`fraction` 0–1, or `notionalSold` in currency) of the loan
+      // to a participant. Per IFRS 9 §3.2.6 "transfer of part of asset where
+      // the part is a fully proportionate share" — derecognise the
+      // participated proportion, keep the rest on balance sheet accruing.
+      //
+      //   • fraction   : 0–1 (default if both given); engine multiplies by carrying
+      //   • salePrice  : cash received from participant
+      //   • Pro-rata ECL allowance also released for the sold portion
+      else if(e.type==='participation'){
+        let frac = (typeof e.fraction === 'number') ? e.fraction : null;
+        if(frac == null && typeof e.notionalSold === 'number' && balance > 0){
+          frac = e.notionalSold / balance;
+        }
+        if(frac == null || frac <= 0) frac = 0;
+        if(frac > 1) frac = 1;
+        const cvSold   = carryingValue * frac;
+        const balSold  = balance       * frac;
+        const drawSold = drawnBalance  * frac;
+        const sale     = (typeof e.salePrice === 'number') ? e.salePrice : cvSold;
+        participation     += sale;
+        participationCV   += cvSold;
+        participationGain += (sale - cvSold);
+        // Pro-rata ECL allowance release (participant takes the credit risk).
+        if(eclAllowance > 0 && frac > 0){
+          const eclRelease = eclAllowance * frac;
+          cureRelease  += eclRelease;
+          cumECLChange -= eclRelease;
+          eclAllowance -= eclRelease;
+        }
+        // Derecognise the sold proportion only
+        balance       -= balSold;
+        drawnBalance  -= drawSold;
+        carryingValue -= cvSold;
+      }
+      // Transtype #15 — Debt-for-Equity Swap. Borrower issues equity to
+      // settle the loan obligation. Per IFRIC 19 ("Extinguishing Financial
+      // Liabilities with Equity Instruments") / ASC 470-50-40: derecognise
+      // the entire loan at carrying; recognise an equity investment at fair
+      // value (almost always lower than carrying in a distressed swap); the
+      // difference flows to P&L as Restructuring Loss.
+      //
+      //   • equityFairValue : fair value of equity received
+      //   • equityShares    : optional — # shares received (informational only)
+      else if(e.type==='debtEquitySwap'){
+        const cvBefore = carryingValue;
+        const fv       = (typeof e.equityFairValue === 'number') ? e.equityFairValue : 0;
+        debtEquitySwap     += fv;
+        debtEquitySwapCV   += cvBefore;
+        debtEquitySwapLoss += (cvBefore - fv);   // typically positive (loss)
+        // Release any ECL allowance (loan no longer NWF's credit exposure).
+        if(eclAllowance > 0){
+          cureRelease  += eclAllowance;
+          cumECLChange -= eclAllowance;
+          eclAllowance  = 0;
+        }
+        // Derecognise the loan
+        balance        = 0;
+        drawnBalance   = 0;
+        carryingValue  = 0;
+      }
+      // Transtype #8 — Write-off. Stage 3 credit-impaired loan whose recovery
+      // efforts have failed. Zero out balance + carryingValue; subsequent days
+      // produce no further accruals (because balance × rate × dcf = 0).
+      // The JE pair generated in generateDIU splits the write-off between the
+      // existing ECL allowance (uses it up first) and a residual P&L charge.
+      else if(e.type==='writeOff'){
+        const wAmt = (typeof e.amount === 'number' && e.amount > 0) ? e.amount : balance;
+        writeOff += wAmt;
+        // Snapshot the allowance balance available to absorb the write-off
+        const availableAllowance = Math.max(0, eclAllowance);
+        const used = Math.min(wAmt, availableAllowance);
+        writeOffAllowanceUsed   += used;
+        writeOffResidualExpense += (wAmt - used);
+        // Apply the write-off to balances + allowance
+        balance        -= wAmt;
+        drawnBalance   -= wAmt;
+        carryingValue  -= wAmt;
+        eclAllowance   -= used;            // allowance consumed
+        cumECLChange   -= used;            // allowance release recorded
+      }
     }
 
     // ----- IFRS 9 modification accounting (§5.4.3) -----------------------
@@ -883,12 +1281,48 @@ function buildSchedule(instr){
       const todayMTM = hedgeMTMOn(dISO);
       const dMTM = (i === 0) ? 0 : todayMTM - prevHedgeMTM;
       prevHedgeMTM = todayMTM;
-      if(instr.hedge.type === 'CFH'){
+      // ── Transtype #20 — Hedge De-Designation ──
+      // Per IFRS 9 §6.5.6 / ASC 815-25-40 / 815-30-40: once hedge accounting
+      // is voluntarily discontinued, future MTM movements stop flowing through
+      // the CFH OCI / FVH P&L mechanism. For CFH, the EXISTING reserve is
+      // amortised to P&L over the remaining life of the originally-hedged
+      // exposure. Trigger via instr.hedgeDeDesignationDate.
+      const dedDate = instr.hedgeDeDesignationDate;
+      const isDeDed = dedDate && dISO >= dedDate;
+      if(isDeDed){
+        // No further OCI / P&L accumulation from MTM changes — accounting frozen.
+        // For CFH, amortise the existing reserve linearly to P&L over remaining
+        // days from de-designation date to maturity.
+        if(instr.hedge.type === 'CFH' && Math.abs(cashFlowHedgeReserve) > 0.005){
+          // Compute remaining days from de-designation to maturity (inclusive)
+          const dedDateObj = parseISO(dedDate);
+          const remainDays = Math.max(1, Math.ceil((maturity - dedDateObj) / 86400000));
+          // Amortise daily until reserve is fully recycled
+          const dailyAmort = cashFlowHedgeReserve / remainDays;
+          dailyHedgeReclass = dailyAmort;
+          cashFlowHedgeReserve -= dailyAmort;
+          // Numerical cleanup: if reserve gets close to zero, zero it out
+          if(Math.abs(cashFlowHedgeReserve) < 0.01) cashFlowHedgeReserve = 0;
+        }
+      } else if(instr.hedge.type === 'CFH'){
         // Cash flow hedge: effective portion to OCI, ineffective to P&L
         dailyHedgeOCI = dMTM * effRatio;
         dailyHedgePL  = dMTM * (1 - effRatio);
         cashFlowHedgeReserve += dailyHedgeOCI;
         // Reclassify reserve to P&L on settlement dates (when hedged cashflow occurs)
+        if(hedgeSettlements.has(dISO) && cashFlowHedgeReserve !== 0){
+          dailyHedgeReclass = cashFlowHedgeReserve;
+          cashFlowHedgeReserve = 0;
+        }
+      } else if(instr.hedge.type === 'FXP' || instr.hedge.subType === 'fxPrincipal'){
+        // ── Transtype #22 — FX Hedge of Loan Principal (IFRS 9 §6.5.16(c)) ──
+        // Same MTM math as CFH, but the OCI accumulates in the dedicated
+        // FX Hedge Reserve (370000) instead of the generic CFH Reserve.
+        // The JE emission routes through INVESTRAN_GL.fxHedgeReserveOCI
+        // because the transactionType is labelled "FX Hedge Reserve" below.
+        dailyHedgeOCI = dMTM * effRatio;
+        dailyHedgePL  = dMTM * (1 - effRatio);
+        cashFlowHedgeReserve += dailyHedgeOCI;
         if(hedgeSettlements.has(dISO) && cashFlowHedgeReserve !== 0){
           dailyHedgeReclass = cashFlowHedgeReserve;
           cashFlowHedgeReserve = 0;
@@ -1045,6 +1479,28 @@ function buildSchedule(instr){
       initialPurchase: initial || 0,
       draw,
       paydown,
+      prepayment,            // Transtype #4 — voluntary / mandatory early repayment (combined)
+      mandatoryPrepayment,   // Transtype #16 — covenant-triggered portion (subset of `prepayment`)
+      mandatoryTriggers: mandatoryTriggers.slice(),  // Transtype #16 — array of reason codes
+      prepayPenalty,         // Transtype #5 — penalty income tied to prepayment
+      writeOff,              // Transtype #8 — gross write-off amount
+      writeOffAllowanceUsed, // Transtype #8 — portion absorbed by ECL allowance
+      writeOffResidualExpense, // Transtype #8 — residual hitting P&L
+      recovery,              // Transtype #9 — post-write-off cash recovered
+      recoveryAllocation,    // Transtype #24 — optional split: {principal, defaultInt, defaultFee, legal}
+      cureRelease,           // Transtype #10 — ECL allowance released back to P&L
+      allowanceReversal,     // Transtype #23 — model-driven allowance reversal (no stage change)
+      forbearanceStartDeferred,  // Transtype #11 — interest deferred from forbearance
+      capitalisedCost,       // Transtype #12 — capitalised origination costs paid
+      loanSale,              // Transtype #13 — sale proceeds (cash in)
+      loanSaleCV,            // Transtype #13 — carrying value derecognised
+      loanSaleGain,          // Transtype #13 — gain (+) or loss (−) on sale
+      participation,         // Transtype #14 — participation proceeds (cash in)
+      participationCV,       // Transtype #14 — partial carrying derecognised
+      participationGain,     // Transtype #14 — gain/(loss) on partial sale
+      debtEquitySwap,        // Transtype #15 — fair value of equity received
+      debtEquitySwapCV,      // Transtype #15 — carrying derecognised
+      debtEquitySwapLoss,    // Transtype #15 — restructuring loss (CV − FV)
       couponRate,
       floatingRate,
       currentRate: couponRate,
@@ -1129,6 +1585,26 @@ function summarize(rows, beginISO, endISO){
     totalDefaultFee:      sum(win,'dailyDefaultFee'),
     totalDraws:           sum(win,'draw'),
     totalRepayments:      sum(win,'paydown'),
+    totalPrepayments:     sum(win,'prepayment'),
+    totalMandatoryPrepayments: sum(win,'mandatoryPrepayment'),  // Transtype #16 — covenant-triggered subset
+    totalPrepayPenalty:   sum(win,'prepayPenalty'),
+    totalWriteOff:        sum(win,'writeOff'),
+    totalWriteOffAllowanceUsed:   sum(win,'writeOffAllowanceUsed'),
+    totalWriteOffResidualExpense: sum(win,'writeOffResidualExpense'),
+    totalRecovery:        sum(win,'recovery'),
+    totalCureRelease:     sum(win,'cureRelease'),
+    totalAllowanceReversal: sum(win,'allowanceReversal'),  // Transtype #23 — model-driven
+    totalForbearanceDeferred: sum(win,'forbearanceStartDeferred'),
+    totalCapitalisedCost: sum(win,'capitalisedCost'),
+    totalLoanSale:        sum(win,'loanSale'),       // Transtype #13 — sale proceeds
+    totalLoanSaleCV:      sum(win,'loanSaleCV'),     // Transtype #13 — carrying derecognised
+    totalLoanSaleGain:    sum(win,'loanSaleGain'),   // Transtype #13 — gain/(loss) on sale
+    totalParticipation:       sum(win,'participation'),    // Transtype #14 — participation proceeds
+    totalParticipationCV:     sum(win,'participationCV'),  // Transtype #14 — partial carrying derecog
+    totalParticipationGain:   sum(win,'participationGain'),// Transtype #14 — partial gain/(loss)
+    totalDebtEquitySwap:      sum(win,'debtEquitySwap'),   // Transtype #15 — FV of equity recognised
+    totalDebtEquitySwapCV:    sum(win,'debtEquitySwapCV'), // Transtype #15 — loan carrying derecog
+    totalDebtEquitySwapLoss:  sum(win,'debtEquitySwapLoss'),// Transtype #15 — restructuring loss
     totalECLChange:       sum(win,'dailyECLChange'),
     closingECLAllowance:  win[win.length-1]?.eclAllowance ?? 0,
     totalFXGain:          sum(win,'dailyFXGain'),
@@ -1449,6 +1925,26 @@ const INVESTRAN_GL = {
   fxRealised:          { account:'440000', accountName:'Realized Gain/Loss',   transType:'Realized gain/(loss) - Short term - F/X' },
   modificationGain:    { account:'442000', accountName:'Modification Gain / Loss (IFRS 9 §5.4.3)', transType:'Modification gain – IFRS 9' },
   modificationLoss:    { account:'442000', accountName:'Modification Gain / Loss (IFRS 9 §5.4.3)', transType:'Modification loss – IFRS 9' },
+  // Loan sale / disposal (IFRS 9 §3.2.3 / ASC 860 — Transtype #13)
+  loanSaleDerecognition:{ account:'141000', accountName:'Investments at Cost', transType:'Sale of investment - Notes - Loan disposal (derecognition)' },
+  loanSaleGain:         { account:'442000', accountName:'Realized Gain on Loan Sale (IFRS 9 §3.2.3 / ASC 860)', transType:'Gain on sale of loan – IFRS 9 §3.2.3' },
+  loanSaleLoss:         { account:'442000', accountName:'Realized Loss on Loan Sale (IFRS 9 §3.2.3 / ASC 860)', transType:'Loss on sale of loan – IFRS 9 §3.2.3' },
+  // Loan participation / partial sell-down (IFRS 9 §3.2.6 — Transtype #14)
+  participationDerecog: { account:'141000', accountName:'Investments at Cost', transType:'Sale of investment - Notes - Loan participation (partial derecog)' },
+  participationGain:    { account:'442000', accountName:'Realized Gain on Loan Participation (IFRS 9 §3.2.6)', transType:'Gain on loan participation – IFRS 9 §3.2.6' },
+  participationLoss:    { account:'442000', accountName:'Realized Loss on Loan Participation (IFRS 9 §3.2.6)', transType:'Loss on loan participation – IFRS 9 §3.2.6' },
+  // Debt-for-Equity Swap (IFRIC 19 / ASC 470-50-40 — Transtype #15)
+  d4eEquity:          { account:'142000', accountName:'Equity Investments at Cost', transType:'Equity received in debt-for-equity swap (IFRIC 19)' },
+  d4eLoanDerecog:     { account:'141000', accountName:'Investments at Cost',         transType:'Sale of investment - Notes - Loan extinguished via D4E swap' },
+  d4eRestructLoss:    { account:'542100', accountName:'Restructuring Loss — Debt-for-Equity (IFRIC 19)', transType:'Restructuring loss — debt-for-equity swap' },
+  d4eRestructGain:    { account:'442100', accountName:'Restructuring Gain — Debt-for-Equity (IFRIC 19)', transType:'Restructuring gain — debt-for-equity swap' },
+  // Mandatory prepayment (covenant-triggered — Transtype #16)
+  mandatoryPrepayment:{ account:'141000', accountName:'Investments at Cost', transType:'Sale of investment - Notes - Mandatory prepayment (covenant trigger)' },
+  // Trade-date accounting (IFRS 9 §B3.1.5 — Transtype #18)
+  tradeDateAsset:     { account:'141000', accountName:'Investments at Cost', transType:'Trade-date recognition — Loan asset (IFRS 9 §B3.1.5)' },
+  unsettledTradePay:  { account:'232000', accountName:'Unsettled Trade Payable', transType:'Unsettled trade payable — trade-date booking' },
+  unsettledTradeRev:  { account:'232000', accountName:'Unsettled Trade Payable', transType:'Unsettled trade payable — settlement-date reversal' },
+  tradeDateAssetRev:  { account:'141000', accountName:'Investments at Cost', transType:'Trade-date recognition reversal — Loan asset' },
   // ─── IFRS 9 ECL ───────────────────────────────────────────────
   impairmentExpense:   { account:'470000', accountName:'Impairment / ECL Expense (IFRS 9 §5.5)', transType:'Impairment expense – IFRS 9 ECL' },
   loanLossAllowance:   { account:'145000', accountName:'Loan Loss Allowance – IFRS 9 ECL',       transType:'Loan loss allowance – IFRS 9 ECL' },
@@ -1461,7 +1957,23 @@ const INVESTRAN_GL = {
   cfhReserveReclass:        { account:'360000', accountName:'Cash Flow Hedge Reserve (OCI)',   transType:'Cash flow hedge reserve – reclassification' },
   hedgeIneffectiveness:     { account:'451000', accountName:'Hedge Ineffectiveness P&L',       transType:'Hedge ineffectiveness P&L' },
   fvHedgePL:                { account:'452000', accountName:'Fair Value Hedge P&L',            transType:'Fair value hedge P&L' },
-  hedgeReclass:             { account:'421000', accountName:'Investment Interest Income',     transType:'Income - Investment interest' }  // P&L side of CFH reclassification
+  hedgeReclass:             { account:'421000', accountName:'Investment Interest Income',     transType:'Income - Investment interest' },  // legacy generic CFH reclass routing
+  // Transtype #21 — Dedicated CFH reclass transtype. Keeps the account on 421000
+  // so it still flows to interest income, but tags the JE with a distinct
+  // transactionType ("CFH reserve recycling to P&L — IFRS 9 §6.5.11"). This
+  // lets reports split "income from hedge reserve recycling" from "raw coupon
+  // income" — critical for hedge accounting disclosures (IFRS 7 §24A-B).
+  cfhReclassPL:             { account:'421000', accountName:'Investment Interest Income — CFH Recycling', transType:'CFH reserve recycling to P&L (IFRS 9 §6.5.11)' },
+  // De-designation amortisation surfaced separately so post-de-designation
+  // OCI recycling is distinguishable from settlement-driven recycling.
+  cfhReclassDeDed:          { account:'421000', accountName:'Investment Interest Income — CFH Recycling (De-Designated)', transType:'CFH reserve amortisation — post de-designation (IFRS 9 §6.5.6)' },
+  // Transtype #22 — FX Hedge of Loan Principal (IFRS 9 §6.5.16(c) / §B6.5.34)
+  // FX forwards designated as a hedge of the foreign-currency loan principal.
+  // Spot-FX effective portion → FX Hedge Reserve (OCI).
+  // Currency basis spread → Cost of Hedging Reserve (separate OCI bucket).
+  fxHedgeReserveOCI:        { account:'370000', accountName:'FX Hedge Reserve (OCI · IFRS 9 §6.5.16)', transType:'FX hedge reserve – OCI (spot component)' },
+  costOfHedgingReserve:     { account:'375000', accountName:'Cost of Hedging Reserve (OCI · IFRS 9 §6.5.16(c))', transType:'Cost of hedging – currency basis (OCI)' },
+  fxHedgeInstrument:        { account:'146100', accountName:'FX Forward Asset / Liability', transType:'FX hedging instrument MTM' }
 };
 
 // Map our internal placeholder-account-codes / transaction-type strings onto
@@ -1478,8 +1990,92 @@ function applyInvestranGLMapping(entries){
     // Loan asset legs
     if(/^loan drawdown\b/.test(t) || /drawdown.*initial/.test(t))   return INVESTRAN_GL.loanDrawdownInitial;
     if(/^loan repayment\b/.test(t))                                return INVESTRAN_GL.loanReturnOfCapital;
+    // Transtype #4 — Prepayment: same GL routing as repayment (loanReturnOfCapital
+    // / cashReceipt) but distinct transtype so reports can filter on it.
+    if(/^loan prepayment$/.test(t))                                return INVESTRAN_GL.loanReturnOfCapital;
+    if(/^loan prepayment — cash$/.test(t))                         return INVESTRAN_GL.cashReceipt;
+    // Transtype #16 — Mandatory Prepayment (covenant-triggered)
+    if(/^mandatory prepayment$/.test(t))                           return INVESTRAN_GL.mandatoryPrepayment;
+    if(/^mandatory prepayment — cash$/.test(t))                    return INVESTRAN_GL.cashReceipt;
+    // Transtype #19 — Period-End Reversing Entries. The "Reversing — " prefix
+    // is the entry's label; we delegate routing by stripping the prefix, re-
+    // running the lookup recursively so the reverse pair lands in the same GL
+    // account family as the original accrual, then re-attaching the prefix.
+    if(/^reversing — /.test(t)){
+      const innerTT = (tt || '').replace(/^reversing — /i, '');
+      const innerMapped = lookup(innerTT, ourAcct);
+      if(innerMapped){
+        return { account: innerMapped.account, accountName: innerMapped.accountName,
+                 transType: 'Reversing — ' + innerMapped.transType };
+      }
+    }
+    // Transtype #18 — Trade vs Settlement Date Accounting
+    if(/^trade-date recognition — loan asset$/.test(t))            return INVESTRAN_GL.tradeDateAsset;
+    if(/^trade-date recognition — unsettled trade payable$/.test(t)) return INVESTRAN_GL.unsettledTradePay;
+    if(/^settlement-date reversal — unsettled trade payable$/.test(t)) return INVESTRAN_GL.unsettledTradeRev;
+    if(/^settlement-date reversal — loan asset/.test(t))           return INVESTRAN_GL.tradeDateAssetRev;
+    // Transtype #5 — Prepayment penalty / make-whole income. Cash leg uses the
+    // standard cash receipt; income leg maps to Other Investment Income (492000)
+    // since 492700 isn't yet in the canonical Investran chart — flagged as a
+    // candidate new sub-account in the GL gap inventory.
+    if(/^prepayment penalty — cash$/.test(t))                      return INVESTRAN_GL.cashReceipt;
+    if(/^prepayment penalty income$/.test(t))                      return INVESTRAN_GL.feeIncome;
+    // Transtype #8 — Write-off. Allowance application → 145000 contra-asset;
+    // residual expense → 470000 Impairment Expense; asset derecognition → 141000.
+    if(/loan write-off — allowance applied/.test(t))               return INVESTRAN_GL.loanLossAllowance;
+    if(/loan write-off — residual expense/.test(t))                return INVESTRAN_GL.impairmentExpense;
+    if(/loan write-off — asset derecognition/.test(t))             return INVESTRAN_GL.loanReturnOfCapital;
+    // Transtype #9 — Recovery post-write-off. Cash leg → standard cash receipt;
+    // income leg credits 470000 Impairment (reverses prior write-off charge).
+    if(/^recovery — cash receipt$/.test(t))                        return INVESTRAN_GL.cashReceipt;
+    if(/^recovery of written-off loan$/.test(t))                   return INVESTRAN_GL.impairmentExpense;
+    // Transtype #24 — Loan-Loss Recovery Allocation buckets
+    if(/^recovery — cash receipt \(/.test(t))                      return INVESTRAN_GL.cashReceipt;
+    if(/^recovery — principal/.test(t))                            return INVESTRAN_GL.impairmentExpense;
+    if(/^recovery — default interest/.test(t))                     return INVESTRAN_GL.defaultIntIncome;
+    if(/^recovery — default fee/.test(t))                          return INVESTRAN_GL.defaultFeeIncome;
+    if(/^recovery — legal cost/.test(t))                           return INVESTRAN_GL.impairmentExpense;
+    // Transtype #10 — Cure / Stage Reversal. Allowance side → 145000 (down),
+    // income side → 470000 Impairment Expense (CR reverses prior expense).
+    if(/^ecl cure — allowance reversal$/.test(t))                  return INVESTRAN_GL.loanLossAllowance;
+    if(/^ecl cure — impairment reversal$/.test(t))                 return INVESTRAN_GL.impairmentExpense;
+    // Transtype #23 — Model-driven allowance reversal (no stage change)
+    if(/^allowance reversal — model recalibration$/.test(t))       return INVESTRAN_GL.loanLossAllowance;
+    if(/^impairment reversal — model recalibration$/.test(t))      return INVESTRAN_GL.impairmentExpense;
+    // Transtype #11 — Forbearance reclass. Both legs go to receivable area
+    // (113000); operator can later route the deferred sub-balance to a
+    // dedicated "Deferred Interest Receivable" sub-account.
+    if(/^forbearance — deferred interest reclass$/.test(t))        return INVESTRAN_GL.interestReceivable;
+    if(/^forbearance — interest receivable reduction$/.test(t))    return INVESTRAN_GL.interestReceivable;
+    // Transtype #12 — Capitalised origination costs. DR carrying value (141000),
+    // CR Cash (111000). Same income-statement effect as a negative upfront fee.
+    if(/^capitalised origination costs$/.test(t))                  return INVESTRAN_GL.loanDrawdownInitial;
+    if(/^capitalised origination costs — cash$/.test(t))           return INVESTRAN_GL.cashReceipt;
+    // Transtype #25 — Revolver Origination Cost Deferral policy disclosure
+    if(/^revolver cost deferral policy/.test(t))                   return INVESTRAN_GL.loanDrawdownInitial;
+    // Transtype #13 — Loan Sale (full derecognition)
+    if(/^loan sale — cash received/.test(t))                       return INVESTRAN_GL.cashReceipt;
+    if(/^loan sale — asset derecognition$/.test(t))                return INVESTRAN_GL.loanSaleDerecognition;
+    if(/^loan sale — residual asset derecog$/.test(t))             return INVESTRAN_GL.loanSaleDerecognition;
+    if(/^loan sale — gain on disposal$/.test(t))                   return INVESTRAN_GL.loanSaleGain;
+    if(/^loan sale — loss on disposal$/.test(t))                   return INVESTRAN_GL.loanSaleLoss;
+    // Transtype #14 — Loan Participation (partial sell-down)
+    if(/^loan participation — cash received/.test(t))              return INVESTRAN_GL.cashReceipt;
+    if(/^loan participation — asset derecognition$/.test(t))       return INVESTRAN_GL.participationDerecog;
+    if(/^loan participation — residual asset derecog$/.test(t))    return INVESTRAN_GL.participationDerecog;
+    if(/^loan participation — gain on disposal$/.test(t))          return INVESTRAN_GL.participationGain;
+    if(/^loan participation — loss on disposal$/.test(t))          return INVESTRAN_GL.participationLoss;
+    // Transtype #15 — Debt-for-Equity Swap
+    if(/^debt-for-equity swap — equity recognition/.test(t))       return INVESTRAN_GL.d4eEquity;
+    if(/^debt-for-equity swap — loan derecognition/.test(t))       return INVESTRAN_GL.d4eLoanDerecog;
+    if(/^debt-for-equity swap — restructuring loss$/.test(t))      return INVESTRAN_GL.d4eRestructLoss;
+    if(/^debt-for-equity swap — restructuring gain$/.test(t))      return INVESTRAN_GL.d4eRestructGain;
     if(/pik (investment|capitalization)/.test(t))                  return INVESTRAN_GL.loanPikCapitalisation;
-    if(/discount accretion|premium amort/.test(t))                 return INVESTRAN_GL.loanOID;
+    // Per IFRS 9 §B5.4 / ASC 310-20-35-26: discount accretion = income side; the
+    // offset (asset side) goes to 141000 carrying value. So the "Offset" leg routes
+    // to loanOID (141000), and the income leg routes to interestIncomeAccrued (421000).
+    if(/discount accretion offset|premium amort.*offset/.test(t))  return INVESTRAN_GL.loanOID;
+    if(/discount accretion|premium amort/.test(t))                 return INVESTRAN_GL.interestIncomeAccrued;
     if(/eir fee accretion/.test(t) && /offset/.test(t))            return INVESTRAN_GL.loanOID;
     if(/eir fee accretion/.test(t))                                return INVESTRAN_GL.interestIncomeAccrued;
     // Default interest / default fee — clear-leg checked BEFORE the bare receivable
@@ -1507,8 +2103,13 @@ function applyInvestranGLMapping(entries){
     if(/impairment expense|impairment reversal/.test(t))           return INVESTRAN_GL.impairmentExpense;
     if(/loan loss allowance/.test(t))                              return INVESTRAN_GL.loanLossAllowance;
     // Hedge accounting — CFH OCI side, reclassification, ineffectiveness, FV hedge
-    if(/cash flow hedge reserve.*reclass|hedge reserve reclass/.test(t)) return INVESTRAN_GL.cfhReserveReclass;
-    if(/hedge income.*reclass/.test(t))                            return INVESTRAN_GL.hedgeReclass;
+    // Transtype #22 — FX Hedge of Loan Principal routing
+    if(/^fx hedge reserve|fx hedge reserve.*oci/.test(t))          return INVESTRAN_GL.fxHedgeReserveOCI;
+    if(/^fx hedging instrument mtm/.test(t))                       return INVESTRAN_GL.fxHedgeInstrument;
+    if(/cost of hedging|currency basis/.test(t))                   return INVESTRAN_GL.costOfHedgingReserve;
+    if(/cash flow hedge reserve.*reclass/.test(t))                 return INVESTRAN_GL.cfhReserveReclass;
+    if(/hedge reserve reclass.*de-designat|cfh.*amortis.*de-desig/.test(t)) return INVESTRAN_GL.cfhReclassDeDed;
+    if(/hedge reserve reclass|hedge income.*reclass|cfh reserve recycling/.test(t)) return INVESTRAN_GL.cfhReclassPL;
     if(/cfh oci|cash flow hedge reserve/.test(t))                  return INVESTRAN_GL.cfhReserve;
     if(/hedging instrument.*cfh oci/.test(t))                      return INVESTRAN_GL.hedgingInstrumentCFHEff;
     if(/hedging instrument mtm \(cfh/.test(t))                     return INVESTRAN_GL.hedgingInstrumentCFHEff;
@@ -1518,6 +2119,9 @@ function applyInvestranGLMapping(entries){
     if(/fair value hedge p&l/.test(t))                             return INVESTRAN_GL.fvHedgePL;
     // Interest legs
     if(/interest receivable clear/.test(t))                        return INVESTRAN_GL.interestReceived;
+    // Transtype #3 — mid-period purchase: receivable side maps to 113000; cash side to 111000
+    if(/accrued interest receivable/.test(t))                      return INVESTRAN_GL.interestReceivable;
+    if(/accrued interest cash paid/.test(t))                       return INVESTRAN_GL.cashReceipt;
     if(/interest receivable/.test(t))                              return INVESTRAN_GL.interestReceivable;
     if(/income.*daily accrued interest/.test(t))                   return INVESTRAN_GL.interestIncomeAccrued;
     if(/interest cash receipt/.test(t))                            return INVESTRAN_GL.cashReceipt;
@@ -1606,8 +2210,11 @@ function generateDIU(instr, summary, opts){
   };
   // Interest pair
   if(summary.totalCashAccrual){
-    add('Interest Receivable',           summary.totalCashAccrual, false, '40100', summary.periodEnd, `Interest Adjustment for ${summary.periodEnd}`);
-    add('Income - Daily Accrued Interest', summary.totalCashAccrual, true,  '23000', summary.periodEnd, `Interest Adjustment for ${summary.periodEnd}`);
+    // Direction fix: accrual JE is DR Receivable / CR Income (asset up, revenue
+    // up). Previously emitted with the legs flipped — caught during Transtype #3
+    // regression. Affects every loan with non-zero accrued cash interest.
+    add('Interest Receivable',           summary.totalCashAccrual, true,  '40100', summary.periodEnd, `Interest Adjustment for ${summary.periodEnd}`);
+    add('Income - Daily Accrued Interest', summary.totalCashAccrual, false, '23000', summary.periodEnd, `Interest Adjustment for ${summary.periodEnd}`);
     jeIndex++;
   }
   // PIK pair (capitalization)
@@ -1616,11 +2223,19 @@ function generateDIU(instr, summary, opts){
     add('Interest Receivable', -summary.totalCapitalized, false, '23000', summary.periodEnd, `PIK Capitalization for ${summary.periodEnd}`);
     jeIndex++;
   }
-  // Amortization
+  // Amortization — Transtype #1 (Discount Accretion) / #2 (Premium Amortization)
+  // Direction flips on sign:
+  //   • totalAmort > 0 (OID):     income CR / carrying DR   (income up, CV up)
+  //   • totalAmort < 0 (premium): income DR / carrying CR   (income down, CV down)
+  // Per IFRS 9 §B5.4 / ASC 310-20-35-26.
   if(Math.abs(summary.totalAmort) > 0.005){
-    const label = summary.totalAmort > 0 ? 'Discount Accretion' : 'Premium Amortization';
-    add(label, summary.totalAmort, false, '40150', summary.periodEnd, `${label} for ${summary.periodEnd}`);
-    add(label + ' Offset', summary.totalAmort, true, '23000', summary.periodEnd, `${label} for ${summary.periodEnd}`);
+    const isAccretion = summary.totalAmort > 0;
+    const label = isAccretion ? 'Discount Accretion' : 'Premium Amortization';
+    const absAmt = Math.abs(summary.totalAmort);
+    // Income leg
+    add(label,            absAmt, /*isDebit*/!isAccretion, '40150', summary.periodEnd, `${label} for ${summary.periodEnd}`);
+    // Carrying-value (offset) leg
+    add(label + ' Offset', absAmt, /*isDebit*/isAccretion,  '23000', summary.periodEnd, `${label} for ${summary.periodEnd}`);
     jeIndex++;
   }
   // Non-use fee
@@ -1636,11 +2251,16 @@ function generateDIU(instr, summary, opts){
   if(Math.abs(summary.totalHedgeOCI || 0) > 0.005){
     const v = summary.totalHedgeOCI;
     if(v > 0){
-      add('Hedging Instrument MTM (CFH OCI)',  v, true,  '16000', summary.periodEnd, `CFH effective portion to OCI for ${summary.periodEnd}`);
-      add('Cash Flow Hedge Reserve (OCI)',     v, false, '35000', summary.periodEnd, `CFH effective portion to OCI for ${summary.periodEnd}`);
+      // Transtype #22 — Route to FX Hedge Reserve when this is an FX hedge of principal
+      const isFXP = (instr.hedge?.type === 'FXP' || instr.hedge?.subType === 'fxPrincipal');
+      const ociLabel = isFXP ? 'FX Hedge Reserve (OCI · FX Principal)' : 'Cash Flow Hedge Reserve (OCI)';
+      const instrLabel = isFXP ? 'FX Hedging Instrument MTM' : 'Hedging Instrument MTM (CFH OCI)';
+      const periodComment = isFXP ? `FX hedge of principal — effective portion to OCI ${summary.periodEnd}` : `CFH effective portion to OCI for ${summary.periodEnd}`;
+      add(instrLabel,  v, true,  '16000', summary.periodEnd, periodComment);
+      add(ociLabel,    v, false, '35000', summary.periodEnd, periodComment);
     } else {
-      add('Hedging Instrument MTM (CFH OCI)', -v, false, '16000', summary.periodEnd, `CFH effective portion to OCI for ${summary.periodEnd}`);
-      add('Cash Flow Hedge Reserve (OCI)',    -v, true,  '35000', summary.periodEnd, `CFH effective portion to OCI for ${summary.periodEnd}`);
+      add(instrLabel, -v, false, '16000', summary.periodEnd, periodComment);
+      add(ociLabel,   -v, true,  '35000', summary.periodEnd, periodComment);
     }
     jeIndex++;
   }
@@ -1659,12 +2279,22 @@ function generateDIU(instr, summary, opts){
   }
   if(Math.abs(summary.totalHedgeReclass || 0) > 0.005){
     const v = summary.totalHedgeReclass;
+    // Transtype #21 — Distinguish post-de-designation amortisation from
+    // settlement-driven CFH reclass. Both flow to interest income but with
+    // different transtype labels so reports / disclosures can split them.
+    const isDeDed = !!instr.hedgeDeDesignationDate;
+    const reclassLabel = isDeDed
+      ? 'Hedge Reserve Reclass — De-Designation Amortisation'
+      : 'CFH Reserve Recycling — Settlement Reclass';
+    const reclassComment = isDeDed
+      ? `Post-de-designation amortisation to P&L (IFRS 9 §6.5.6) ${summary.periodEnd}`
+      : `CFH reclass to P&L on settlement (IFRS 9 §6.5.11) ${summary.periodEnd}`;
     if(v > 0){
-      add('Cash Flow Hedge Reserve Reclass',  v, true,  '35000', summary.periodEnd, `CFH reclass to P&L on settlement ${summary.periodEnd}`);
-      add('Hedge Income (Reclass from OCI)',  v, false, '45100', summary.periodEnd, `CFH reclass to P&L on settlement ${summary.periodEnd}`);
+      add('Cash Flow Hedge Reserve Reclass',  v, true,  '35000', summary.periodEnd, reclassComment);
+      add(reclassLabel,                       v, false, '45100', summary.periodEnd, reclassComment);
     } else {
-      add('Cash Flow Hedge Reserve Reclass', -v, false, '35000', summary.periodEnd, `CFH reclass to P&L on settlement ${summary.periodEnd}`);
-      add('Hedge Income (Reclass from OCI)', -v, true,  '45100', summary.periodEnd, `CFH reclass to P&L on settlement ${summary.periodEnd}`);
+      add('Cash Flow Hedge Reserve Reclass', -v, false, '35000', summary.periodEnd, reclassComment);
+      add(reclassLabel,                      -v, true,  '45100', summary.periodEnd, reclassComment);
     }
     jeIndex++;
   }
@@ -1739,6 +2369,56 @@ function generateDIU(instr, summary, opts){
   // Repayments: DR Cash (10000) / CR Loan Asset (15000) — one pair per repayment
   // Cash settlement of accrued income at period end: DR Cash / CR Receivable
   // (clears the corresponding 23000/23130/23140/23150 receivables booked above).
+  // ── Transtype #3 — Mid-period purchase (accrued interest paid at trade) ──
+  // When NWF acquires a loan mid-coupon-period, the buyer pays the seller for
+  // accrued-but-unpaid interest at the trade date. That amount is held as a
+  // receivable and clears on the next coupon when the buyer receives the full
+  // coupon. Emit a JE pair on the trade date (= recognition date for NWF):
+  //   DR 113000 Interest Receivable   (purchased accrual)
+  //   CR 111000 Cash                  (cash paid to seller)
+  // Only emits if instr.tradeAccruedInterest is a positive number.
+  if(typeof instr.tradeAccruedInterest === 'number' && instr.tradeAccruedInterest > 0.005){
+    const tradeDate = instr.tradeDate || instr.settlementDate;
+    add('Accrued Interest Receivable (purchased at trade)', instr.tradeAccruedInterest, true,  '40100', tradeDate,
+        `Accrued interest paid to seller at trade · ${tradeDate}`);
+    add('Accrued Interest Cash Paid (at trade)',            instr.tradeAccruedInterest, false, '10000', tradeDate,
+        `Cash paid to seller for accrued interest at trade · ${tradeDate}`);
+    jeIndex++;
+  }
+  // ── Transtype #18 — Trade vs Settlement Date Accounting ──
+  // Per IFRS 9 §B3.1.5: a financial asset purchased may be recognised either
+  // on trade date (commitment date) or settlement date (cash exchange).
+  // Policy is applied consistently to a category of assets.
+  //
+  // When instr.tradeDate < instr.settlementDate AND
+  // instr.tradeAccountingMethod === 'tradeDate', emit a pre-recognition pair
+  // on trade date and the offsetting reversal on settle date so the
+  // GL trail shows the unsettled-period exposure cleanly.
+  //
+  //   tradeDate (T+0)   : DR 141000 Loan Asset / CR 232000 Unsettled Trade Payable
+  //   settleDate (T+n)  : DR 232000 Unsettled Trade Payable / CR 141000 Loan Asset
+  //   settleDate (T+n)  : DR 141000 Loan Asset / CR 111000 Cash (existing draw JE)
+  //
+  // Net effect: the loan asset shows on day T+0 (commitment recognised) and
+  // the cash hits on T+n. Total carrying value at end of T+n is unchanged.
+  if(instr.tradeAccountingMethod === 'tradeDate' && instr.tradeDate && instr.tradeDate < instr.settlementDate){
+    const initialDraw = (summary.rows[0]?.balance || 0);   // opening balance = face committed
+    const tradeAmt    = +instr.faceValue || +instr.commitment || initialDraw;
+    if(tradeAmt > 0.005){
+      add('Trade-Date Recognition — Loan Asset',
+          tradeAmt, true,  '141000', instr.tradeDate, `Trade-date recognition — IFRS 9 §B3.1.5 · ${instr.tradeDate}`);
+      add('Trade-Date Recognition — Unsettled Trade Payable',
+          tradeAmt, false, '232000', instr.tradeDate, `Unsettled trade payable booked on trade date · ${instr.tradeDate}`);
+      jeIndex++;
+      // Reversal on settlement date (immediately before the cash-settlement JE
+      // that the existing draw handler will emit)
+      add('Settlement-Date Reversal — Unsettled Trade Payable',
+          tradeAmt, true,  '232000', instr.settlementDate, `Reverse unsettled trade payable on settle · ${instr.settlementDate}`);
+      add('Settlement-Date Reversal — Loan Asset (Unsettled)',
+          tradeAmt, false, '141000', instr.settlementDate, `Reverse trade-date asset booking on settle · ${instr.settlementDate}`);
+      jeIndex++;
+    }
+  }
   for(const r of summary.rows){
     if(r.draw && r.draw > 0.005){
       add('Loan Drawdown',          r.draw, true,  '15000', r.date, `Drawdown ${r.date}`);
@@ -1749,6 +2429,232 @@ function generateDIU(instr, summary, opts){
       add('Loan Repayment — Cash',   r.paydown, true,  '10000', r.date, `Repayment ${r.date}`);
       add('Loan Repayment',          r.paydown, false, '15000', r.date, `Repayment ${r.date}`);
       jeIndex++;
+    }
+    // Transtype #4 — Prepayment. Same DR/CR pattern as scheduled repayment
+    // but with a distinct transtype so it can be filtered separately in the
+    // GL / DIU output and audit reports.
+    if(r.prepayment && r.prepayment > 0.005){
+      // Transtype #16 — Mandatory Prepayment Events. If part of today's
+      // prepayment was mandatory (covenant-triggered: excess cash flow sweep,
+      // change-of-control, asset sale proceeds, IPO, insurance), emit a
+      // separate JE pair carrying the trigger reason in the comments so
+      // covenant tracking / lender reporting can isolate it cleanly.
+      const mandatory = r.mandatoryPrepayment || 0;
+      const voluntary = Math.max(0, r.prepayment - mandatory);
+      const trigStr   = (r.mandatoryTriggers && r.mandatoryTriggers.length)
+                       ? ' (' + r.mandatoryTriggers.join(', ') + ')' : '';
+      if(voluntary > 0.005){
+        add('Loan Prepayment — Cash',  voluntary, true,  '10000', r.date, `Prepayment ${r.date}`);
+        add('Loan Prepayment',         voluntary, false, '15000', r.date, `Prepayment ${r.date}`);
+        jeIndex++;
+      }
+      if(mandatory > 0.005){
+        add('Mandatory Prepayment — Cash', mandatory, true,  '10000', r.date, `Mandatory prepayment ${r.date}${trigStr}`);
+        add('Mandatory Prepayment',        mandatory, false, '15000', r.date, `Mandatory prepayment ${r.date}${trigStr}`);
+        jeIndex++;
+      }
+    }
+    // Transtype #5 — Prepayment penalty / make-whole income. Cash received from
+    // borrower over and above the prepaid principal; recognised immediately as
+    // fee/penalty income (not part of EIR per IFRS 9 §B5.4 / ASC 310-20-25-12).
+    if(r.prepayPenalty && r.prepayPenalty > 0.005){
+      add('Prepayment Penalty — Cash', r.prepayPenalty, true,  '10000', r.date, `Prepayment penalty ${r.date}`);
+      add('Prepayment Penalty Income', r.prepayPenalty, false, '40250', r.date, `Prepayment penalty ${r.date}`);
+      jeIndex++;
+    }
+    // Transtype #8 — Write-off. Three-legged JE that uses up the existing ECL
+    // allowance first, then takes the residual to P&L as a current-period
+    // impairment expense. Asset side credited for the full gross write-off.
+    if(r.writeOff && r.writeOff > 0.005){
+      const allowUsed = r.writeOffAllowanceUsed || 0;
+      const residual  = r.writeOffResidualExpense || 0;
+      if(allowUsed > 0.005){
+        add('Loan Write-Off — Allowance Applied', allowUsed, true,  '14500', r.date, `Write-off allowance application ${r.date}`);
+      }
+      if(residual > 0.005){
+        add('Loan Write-Off — Residual Expense', residual, true,  '47000', r.date, `Write-off residual impairment ${r.date}`);
+      }
+      add('Loan Write-Off — Asset Derecognition', r.writeOff, false, '15000', r.date, `Loan asset written off ${r.date}`);
+      jeIndex++;
+    }
+    // Transtype #9 — Recovery post-write-off. Cash received from a borrower /
+    // bankruptcy estate / guarantor / collateral realisation AFTER write-off.
+    // IFRS 9 §B5.5.43 / ASC 326-20-30 credit the income to the same line that
+    // absorbed the original write-off (470000 Impairment), effectively
+    // reversing prior expense.
+    if(r.recovery && r.recovery > 0.005){
+      // Transtype #24 — When `recoveryAllocation` is present, split the cash
+      // receipt across the four buckets (principal, default interest, default
+      // fees, legal). Each bucket emits its own JE pair with a distinct label
+      // so the IFRS 7 §35K recovery analysis can trace where cash landed.
+      const alloc = r.recoveryAllocation;
+      if(alloc){
+        const buckets = [
+          { key:'principal',   amt: +alloc.principal  || 0, label:'Recovery — Principal (Write-Off Reversal)',  glAcct:'47000' },
+          { key:'defaultInt',  amt: +alloc.defaultInt || 0, label:'Recovery — Default Interest Allocation',     glAcct:'42100' },
+          { key:'defaultFee',  amt: +alloc.defaultFee || 0, label:'Recovery — Default Fee Allocation',           glAcct:'49200' },
+          { key:'legal',       amt: +alloc.legal      || 0, label:'Recovery — Legal Cost Reimbursement',         glAcct:'54300' }
+        ];
+        for(const b of buckets){
+          if(b.amt <= 0.005) continue;
+          add('Recovery — Cash Receipt (' + b.key + ')', b.amt, true,  '10000', r.date, `Recovery cash allocated to ${b.key} ${r.date}`);
+          add(b.label,                                    b.amt, false, b.glAcct, r.date, `Recovery cash allocated to ${b.key} ${r.date}`);
+          jeIndex++;
+        }
+        // If allocation doesn't equal total recovery, residual hits Impairment Reversal
+        const allocSum = buckets.reduce((s,b) => s + b.amt, 0);
+        const residual = r.recovery - allocSum;
+        if(residual > 0.005){
+          add('Recovery — Cash Receipt (unallocated)', residual, true,  '10000', r.date, `Unallocated recovery residual ${r.date}`);
+          add('Recovery of Written-Off Loan',          residual, false, '47000', r.date, `Unallocated recovery residual ${r.date}`);
+          jeIndex++;
+        }
+      } else {
+        // Legacy single-bucket path
+        add('Recovery — Cash Receipt',              r.recovery, true,  '10000', r.date, `Post-write-off recovery ${r.date}`);
+        add('Recovery of Written-Off Loan',         r.recovery, false, '47000', r.date, `Post-write-off recovery ${r.date}`);
+        jeIndex++;
+      }
+    }
+    // Transtype #10 — Cure / Stage Reversal. Stage 3 → Stage 2/1 transition
+    // releases the existing ECL allowance back to P&L. JE pair reverses the
+    // prior allowance build (DR Allowance / CR Impairment Expense).
+    if(r.cureRelease && r.cureRelease > 0.005){
+      add('ECL Cure — Allowance Reversal',       r.cureRelease, true,  '14500', r.date, `Stage cure / allowance release ${r.date}`);
+      add('ECL Cure — Impairment Reversal',      r.cureRelease, false, '47000', r.date, `Stage cure / allowance release ${r.date}`);
+      jeIndex++;
+    }
+    // Transtype #23 — Allowance Reversal (Without Stage Change). Same DR/CR
+    // mechanic as cure (DR Allowance / CR Impairment) but with distinct
+    // transtype labels so IFRS 7 §35F ECL roll-forward can split model-
+    // recalibration movements from stage-driven movements.
+    if(r.allowanceReversal && r.allowanceReversal > 0.005){
+      add('Allowance Reversal — Model Recalibration',  r.allowanceReversal, true,  '14500', r.date, `Model-driven allowance reversal (no stage change) ${r.date}`);
+      add('Impairment Reversal — Model Recalibration', r.allowanceReversal, false, '47000', r.date, `Model-driven allowance reversal (no stage change) ${r.date}`);
+      jeIndex++;
+    }
+    // Transtype #11 — Forbearance / Payment Holiday. One-time booking on the
+    // forbearance start date that reclassifies the expected deferred interest
+    // from the regular receivable (113000) to a separate "Deferred Interest"
+    // sub-account. Subsequent accruals continue and naturally accumulate in
+    // the deferred bucket until the holiday ends.
+    if(r.forbearanceStartDeferred && r.forbearanceStartDeferred > 0.005){
+      add('Forbearance — Deferred Interest Reclass',  r.forbearanceStartDeferred, true,  '40100', r.date, `Forbearance deferral ${r.date}`);
+      add('Forbearance — Interest Receivable Reduction', r.forbearanceStartDeferred, false, '40100', r.date, `Forbearance deferral ${r.date}`);
+      jeIndex++;
+    }
+    // Transtype #12 — Capitalised origination costs. Costs PAID by NWF at
+    // origination (legal, transaction, valuation) that capitalise into the
+    // loan's carrying value per IFRS 9 §B5.4 / ASC 310-20-25-2.
+    if(r.capitalisedCost && r.capitalisedCost > 0.005){
+      add('Capitalised Origination Costs',           r.capitalisedCost, true,  '15000', r.date, `Capitalised cost into carrying ${r.date}`);
+      add('Capitalised Origination Costs — Cash',    r.capitalisedCost, false, '10000', r.date, `Capitalised cost cash paid ${r.date}`);
+      jeIndex++;
+      // ── Transtype #25 — Origination Cost Deferral on Revolvers (ASC 310-20-25-19) ──
+      // When the deal's revolverCostDeferralBasis === 'commitment', the
+      // origination cost amortises over the COMMITMENT period (settlement →
+      // availabilityEnd) rather than the loan maturity. Emit a documentation
+      // JE that captures the policy choice for the audit trail. The actual
+      // amortisation flows through the existing EIR mechanism (the higher
+      // day-1 carrying yields a lower EIR over the commitment period).
+      if(instr.revolverCostDeferralBasis === 'commitment' && instr.availabilityEnd && r.date === instr.settlementDate){
+        add('Revolver Cost Deferral Policy — Commitment Basis (ASC 310-20-25-19)',
+            r.capitalisedCost, true,  '15000', r.date,
+            `Origination cost amortises over commitment period (settle → ${instr.availabilityEnd}) per ASC 310-20-25-19, not over loan maturity (${instr.maturityDate})`);
+        add('Revolver Cost Deferral Policy — Offset (zero net effect)',
+            r.capitalisedCost, false, '15000', r.date,
+            `Memo entry — policy disclosure only; no net carrying-value impact`);
+        jeIndex++;
+      }
+    }
+    // Transtype #13 — Loan Sale (full derecognition). Per IFRS 9 §3.2.3 /
+    // ASC 860: derecognise the entire carrying amount; book sale proceeds to
+    // cash; the difference between proceeds and carrying value flows to P&L
+    // as Gain/(Loss) on Sale of Loan.
+    //
+    // We split the booking into two JE pairs so the gain/loss leg is visible:
+    //   JE-A (always)    DR Cash 111000           CR Loan Asset 141000  (at carrying)
+    //   JE-B (gain)      DR Cash 111000           CR Gain on Sale 442000
+    //   JE-B (loss)      DR Loss on Sale 542000   CR Loan Asset 141000
+    if(r.loanSaleCV && r.loanSaleCV > 0.005){
+      const proceeds = r.loanSale || 0;
+      const cv       = r.loanSaleCV;
+      const gainLoss = r.loanSaleGain || 0;
+      // JE-A — derecognise asset against cash up to carrying value
+      const baseCash = Math.min(proceeds, cv);   // portion of cash that pairs with asset
+      if(baseCash > 0.005){
+        add('Loan Sale — Cash Received',         baseCash, true,  '111000', r.date, `Loan sale proceeds ${r.date}`);
+        add('Loan Sale — Asset Derecognition',   baseCash, false, '141000', r.date, `Loan sale carrying derecog ${r.date}`);
+        jeIndex++;
+      }
+      // JE-B — gain or loss leg
+      if(gainLoss > 0.005){
+        // Sold above carrying → gain. Excess cash hits Gain on Sale (P&L credit).
+        const excess = gainLoss;
+        add('Loan Sale — Cash Received (Gain)',  excess,   true,  '111000', r.date, `Loan sale gain — extra cash ${r.date}`);
+        add('Loan Sale — Gain on Disposal',      excess,   false, '442000', r.date, `Gain on loan sale ${r.date}`);
+        jeIndex++;
+      } else if(gainLoss < -0.005){
+        // Sold below carrying → loss. Loss on Sale absorbs the residual carrying value.
+        const shortfall = -gainLoss;
+        add('Loan Sale — Loss on Disposal',      shortfall, true,  '542000', r.date, `Loss on loan sale ${r.date}`);
+        add('Loan Sale — Residual Asset Derecog',shortfall, false, '141000', r.date, `Loan sale residual derecog ${r.date}`);
+        jeIndex++;
+      }
+    }
+    // Transtype #14 — Loan Participation / Partial Sell-Down. Per IFRS 9
+    // §3.2.6 "fully proportionate share" transfer test. The pro-rata
+    // carrying value is derecognised; cash flows in; the difference flows
+    // to P&L as Gain/(Loss) on Participation Sale.
+    if(r.participationCV && r.participationCV > 0.005){
+      const proceeds = r.participation || 0;
+      const cv       = r.participationCV;
+      const gainLoss = r.participationGain || 0;
+      const baseCash = Math.min(proceeds, cv);
+      if(baseCash > 0.005){
+        add('Loan Participation — Cash Received',          baseCash, true,  '111000', r.date, `Participation proceeds ${r.date}`);
+        add('Loan Participation — Asset Derecognition',    baseCash, false, '141000', r.date, `Participation partial derecog ${r.date}`);
+        jeIndex++;
+      }
+      if(gainLoss > 0.005){
+        const excess = gainLoss;
+        add('Loan Participation — Cash Received (Gain)',   excess,   true,  '111000', r.date, `Participation gain — extra cash ${r.date}`);
+        add('Loan Participation — Gain on Disposal',       excess,   false, '442000', r.date, `Gain on participation ${r.date}`);
+        jeIndex++;
+      } else if(gainLoss < -0.005){
+        const shortfall = -gainLoss;
+        add('Loan Participation — Loss on Disposal',       shortfall, true,  '542000', r.date, `Loss on participation ${r.date}`);
+        add('Loan Participation — Residual Asset Derecog', shortfall, false, '141000', r.date, `Participation residual derecog ${r.date}`);
+        jeIndex++;
+      }
+    }
+    // Transtype #15 — Debt-for-Equity Swap. Per IFRIC 19 / ASC 470-50-40:
+    // derecognise the loan at carrying; recognise a new equity investment
+    // at fair value (FV); the carrying-FV gap is a restructuring loss to
+    // P&L. JE pair structure:
+    //   DR Equity Investment  142000    (at fair value of equity received)
+    //   DR Restructuring Loss 542100    (CV − FV)
+    //   CR Loan Asset         141000    (at full carrying)
+    if(r.debtEquitySwapCV && r.debtEquitySwapCV > 0.005){
+      const fv   = r.debtEquitySwap || 0;
+      const cv   = r.debtEquitySwapCV;
+      const loss = r.debtEquitySwapLoss || 0;
+      if(fv > 0.005){
+        add('Debt-for-Equity Swap — Equity Recognition', fv, true,  '142000', r.date, `Equity received at FV — D4E swap ${r.date}`);
+        add('Debt-for-Equity Swap — Loan Derecognition (FV portion)', fv, false, '141000', r.date, `Loan derecog at FV portion ${r.date}`);
+        jeIndex++;
+      }
+      if(loss > 0.005){
+        add('Debt-for-Equity Swap — Restructuring Loss', loss, true,  '542100', r.date, `Restructuring loss CV-FV ${r.date}`);
+        add('Debt-for-Equity Swap — Loan Derecognition (Loss portion)', loss, false, '141000', r.date, `Loan derecog loss portion ${r.date}`);
+        jeIndex++;
+      } else if(loss < -0.005){
+        // Rare — equity FV exceeds loan carrying. Gain on swap.
+        const gain = -loss;
+        add('Debt-for-Equity Swap — Equity Recognition (Gain)', gain, true, '142000', r.date, `Equity FV > carrying ${r.date}`);
+        add('Debt-for-Equity Swap — Restructuring Gain',       gain, false,'442100', r.date, `Restructuring gain FV-CV ${r.date}`);
+        jeIndex++;
+      }
     }
   }
   // Cash settlement at period end: assume accrued interest + fees paid on
@@ -1779,6 +2685,45 @@ function generateDIU(instr, summary, opts){
     add('Non-Use Fee Cash Receipt',          summary.totalNonUseFee, true,  '10000', summary.periodEnd, `Non-use fee cash settlement ${summary.periodEnd}`);
     add('Non-Use Fee Receivable Clear',      summary.totalNonUseFee, false, '23100', summary.periodEnd, `Non-use fee cash settlement ${summary.periodEnd}`);
     jeIndex++;
+  }
+  // ──────────────── Transtype #19 — Period-End Reversing Entries ────────────────
+  // Standard month-end-close pattern: every accrual JE posted on periodEnd gets
+  // a mirrored "reversing" entry on day 1 of the next period. When the real cash
+  // hits later, the cash JE books the full amount to income in the new period.
+  // The reverse pair cancels out so net effect is zero — but the audit trail
+  // shows the original accrual + its reversal + the eventual cash receipt
+  // distinctly, which is how many GLs require accruals to be presented.
+  //
+  // Triggered when instr.useReversingEntries === true. Filters the entries
+  // emitted so far to find accrual-style postings (income/receivable pairs)
+  // and emits flipped twins dated to the day after periodEnd.
+  if(instr.useReversingEntries && summary.periodEnd){
+    const periodEndDate = new Date(summary.periodEnd);
+    const nextDay = new Date(periodEndDate.getFullYear(), periodEndDate.getMonth(), periodEndDate.getDate() + 1)
+                    .toISOString().slice(0, 10);
+    // Identify which JEs to reverse: anything posted on periodEnd that is an
+    // accrual (interest, fee, PIK, default interest/fee, EIR accretion) and
+    // NOT a cash receipt or settlement.
+    const isAccrual = (e) => {
+      if(e.effectiveDate !== summary.periodEnd) return false;
+      const tt = (e.transactionType || '').toLowerCase();
+      const isCash = /cash receipt|cash settlement|receivable clear|drawdown|repayment/.test(tt);
+      const isAccrualLike = /interest receivable|interest income|daily accrued|pik|fee receivable|fee income|accretion|amortis|default (interest|fee)|non-use fee/.test(tt);
+      return isAccrualLike && !isCash;
+    };
+    const toReverse = entries.filter(isAccrual);
+    for(const orig of toReverse){
+      // Emit a DR/CR-flipped twin with a "Reversing —" prefix label
+      add(
+        'Reversing — ' + (orig.transactionType || ''),
+        orig.amountLE,
+        !orig.isDebit,         // flip DR ↔ CR
+        orig.account,
+        nextDay,
+        `Auto-reversing entry — cancels ${summary.periodEnd} accrual at next period start`
+      );
+    }
+    if(toReverse.length > 0) jeIndex++;
   }
   return applyInvestranGLMapping(entries);
 }
@@ -1811,8 +2756,9 @@ function generateDIUFromReference(instr, referenceData){
     const eff = ref.date;
     // Interest accrual pair (+ cash-settlement clear)
     if((ref.interestAccrued || 0) > 0.005){
-      add('Interest Receivable',           ref.interestAccrued, false, '40100', eff, `Interest accrual (PortF) ${eff}`);
-      add('Income - Daily Accrued Interest', ref.interestAccrued, true,  '23000', eff, `Interest accrual (PortF) ${eff}`);
+      // Direction fix (same as main flow): DR Receivable / CR Income for accrual
+      add('Interest Receivable',           ref.interestAccrued, true,  '40100', eff, `Interest accrual (PortF) ${eff}`);
+      add('Income - Daily Accrued Interest', ref.interestAccrued, false, '23000', eff, `Interest accrual (PortF) ${eff}`);
       jeIndex++;
       add('Interest Cash Receipt',     ref.interestAccrued, true,  '10000', eff, `Interest cash settlement (PortF) ${eff}`);
       add('Interest Receivable Clear', ref.interestAccrued, false, '23000', eff, `Interest cash settlement (PortF) ${eff}`);
