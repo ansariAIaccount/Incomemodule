@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Loan Module Integration Layer · PortF → PCS → Workday</title>
+<title>Loan Module Integration Layer · PortF → PCS → Cash Movements</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined" rel="stylesheet"/>
@@ -292,7 +292,7 @@
       <span class="material-icons-outlined text-[28px] text-brand-600" style="color:var(--brand-600)">hub</span>
       <div>
         <h1 class="text-lg font-bold leading-tight">Loan Module Integration Layer</h1>
-        <div class="text-[11px] text-gray-500">PortF (System of Record) → PCS / Investran (Accounting) → Workday GL → Reconciliation → PortF Feedback</div>
+        <div class="text-[11px] text-gray-500">PortF (System of Record) → PCS / Investran (Accounting) → Cash Movements (GL) → Reconciliation → PortF Feedback</div>
       </div>
     </div>
     <div class="ml-auto flex items-center gap-3 flex-wrap">
@@ -310,7 +310,7 @@
     </div>
   </div>
   <div class="max-w-[1400px] mx-auto px-6 pb-3 text-[11px] text-gray-500 leading-snug">
-    Integration architecture: PortF is the system of record for deal capture, cashflows and workflows; PCS / Investran is the IFRS-aligned accounting sub-ledger; Workday is the General Ledger. This module orchestrates the data flow between them with full reconciliation and feedback.
+    Integration architecture: PortF is the system of record for deal capture, cashflows and workflows; PCS / Investran is the IFRS-aligned accounting sub-ledger; the Cash Movements system is the downstream General Ledger. This module orchestrates the data flow between them with full reconciliation and feedback.
   </div>
 </header>
 
@@ -330,12 +330,12 @@
   </button>
   <button class="tab-btn" data-tab="stage-3" role="tab" aria-selected="false">
     <span class="tab-num">3</span>
-    <span class="tab-label">Workday Outbound</span>
+    <span class="tab-label">Cash Movements Out</span>
     <span class="tab-sub" id="tabsub-stage-3">Awaiting JEs</span>
   </button>
   <button class="tab-btn" data-tab="stage-4" role="tab" aria-selected="false">
     <span class="tab-num">4</span>
-    <span class="tab-label">Workday Cash Inbound</span>
+    <span class="tab-label">Cash Movements In</span>
     <span class="tab-sub" id="tabsub-stage-4">Awaiting actuals</span>
   </button>
   <button class="tab-btn" data-tab="stage-5" role="tab" aria-selected="false">
@@ -1429,25 +1429,25 @@
 
 <div class="stage-arrow"><span class="material-icons-outlined text-[28px]">south</span></div>
 
-<!-- ===== STAGE 3: Workday Outbound (DIU) ===== -->
+<!-- ===== STAGE 3: Cash Movements Outbound (DIU) ===== -->
 <section id="stage-3" class="stage-card stage-tab-content p-5">
   <div class="step-indicator">
     <div class="step-num-big">3</div>
     <div class="step-text">
       <div class="step-of">Step 3 of 5 · You are here</div>
-      <div class="step-name">Workday GL Outbound</div>
-      <div class="step-hint">Wrap journal entries into a DIU batch with a deterministic external key, then post to Workday</div>
+      <div class="step-name">Cash Movements Outbound</div>
+      <div class="step-hint">Wrap journal entries into a DIU batch with a deterministic external key, then post to the Cash Movements GL</div>
     </div>
     <span class="step-state-chip" id="step-state-3">Awaiting JEs</span>
   </div>
   <div class="flex items-start gap-3 mb-3 flex-wrap">
     <span class="stage-num">3</span>
     <div class="flex-1">
-      <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">cloud_upload</span>Workday GL Outbound — Push Journals via DIU</h2>
-      <p class="text-[12px] text-gray-600 mt-1">Generated journals are packaged for FIS Investran's Data Import Utility (DIU) and pushed to Workday's General Ledger as a balanced batch with deterministic external key (idempotent retries).</p>
+      <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">cloud_upload</span>Cash Movements Outbound — Push Journals via DIU</h2>
+      <p class="text-[12px] text-gray-600 mt-1">Generated journals are packaged for FIS Investran's Data Import Utility (DIU) and pushed to the downstream Cash Movements GL as a balanced batch with deterministic external key (idempotent retries).</p>
     </div>
     <div class="flex flex-wrap gap-2">
-      <button id="btn-workday-push" class="mat-btn primary" disabled><span class="material-icons-outlined text-[16px]">send</span>Push DIU to Workday</button>
+      <button id="btn-workday-push" class="mat-btn primary" disabled><span class="material-icons-outlined text-[16px]">send</span>Push DIU to Cash Movements</button>
       <button id="btn-workday-csv" class="mat-btn outline" disabled><span class="material-icons-outlined text-[16px]">download</span>Download CSV</button>
       <span id="workday-out-status" class="chip gray self-center">Awaiting Stage 2</span>
     </div>
@@ -1464,25 +1464,25 @@
 
 <div class="stage-arrow"><span class="material-icons-outlined text-[28px]">south</span></div>
 
-<!-- ===== STAGE 4: Workday Inbound (Actuals) ===== -->
+<!-- ===== STAGE 4: Cash Movements Inbound (Actuals) ===== -->
 <section id="stage-4" class="stage-card stage-tab-content p-5">
   <div class="step-indicator">
     <div class="step-num-big">4</div>
     <div class="step-text">
       <div class="step-of">Step 4 of 5 · You are here</div>
-      <div class="step-name">Workday Actual Cash — Inbound</div>
-      <div class="step-hint">Pull or synthesise actual cash settlements from Workday for the posted batch</div>
+      <div class="step-name">Cash Movements — Actuals (Inbound)</div>
+      <div class="step-hint">Pull or synthesise actual cash settlements from the Cash Movements GL for the posted batch</div>
     </div>
     <span class="step-state-chip" id="step-state-4">Awaiting actuals</span>
   </div>
   <div class="flex items-start gap-3 mb-3 flex-wrap">
     <span class="stage-num">4</span>
     <div class="flex-1">
-      <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">account_balance_wallet</span>Workday Actual Cash — Inbound</h2>
-      <p class="text-[12px] text-gray-600 mt-1">Workday returns the actual cash receipts / disbursements after settlement (drawdowns funded, interest paid, fees received). The integration layer ingests this for reconciliation against PCS expected amounts.</p>
+      <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">account_balance_wallet</span>Cash Movements — Actuals (Inbound)</h2>
+      <p class="text-[12px] text-gray-600 mt-1">The Cash Movements system returns the actual cash receipts / disbursements after settlement (drawdowns funded, interest paid, fees received). The integration layer ingests this for reconciliation against PCS expected amounts.</p>
     </div>
     <div class="flex flex-wrap gap-2">
-      <button id="btn-workday-actuals" class="mat-btn primary"><span class="material-icons-outlined text-[16px]">file_upload</span>Load Actual Cash from Workday</button>
+      <button id="btn-workday-actuals" class="mat-btn primary"><span class="material-icons-outlined text-[16px]">file_upload</span>Load Actual Cash from GL</button>
       <button id="btn-workday-actuals-sample" class="mat-btn outline"><span class="material-icons-outlined text-[16px]">data_object</span>Synthesise Sample (with variances)</button>
       <span id="workday-in-status" class="chip gray self-center">Not loaded</span>
     </div>
@@ -1499,7 +1499,7 @@
     <div id="actuals-batches-list"></div>
   </div>
   <details id="workday-actuals-section" class="hidden">
-    <summary class="text-[12px] mb-2">View Workday actual-cash entries</summary>
+    <summary class="text-[12px] mb-2">View Cash Movements actual-cash entries</summary>
     <div class="scrolled" id="workday-actuals-table"></div>
   </details>
 </section>
@@ -1513,7 +1513,7 @@
     <div class="step-text">
       <div class="step-of">Step 5 of 5 · You are here</div>
       <div class="step-name">Reconciliation &amp; Feedback to PortF</div>
-      <div class="step-hint">Match PCS expected vs Workday actual line by line; route breaks back to PortF deal team</div>
+      <div class="step-hint">Match PCS expected vs Cash Movements actual line by line; route breaks back to PortF deal team</div>
     </div>
     <span class="step-state-chip" id="step-state-5">Awaiting Stage 4</span>
   </div>
@@ -1521,7 +1521,7 @@
     <span class="stage-num">5</span>
     <div class="flex-1">
       <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">compare_arrows</span>Reconciliation &amp; Feedback to PortF</h2>
-      <p class="text-[12px] text-gray-600 mt-1">Compares PCS-expected cash movements against Workday actuals. Differences classified as <strong>tied</strong> (within tolerance) / <strong>within</strong> (Δ% ≤ break threshold) / <strong>break</strong>. A feedback message goes back to PortF for any breaks so the deal record can be investigated.</p>
+      <p class="text-[12px] text-gray-600 mt-1">Compares PCS-expected cash movements against actuals from the Cash Movements GL. Differences classified as <strong>tied</strong> (within tolerance) / <strong>within</strong> (Δ% ≤ break threshold) / <strong>break</strong>. A feedback message goes back to PortF for any breaks so the deal record can be investigated.</p>
     </div>
     <div class="flex flex-wrap gap-2">
       <button id="btn-recon-run" class="mat-btn primary" disabled><span class="material-icons-outlined text-[16px]">balance</span>Run Reconciliation</button>
@@ -1563,7 +1563,7 @@
       </ul>
     </div>
     <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-      <div class="font-bold text-emerald-900 mb-2">Workday · General Ledger</div>
+      <div class="font-bold text-emerald-900 mb-2">Cash Movements · General Ledger</div>
       <ul class="space-y-1 text-gray-700">
         <li>• DIU batch posting</li>
         <li>• Cash movements (actuals)</li>
@@ -1837,7 +1837,7 @@
    The engine + INSTRUMENTS dataset are loaded above from external
    files (extracted from income-calculator.html so we share one source
    of truth). This file owns the pipeline UI: stage state machine,
-   PortF inbound, Workday outbound + inbound, reconciliation, PortF
+   PortF inbound, Cash Movements outbound + inbound, reconciliation, PortF
    feedback message generation.
 */
 
@@ -1926,8 +1926,8 @@ const M = {
   schedule: [],                 // Engine-built daily schedule
   summary: null,                // Engine-summarised period totals
   acctJournals: [],             // Generated DIU JE rows (PCS accounting output)
-  workdayBatch: null,           // The DIU batch we sent to Workday (with externalKey)
-  workdayActuals: null,         // Actual cash payload received from Workday
+  workdayBatch: null,           // The DIU batch we sent to the Cash Movements GL (with externalKey)
+  workdayActuals: null,         // Actual cash payload received from the Cash Movements GL
   reconciliation: null,         // Per-line reconciliation results
   portfFeedback: null,          // Feedback payload sent back to PortF
   jsonModalCallback: null,      // Active JSON-modal callback
@@ -3028,8 +3028,8 @@ function buildCapabilityCards(inst){
       : `No modifications on this deal · threshold per ${fw.mod.citation}` };
 
   // Card 10 — Journal export (framework-neutral)
-  const card10 = { icon:'cloud_upload', title:'Journal export to Workday + reconciliation',
-    desc:'Balanced double-entry batch pushed via DIU to Workday GL. Actual cash returned from Workday is reconciled back to PortF source data (Stage 4-5).',
+  const card10 = { icon:'cloud_upload', title:'Journal export to Cash Movements GL + reconciliation',
+    desc:'Balanced double-entry batch pushed via DIU to the Cash Movements GL. Actual cash returned from the GL is reconciled back to PortF source data (Stage 4-5).',
     status: 'green',
     detail: 'DIU batch with deterministic externalKey · idempotent retries' };
 
@@ -4654,7 +4654,7 @@ function onTreatmentChange(){
   // Recalculate journals + downstream stages
   if(M.portfData){
     runAccounting();
-    // Invalidate Workday + reconciliation downstream — they need to be re-pushed
+    // Invalidate Cash Movements + reconciliation downstream — they need to be re-pushed
     if(M.workdayBatch){
       M.workdayBatch = null;
       $('workday-batch-info').classList.add('hidden');
@@ -5784,7 +5784,7 @@ function renderModificationHistory(inst, summary){
 }
 
 // ============================================================
-// STAGE 3 — Workday Outbound
+// STAGE 3 — Cash Movements Outbound
 // ============================================================
 function djb2(s){
   let h = 5381 >>> 0;
@@ -5806,7 +5806,7 @@ function pushToWorkday(){
   M.workdayBatch = {
     api: 'DataImport/v1',
     endpoint: '/batches',
-    target: 'Workday Financial Management · GL',
+    target: 'Cash Movements GL',
     envelope: {
       templateId: 'b1e8d7c4-3f5a-4c62-8d9e-7a6b5c4d3e2f',
       templateName: 'GL_JOURNAL_V1',
@@ -5838,8 +5838,8 @@ function pushToWorkday(){
   setStage('stage-3', 'done');
   setStage('stage-4', 'active');
   $('workday-in-status').className = 'chip blue self-center';
-  $('workday-in-status').textContent = 'Awaiting Workday actuals';
-  toast('DIU batch posted to Workday — externalKey ' + externalKey);
+  $('workday-in-status').textContent = 'Awaiting Cash Movements actuals';
+  toast('DIU batch posted to Cash Movements GL — externalKey ' + externalKey);
 }
 function downloadWorkdayCSV(){
   if(!M.acctJournals.length) return;
@@ -5852,16 +5852,16 @@ function downloadWorkdayCSV(){
 }
 
 // ============================================================
-// STAGE 4 — Workday Actuals (Inbound)
+// STAGE 4 — Cash Movements Actuals (Inbound)
 // ============================================================
-// Workday actuals payload shape:
+// Cash Movements actuals payload shape:
 // {
-//   source: "Workday Financial Management",
+//   source: "Cash Movements GL",
 //   batchId: "WD-...",
 //   periodStart, periodEnd,
 //   actuals: [{ date, transactionType, account, amountLE, isDebit, workdayJournalId, status:'POSTED'|'CANCELLED' }]
 // }
-// Append a Workday actuals payload as a new batch on the active deal. Each batch
+// Append a Cash Movements actuals payload as a new batch on the active deal. Each batch
 // represents one period (Q1 2026, Q2 2026, etc.). The user can load many batches
 // and reconciliation in Stage 5 runs per batch.
 function applyWorkdayActuals(payload){
@@ -5918,7 +5918,7 @@ function renderActualsBatchesList(){
       return `<tr class="${isActive ? 'event' : ''}" data-batch-row="${b.batchKey}" style="cursor:pointer">
         <td class="left text-[12px]">${fmtDate(b.periodStart)} → ${fmtDate(b.periodEnd)}</td>
         <td class="left text-[11px]" style="word-break:break-all">${b.batchId || b.batchKey}</td>
-        <td class="left text-[11px]">${(b.source || 'Workday').slice(0, 32)}</td>
+        <td class="left text-[11px]">${(b.source || 'Cash Movements GL').slice(0, 32)}</td>
         <td>${(b.actuals || []).length}</td>
         <td>${fmtMoney(total, ccy)}</td>
         <td class="left text-[11px]">${b.loadedAt ? new Date(b.loadedAt).toLocaleString('en-GB') : '—'}</td>
@@ -5968,7 +5968,7 @@ function renderActualsTable(payload){
   const rows = payload.actuals || [];
   $('workday-actuals-table').innerHTML = `<div class="text-[11px] text-gray-500 mb-1">Showing batch <strong>${payload.batchKey}</strong> · ${fmtDate(payload.periodStart)} → ${fmtDate(payload.periodEnd)} · ${rows.length} rows</div>
   <table class="data">
-    <thead><tr><th class="left">Date</th><th class="left">Transaction Type</th><th>Account</th><th>Amount</th><th>DR/CR</th><th class="left">Workday JE</th><th class="left">Status</th></tr></thead>
+    <thead><tr><th class="left">Date</th><th class="left">Transaction Type</th><th>Account</th><th>Amount</th><th>DR/CR</th><th class="left">GL Journal ID</th><th class="left">Status</th></tr></thead>
     <tbody>${rows.map(r => `<tr>
       <td class="left">${fmtDate(r.date)}</td>
       <td class="left">${r.transactionType}</td>
@@ -6000,7 +6000,7 @@ function synthesiseWorkdayActuals(){
     };
   });
   applyWorkdayActuals({
-    source: 'Workday Financial Management (synthesised)',
+    source: 'Cash Movements GL (synthesised)',
     batchId: M.workdayBatch?.envelope?.batchId || 'WD-DEMO',
     periodStart: currentInstrument().settlementDate,
     periodEnd: currentInstrument().maturityDate,
@@ -6012,7 +6012,7 @@ function synthesiseWorkdayActuals(){
 // STAGE 5 — Reconciliation + PortF Feedback
 // ============================================================
 function runReconciliation(){
-  if(!M.workdayActuals){ toast('Load Workday actuals first'); return; }
+  if(!M.workdayActuals){ toast('Load Cash Movements actuals first'); return; }
   if(!M.acctJournals || !M.acctJournals.length){ toast('No PCS journals to reconcile — run accounting in Stage 2'); return; }
   const ccy = currentInstrument().currency || 'GBP';
   const tolerance = 1.00;       // £1 tolerance
@@ -6025,7 +6025,7 @@ function runReconciliation(){
     const k = expectedKey(j);
     if(!expectedMap.has(k)) expectedMap.set(k, { ...j, expectedAmount: j.amountLE });
   }
-  // Index Workday actuals likewise
+  // Index Cash Movements actuals likewise
   const actualMap = new Map();
   for(const a of M.workdayActuals.actuals || []){
     const k = `${a.date}|${a.transactionType}|${a.account}`;
@@ -6044,9 +6044,9 @@ function runReconciliation(){
     const pct = Math.abs(diff) / denom;
     let status, reason;
     if(Math.abs(diff) <= tolerance) { status = 'tied'; reason = ''; }
-    else if(act && act.status === 'CANCELLED') { status = 'break'; reason = 'Workday cancelled the receipt'; }
-    else if(!act) { status = 'break'; reason = 'No matching Workday actual found (timing or missing)'; }
-    else if(!exp) { status = 'break'; reason = 'Unexpected Workday actual (no PCS journal)'; }
+    else if(act && act.status === 'CANCELLED') { status = 'break'; reason = 'Cash Movements GL cancelled the receipt'; }
+    else if(!act) { status = 'break'; reason = 'No matching Cash Movements actual found (timing or missing)'; }
+    else if(!exp) { status = 'break'; reason = 'Unexpected Cash Movements actual (no PCS journal)'; }
     else if(pct <= breakPct) { status = 'within'; reason = 'Within 0.5% tolerance'; }
     else { status = 'break'; reason = `Variance ${(pct*100).toFixed(2)}% > 0.5% threshold`; }
     lines.push({
@@ -6095,7 +6095,7 @@ function renderReconResults(r){
     { label:'Tied',                value: `${tied} / ${lines.length}`, sub: `${summary.tieRatePct.toFixed(1)}%` },
     { label:'Within Tolerance',    value: within.toString() },
     { label:'Breaks',              value: breaks.toString(), sub: 'Total |Δ|: ' + fmtMoney(summary.totalAbsDiff, ccy) },
-    { label:'Net Variance',        value: fmtMoney(summary.totalDiff, ccy), sub: 'Workday – PCS' }
+    { label:'Net Variance',        value: fmtMoney(summary.totalDiff, ccy), sub: 'Actuals – Expected' }
   ].map(k =>
     `<div class="kpi"><div class="label">${k.label}</div><div class="value text-[14px]">${k.value}</div><div class="sub">${k.sub||''}</div></div>`
   ).join('');
@@ -6108,7 +6108,7 @@ function renderReconResults(r){
     $('recon-status').textContent = `${breaks} break${breaks>1?'s':''} (${summary.tieRatePct.toFixed(1)}% tied)`;
   }
   $('recon-table').innerHTML = `<table class="data">
-    <thead><tr><th class="left">Date</th><th class="left">Transaction Type</th><th>PCS Expected</th><th>Workday Actual</th><th>Δ (act – exp)</th><th>Δ%</th><th>Status</th><th class="left">Reason</th></tr></thead>
+    <thead><tr><th class="left">Date</th><th class="left">Transaction Type</th><th>PCS Expected</th><th>Cash Movement Actual</th><th>Δ (act – exp)</th><th>Δ%</th><th>Status</th><th class="left">Reason</th></tr></thead>
     <tbody>${lines.map(l => `<tr ${l.status==='break'?'class="break"':''}>
       <td class="left">${fmtDate(l.date)}</td>
       <td class="left">${l.transactionType}</td>
@@ -6174,7 +6174,7 @@ function buildPortFFeedback(){
     actionRequired: breakLines.length > 0,
     requestedActions: breakLines.length > 0 ? [
       'Confirm contractual cashflow date / amount with deal team',
-      'If cashflow is correct, raise Workday GL ticket to investigate posting',
+      'If cashflow is correct, raise Cash Movements GL ticket to investigate posting',
       'If cashflow needs amendment, create amendment in PortF (versioning preserved)',
       'Trigger Stage 1 → 5 re-run after amendment'
     ] : ['No action — period reconciled cleanly']
@@ -6206,8 +6206,8 @@ const SESSION_STORE_KEY = 'lmil:sessions:v1';
 
 function detectCurrentStage(){
   if(M.reconciliation || (M.reconciliations && M.reconciliations.length)) return 'Stage 5 — Reconciliation';
-  if(M.actualsBatches && M.actualsBatches.length) return 'Stage 4 — Workday Actuals';
-  if(M.workdayBatch)                                return 'Stage 3 — Workday GL Push';
+  if(M.actualsBatches && M.actualsBatches.length) return 'Stage 4 — Cash Movements Actuals';
+  if(M.workdayBatch)                                return 'Stage 3 — Cash Movements Push';
   if(M.acctJournals && M.acctJournals.length)      return 'Stage 2 — PCS Accounting';
   if(M.portfData)                                   return 'Stage 1 — PortF Inbound';
   return 'Stage 0 — Empty';
@@ -6329,7 +6329,7 @@ function restoreSession(session){
     runAccounting();                            // rebuilds journals + Evidence Pack
   }
   if(M.workdayBatch){
-    // Restore the displayed batch info — repopulate the Workday batch panel
+    // Restore the displayed batch info — repopulate the Cash Movements batch panel
     $('batch-id').textContent      = M.workdayBatch.envelope?.batchId || '—';
     $('batch-extkey').textContent  = M.workdayBatch.envelope?.externalKey || '—';
     $('batch-rows').textContent    = M.workdayBatch.summary?.jeRows ?? '—';
@@ -6376,7 +6376,7 @@ function openSaveSessionModal(){
         <div><strong>State captured:</strong>
           PortF data ${M.portfData ? '✓' : '—'} ·
           Journals ${M.acctJournals?.length ? `(${M.acctJournals.length})` : '—'} ·
-          Workday batch ${M.workdayBatch ? '✓' : '—'} ·
+          Cash Movements batch ${M.workdayBatch ? '✓' : '—'} ·
           Actuals batches ${M.actualsBatches?.length || 0} ·
           Reconciliations ${M.reconciliations?.length || 0}
         </div>
@@ -6985,8 +6985,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('btn-workday-csv').onclick = downloadWorkdayCSV;
   // Stage 4
   $('btn-workday-actuals').onclick = ()=> openJsonModal({
-    title: 'Load Workday Actual Cash',
-    subtitle: 'Paste the actuals JSON returned by Workday after posting (status: POSTED / CANCELLED)',
+    title: 'Load Cash Movements — Actual Cash',
+    subtitle: 'Paste the actuals JSON returned by the Cash Movements GL after posting (status: POSTED / CANCELLED)',
     callback: payload => {
       if(!Array.isArray(payload.actuals)) throw new Error('Missing actuals[] array');
       applyWorkdayActuals(payload);
@@ -7260,8 +7260,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const stages = [
       { id: 'stage-1', title: '1 · PortF Inbound',        chip: 'portf-status' },
       { id: 'stage-2', title: '2 · Accounting Engine',    chip: 'acct-status' },
-      { id: 'stage-3', title: '3 · Workday Outbound',     chip: 'workday-out-status' },
-      { id: 'stage-4', title: '4 · Workday Cash Inbound', chip: 'workday-in-status' },
+      { id: 'stage-3', title: '3 · Cash Movements Out',     chip: 'workday-out-status' },
+      { id: 'stage-4', title: '4 · Cash Movements In', chip: 'workday-in-status' },
       { id: 'stage-5', title: '5 · Reconciliation',       chip: 'recon-status' }
     ];
     for(const s of stages){
