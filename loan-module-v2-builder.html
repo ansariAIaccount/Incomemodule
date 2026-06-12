@@ -5392,6 +5392,223 @@ function applyEclAutoMigration(inst){
   }
 }
 
+// ============================================================
+// AASB extras post-processor — wires three of the six AASB dropdowns into JEs
+// ============================================================
+// Only fires when accountingFramework === 'AASB'. Reads inst.aasbExtras and
+// applies the following live adjustments to the journal-row array returned
+// by generateDIU:
+//
+//   1. GST treatment === 'taxable':
+//        Fee CR rows on the income leg (40150, 40200, 40250) are split
+//        10/11 fee income + 1/11 GST Payable (account 24500). The DR cash
+//        / receivable leg stays at the gross amount.
+//
+//   2. APRA standard === 'aps220':
+//        Compute APRA APS 220 minimum loss-allowance floor = 0.5% of
+//        carrying value (faceValue proxy). If the IFRS 9 ECL JE (45000
+//        income / 24000 allowance) is below the floor, append a "APS 220
+//        ECL top-up" pair lifting the allowance to the floor.
+//
+//   3. Franking treatment in ('fullyFranked', 'partiallyFranked'):
+//        For every dividend-type JE (transactionType containing 'Dividend'
+//        or account 40300), append a memo row recording the franking
+//        credit gross-up — DR Franking Credit Receivable (23900) /
+//        CR Franking Credit Income (40310). Gross-up = dividend × 30/70
+//        for fully franked, × (30/70) × fractionFranked (default 50%) for
+//        partial. No-op when the deal has no dividend income (i.e. pure
+//        debt). Three other extras (Tier, ASIC-reportable, Related-party)
+//        are intentionally NOT wired — they're disclosure-only metadata
+//        and don't move accounts.
+function applyAASBExtrasToJEs(journals, inst, summary){
+  if(!Array.isArray(journals) || !journals.length){
+    console.warn('[AASB overlay] skipping: no journals to process');
+    return journals;
+  }
+  if(!inst){
+    console.warn('[AASB overlay] skipping: no inst');
+    return journals;
+  }
+  if(inst.accountingFramework !== 'AASB'){
+    console.warn('[AASB overlay] skipping: framework =', inst.accountingFramework, '(expected AASB)');
+    return journals;
+  }
+  const ax = inst.aasbExtras || {};
+  console.log('[AASB overlay] running on', journals.length, 'rows · gst=' + ax.gstTreatment +
+              ' apra=' + ax.apraStandard + ' franking=' + ax.frankingTreatment);
+  let out = journals.slice();
+
+  // ─── 1. GST 10% split on fees ───
+  // Only for taxable supply (default Australian treatment for loan interest is
+  // financialSupply, which is GST-free under the input-taxed regime). For
+  // taxable fees a $110 fee gross becomes $100 net income + $10 GST collected.
+  if(ax.gstTreatment === 'taxable'){
+    // Detect fee CR rows by transactionType primarily, account secondarily.
+    // The engine emits fee rows with transactionType strings like:
+    //   "Establishment Fee (Upfront) Income (IFRS 15)"
+    //   "Agency Fee (Annual) Income (IFRS 15)"
+    //   "Non-Use Fee Income"
+    //   "Default Fee Income"
+    //   "Arrangement fee income – IFRS 15"
+    // All match the broad "fee" regex. We also exclude interest, drawdown,
+    // cash, principal etc. rows explicitly so we never split a non-fee row.
+    const feeMarkRe = /\bfee\b/i;
+    const excludeRe = /interest|draw|paydown|repay|principal|ecl|impair|hedge|fx|cash receipt|maturity payoff|loan asset|allowance|modification|recovery|sale|swap|participation/i;
+    // Final account whitelist — anywhere a fee CR could land after the engine's
+    // lookup() remap, plus the placeholder accounts the engine uses pre-remap.
+    const isFeeIncomeAccount = acct => {
+      const s = String(acct || '');
+      return s.startsWith('492') ||              // remapped IFRS 15 fee income
+             s === '40140' || s === '40150' ||  // legacy default fee, fee income
+             s === '40200' || s === '40250' ||  // non-use fee placeholder, generic
+             s === '40300';
+    };
+    const split = [];
+    let gstHits = 0;
+    let candidateCount = 0;
+    for(const j of out){
+      if(j.isDebit){ split.push(j); continue; }                  // skip DR rows
+      const tt = j.transactionType || '';
+      if(excludeRe.test(tt)){ split.push(j); continue; }
+      const hasFeeWord    = feeMarkRe.test(tt);
+      const hasFeeAccount = isFeeIncomeAccount(j.account);
+      const isFeeIncomeCr = !j.isDebit && (hasFeeAccount || (hasFeeWord && !excludeRe.test(tt)));
+      if(hasFeeWord || hasFeeAccount) candidateCount++;
+      if(isFeeIncomeCr){
+        gstHits++;
+        const gross = +j.amountLE || 0;
+        const net   = +(gross * 10 / 11).toFixed(2);
+        const gst   = +(gross - net).toFixed(2);
+        split.push(Object.assign({}, j, {
+          amountLE: net, amountLocal: net, originalAmount: net,
+          transactionComments: (j.transactionComments || '') + ' · GST-exclusive net (AASB GST taxable)'
+        }));
+        split.push(Object.assign({}, j, {
+          account: '24500',
+          transactionType: 'GST Payable (10% on ' + (j.transactionType || 'Fee') + ')',
+          amountLE: gst, amountLocal: gst, originalAmount: gst,
+          txIndex: (j.txIndex || 1) + 0.5,
+          transactionComments: 'GST collected on taxable fee · AASB / GST Act 1999 §9-10'
+        }));
+      } else {
+        split.push(j);
+      }
+    }
+    console.log('[AASB GST] candidates=' + candidateCount + ', hits=' + gstHits +
+                ', added ' + gstHits + ' GST Payable rows');
+    if(gstHits === 0){
+      // No fee CR rows matched — surface this to the user so they aren't
+      // wondering why nothing changed. Dump the first 5 CR rows to console
+      // for inspection.
+      const crSample = out.filter(j => !j.isDebit).slice(0, 5).map(j => ({
+        type: j.transactionType, acct: j.account, amt: j.amountLE
+      }));
+      console.warn('[AASB GST] No fee CR rows matched. Sample CR rows:', crSample);
+      if(typeof toast === 'function'){
+        toast('GST taxable selected — no fee CR rows matched the filter (see console)');
+      }
+    } else if(typeof toast === 'function'){
+      toast('GST taxable applied · ' + gstHits + ' fee row' + (gstHits===1?'':'s') +
+            ' split into income + GST Payable');
+    }
+    out = split;
+  }
+
+  // ─── 2. APRA APS 220 ECL floor ───
+  // APRA APS 220 §32 prescribes a prudential floor on credit-loss allowances
+  // (≈0.5% of carrying value for most ADI portfolios). If the IFRS 9 ECL JE
+  // is below the floor, post a top-up to lift the balance-sheet allowance.
+  // Uses the SAME accounts as the existing IFRS 9 ECL JE (15500 Loan Loss
+  // Allowance / 70100 Impairment Expense) so no new chart entries are needed.
+  if(ax.apraStandard === 'aps220'){
+    const cv = +inst.faceValue || +inst.commitment || 0;
+    if(cv > 0){
+      const APS220_FLOOR_PCT = 0.005; // 0.5%
+      const requiredFloor = cv * APS220_FLOOR_PCT;
+      // Sum existing ECL JE on 15500 (allowance CR) — same account as IFRS 9 ECL
+      let currentEclAllowance = 0;
+      for(const j of out){
+        if(j.account === '15500' && !j.isDebit) currentEclAllowance += (+j.amountLE || 0);
+        if(j.account === '15500' && j.isDebit)  currentEclAllowance -= (+j.amountLE || 0);
+      }
+      const gap = requiredFloor - currentEclAllowance;
+      if(gap > 0.01){
+        const periodEnd = (summary && summary.periodEnd) || new Date().toISOString().slice(0,10);
+        const nextJeIdx = (out.reduce((m, j) => Math.max(m, j.jeIndex || 0), 0)) + 1;
+        const base = {
+          legalEntity: inst.legalEntity, leid: inst.leid, batchId: 1,
+          jeIndex: nextJeIdx,
+          glDate: periodEnd, effectiveDate: periodEnd,
+          deal: inst.deal, position: inst.position, incomeSecurity: inst.incomeSecurity,
+          allocationRule: 'No Allocation', batchType: 'Loan Calculator',
+          batchComments: 'APRA APS 220 ECL prudential floor top-up',
+          fx: 1, leDomain: 'NWF', amountLE: gap, amountLocal: gap, originalAmount: gap
+        };
+        out.push(Object.assign({}, base, {
+          txIndex: 1,
+          transactionType: 'APRA APS 220 ECL Top-Up — Allowance',
+          account: '15500', isDebit: false,                                    // reuse IFRS 9 ECL allowance
+          transactionComments: 'Top-up of credit-loss allowance to APRA APS 220 floor (0.5% of carrying value)'
+        }));
+        out.push(Object.assign({}, base, {
+          txIndex: 2,
+          transactionType: 'APRA APS 220 ECL Top-Up — Expense',
+          account: '70100', isDebit: true,                                      // reuse IFRS 9 impairment expense
+          transactionComments: 'P&L expense for APRA prudential top-up · APS 220 §32'
+        }));
+      }
+    }
+  }
+
+  // ─── 3. Franking memo on dividend income ───
+  // Only relevant when the deal has any dividend-type JE — for a pure debt
+  // loan there's no equity income to attach franking to, so this is silently
+  // a no-op (which is the truthful behaviour for most preset deals).
+  if(ax.frankingTreatment === 'fullyFranked' || ax.frankingTreatment === 'partiallyFranked'){
+    const fractionFranked = ax.frankingTreatment === 'fullyFranked' ? 1 : 0.5;
+    const corpTaxRate = 0.30; // AU corporate tax rate
+    const grossUpMultiplier = corpTaxRate / (1 - corpTaxRate) * fractionFranked;
+    const dividendRows = out.filter(j =>
+      !j.isDebit && (
+        /dividend/i.test(j.transactionType || '') ||
+        j.account === '40300'
+      )
+    );
+    const memoRows = [];
+    for(const div of dividendRows){
+      const divAmt = +div.amountLE || 0;
+      const grossUp = +(divAmt * grossUpMultiplier).toFixed(2);
+      if(grossUp <= 0.005) continue;
+      const nextJeIdx = (out.concat(memoRows).reduce((m, j) => Math.max(m, j.jeIndex || 0), 0)) + 1;
+      const base = {
+        legalEntity: inst.legalEntity, leid: inst.leid, batchId: 1,
+        jeIndex: nextJeIdx,
+        glDate: div.glDate, effectiveDate: div.effectiveDate,
+        deal: inst.deal, position: inst.position, incomeSecurity: inst.incomeSecurity,
+        allocationRule: 'No Allocation', batchType: 'Loan Calculator',
+        batchComments: 'AASB / ITAA franking credit gross-up',
+        fx: 1, leDomain: 'NWF', amountLE: grossUp, amountLocal: grossUp, originalAmount: grossUp
+      };
+      memoRows.push(Object.assign({}, base, {
+        txIndex: 1,
+        transactionType: 'Franking Credit Receivable (' + ax.frankingTreatment + ')',
+        account: '23900', isDebit: true,
+        transactionComments: 'Franking credit gross-up at 30% AU corporate rate · ' +
+                             (ax.frankingTreatment === 'fullyFranked' ? '100%' : '50%') +
+                             ' franked'
+      }));
+      memoRows.push(Object.assign({}, base, {
+        txIndex: 2,
+        transactionType: 'Franking Credit Income — Gross-Up',
+        account: '40310', isDebit: false,
+        transactionComments: 'Imputation credit on franked dividend · AASB 112 / TR 2003/13'
+      }));
+    }
+    out = out.concat(memoRows);
+  }
+  return out;
+}
+
 function runAccounting(){
   try { return runAccountingImpl(); }
   catch(err){
@@ -5490,6 +5707,14 @@ function runAccountingImpl(){
   // effectiveDate). Filled value applies the same close date to every row.
   const glPostDate = $('opt-gl-date')?.value || null;
   M.acctJournals = generateDIU(inst, M.summary, { glDate: glPostDate });
+  // AASB extras overlay — applies GST 10% split on fees, APRA APS 220 ECL
+  // floor, and franking memo annotations to the engine output BEFORE the
+  // KPI / coverage / journal-table renders so the user sees them in the JE
+  // drill-through. No-op for non-AASB frameworks or default extras.
+  if(typeof applyAASBExtrasToJEs === 'function'){
+    try { M.acctJournals = applyAASBExtrasToJEs(M.acctJournals, inst, M.summary); }
+    catch(err){ console.error('AASB overlay failed:', err); }
+  }
   // KPI strip
   const ccy = inst.currency || 'GBP';
   const sum = M.summary;
