@@ -302,11 +302,10 @@
       <button id="btn-session-load" class="mat-btn outline text-xs" title="Load a previously-saved session">
         <span class="material-icons-outlined text-[16px]">folder_open</span>Load Session
       </button>
-      <label class="text-[11px] text-gray-500 font-semibold uppercase tracking-wider">Active Deal</label>
-      <select id="sel-instrument" class="border border-gray-300 rounded-md px-2 py-1.5 text-sm" style="min-width:280px"></select>
-      <a href="income-calculator.html" class="mat-btn outline text-xs" title="Open the legacy Loan Module">
-        <span class="material-icons-outlined text-[16px]">history</span>Old Loan Module
-      </a>
+      <div class="flex items-center gap-2 flex-nowrap whitespace-nowrap">
+        <label for="sel-instrument" class="text-[11px] text-gray-500 font-semibold uppercase tracking-wider leading-none">Active Deal</label>
+        <select id="sel-instrument" class="border border-gray-300 rounded-md px-2 py-1.5 text-sm" style="min-width:280px"></select>
+      </div>
     </div>
   </div>
   <div class="max-w-[1400px] mx-auto px-6 pb-3 text-[11px] text-gray-500 leading-snug">
@@ -341,7 +340,7 @@
   </button>
   <button class="tab-btn" data-tab="stage-4" role="tab" aria-selected="false">
     <span class="tab-num">4</span>
-    <span class="tab-label">Cash Movements In</span>
+    <span class="tab-label">Cash Movement Actuals</span>
     <span class="tab-sub" id="tabsub-stage-4">Awaiting actuals</span>
   </button>
   <button class="tab-btn" data-tab="stage-5" role="tab" aria-selected="false">
@@ -377,145 +376,239 @@
      interest rate links to the calculation breakdown (base + spread +
      ratchet + ESG). -->
 <section id="builder" class="stage-card stage-tab-content tab-visible p-5">
-  <div class="step-indicator">
-    <div class="step-num-big">0</div>
-    <div class="step-text">
-      <div class="step-of">Step 0 of 5 · Start here</div>
-      <div class="step-name">Loan Builder</div>
-      <div class="step-hint">Define deal, facility, tranches, interest components and fees from scratch. Forward cashflow updates as you type. Click any cell to drill into the calculation.</div>
+  <!-- ═══════════════════ HERO STRIP — Deal Summary Preview ═══════════════════ -->
+  <div class="builder-hero" style="background: linear-gradient(135deg, #21295C 0%, #2E3A7B 60%, #4338ca 100%); border-radius: 14px; padding: 20px 24px; margin-bottom: 18px; color: white; position: relative; overflow: hidden;">
+    <div style="position:absolute; top:-30px; right:-30px; width:200px; height:200px; background:radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%); border-radius:50%;"></div>
+    <div style="position:absolute; bottom:-50px; left:30%; width:300px; height:300px; background:radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 60%); border-radius:50%;"></div>
+    <div style="display:flex; align-items:flex-start; gap:18px; flex-wrap:wrap; position:relative;">
+      <div style="background:rgba(255,255,255,0.12); backdrop-filter:blur(8px); border-radius:12px; padding:12px; border:1px solid rgba(255,255,255,0.18);">
+        <span class="material-icons-outlined" style="font-size:32px;">design_services</span>
+      </div>
+      <div style="flex:1; min-width:280px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; opacity:0.7;">Step 0 of 5 · Start here</span>
+          <span id="step-state-builder" style="background:rgba(255,255,255,0.18); padding:2px 10px; border-radius:12px; font-size:10px; font-weight:600;">Empty</span>
+        </div>
+        <h1 id="hero-deal-name" style="font-size:24px; font-weight:700; margin:6px 0 4px; letter-spacing:-0.5px;">Loan Builder</h1>
+        <p style="font-size:12px; opacity:0.85; line-height:1.5; max-width:680px;">Define deal, facility, tranches, interest components and fees from scratch — full transparency, no black-box calculations. Each interest component supports multiple terms, lookback, lockout, multi-spread schedules, and KPI-driven ratchets.</p>
+        <!-- Live deal summary stats -->
+        <div id="hero-stats" style="display:flex; gap:16px; margin-top:14px; flex-wrap:wrap;">
+          <div class="hero-stat"><div class="hero-stat-label">Commitment</div><div class="hero-stat-val" id="hero-commitment">—</div></div>
+          <div class="hero-stat"><div class="hero-stat-label">Tranches</div><div class="hero-stat-val" id="hero-tranches">0</div></div>
+          <div class="hero-stat"><div class="hero-stat-label">Interest Components</div><div class="hero-stat-val" id="hero-components">0</div></div>
+          <div class="hero-stat"><div class="hero-stat-label">Fees</div><div class="hero-stat-val" id="hero-fees-count">0</div></div>
+          <div class="hero-stat"><div class="hero-stat-label">Framework</div><div class="hero-stat-val" id="hero-framework">IFRS</div></div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; position:relative; z-index:1;">
+        <button id="btn-builder-preset" style="background:rgba(255,255,255,0.18); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,0.25); color:white; padding:8px 14px; border-radius:8px; font-size:12px; font-weight:600; display:flex; align-items:center; gap:6px; cursor:pointer; transition:all 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.28)'" onmouseout="this.style.background='rgba(255,255,255,0.18)'">
+          <span class="material-icons-outlined" style="font-size:16px;">auto_awesome</span>Load Preset
+        </button>
+        <button id="btn-builder-reset" style="background:transparent; border:1px solid rgba(255,255,255,0.25); color:white; padding:8px 14px; border-radius:8px; font-size:12px; font-weight:600; display:flex; align-items:center; gap:6px; cursor:pointer; transition:all 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='transparent'">
+          <span class="material-icons-outlined" style="font-size:16px;">restart_alt</span>Reset
+        </button>
+        <button id="btn-builder-toS2" style="background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:white; padding:10px 16px; border-radius:8px; font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; cursor:pointer; border:0; box-shadow:0 4px 14px rgba(16,185,129,0.4); transition:all 0.15s;" onmouseover="this.style.boxShadow='0 6px 20px rgba(16,185,129,0.55)'; this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 4px 14px rgba(16,185,129,0.4)'; this.style.transform=''">
+          <span class="material-icons-outlined" style="font-size:18px;">arrow_forward</span>Send to Cashflow Generation
+        </button>
+        <span id="builder-status" style="text-align:center; font-size:10px; padding:3px 8px; border-radius:10px; background:rgba(255,255,255,0.12); margin-top:2px;">Empty</span>
+      </div>
     </div>
-    <span class="step-state-chip" id="step-state-builder">Empty</span>
   </div>
 
-  <div class="flex items-center mb-3 gap-3 flex-wrap">
-    <div>
-      <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">design_services</span>Loan Builder</h2>
-      <p class="text-[12px] text-gray-600 mt-1">Replaces Stage 1 PortF ingestion. Build the loan from scratch with full transparency — no black-box rate or fee calculations. Each interest component supports multiple terms, lookback, lockout, multi-spread schedules, and KPI-driven ratchets. Each fee supports fix / float / % over base / % over funded / % over unfunded modes.</p>
-    </div>
-    <div class="ml-auto flex gap-2 items-center">
-      <button id="btn-builder-preset" class="mat-btn outline" title="Load a worked example so you can see the full builder populated">
-        <span class="material-icons-outlined text-[16px]">auto_awesome</span>Load Preset
-      </button>
-      <button id="btn-builder-reset" class="mat-btn outline" title="Clear the builder and start fresh">
-        <span class="material-icons-outlined text-[16px]">restart_alt</span>Reset
-      </button>
-      <button id="btn-builder-toS2" class="mat-btn primary" title="Generate forward cashflows from the built deal — opens Stage 1 Cashflow Generation">
-        <span class="material-icons-outlined text-[16px]">arrow_forward</span>Send to Cashflow Generation
-      </button>
-      <span id="builder-status" class="chip gray self-center">Empty</span>
+  <style>
+    .hero-stat { background: rgba(255,255,255,0.08); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 8px 14px; min-width: 100px; }
+    .hero-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; opacity: 0.65; }
+    .hero-stat-val { font-size: 16px; font-weight: 700; margin-top: 2px; letter-spacing: -0.3px; }
+    .builder-section { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 0; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); overflow: hidden; transition: box-shadow 0.2s; }
+    .builder-section:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+    .builder-section > summary { list-style: none; padding: 14px 18px; cursor: pointer; display: flex; align-items: center; gap: 12px; user-select: none; transition: background 0.15s; }
+    .builder-section > summary::-webkit-details-marker { display: none; }
+    .builder-section > summary:hover { background: #f9fafb; }
+    .builder-section[open] > summary { border-bottom: 1px solid #f3f4f6; }
+    .builder-section-icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .builder-section-title { font-size: 14px; font-weight: 700; color: #111827; letter-spacing: -0.2px; }
+    .builder-section-subtitle { font-size: 11px; color: #6b7280; margin-top: 1px; }
+    .builder-section-body { padding: 16px 18px 18px; }
+    .builder-section[open] > summary::after { content:"expand_less"; }
+    .builder-section:not([open]) > summary::after { content:"expand_more"; }
+    .builder-section > summary::after { font-family:"Material Icons Outlined"; font-size:22px; color:#9ca3af; margin-left:auto; }
+    .b-input { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; font-size: 13px; background: white; transition: all 0.15s; }
+    .b-input:focus { border-color: #21295C; outline: 0; box-shadow: 0 0 0 3px rgba(33,41,92,0.1); }
+    .b-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #6b7280; margin-bottom: 5px; display: block; }
+    .b-field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .add-btn-pill { background: linear-gradient(135deg, #21295C 0%, #4338ca 100%); color: white; border: 0; padding: 6px 14px; border-radius: 999px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; box-shadow: 0 2px 8px rgba(67,56,202,0.25); transition: all 0.15s; }
+    .add-btn-pill:hover { box-shadow: 0 4px 14px rgba(67,56,202,0.4); transform: translateY(-1px); }
+    .icon-indigo { background: linear-gradient(135deg, #eef2ff 0%, #c7d2fe 100%); color: #4338ca; }
+    .icon-emerald { background: linear-gradient(135deg, #ecfdf5 0%, #a7f3d0 100%); color: #059669; }
+    .icon-amber { background: linear-gradient(135deg, #fffbeb 0%, #fde68a 100%); color: #b45309; }
+    .icon-rose { background: linear-gradient(135deg, #fff1f2 0%, #fecdd3 100%); color: #be123c; }
+    .icon-slate { background: linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 100%); color: #334155; }
+  </style>
+
+  <!-- ═══════════════════ ENTRY CHOICE — Manual vs ISIN ═══════════════════ -->
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:18px;">
+    <button id="btn-mode-manual" style="background:white; border:2px solid #e5e7eb; border-radius:14px; padding:22px 26px; text-align:left; cursor:pointer; transition:all 0.2s; display:flex; gap:18px; align-items:flex-start;" onmouseover="this.style.borderColor='#21295C'; this.style.boxShadow='0 8px 24px rgba(33,41,92,0.12)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.borderColor='#e5e7eb'; this.style.boxShadow=''; this.style.transform='';">
+      <div style="background:linear-gradient(135deg, #eef2ff 0%, #c7d2fe 100%); color:#4338ca; width:54px; height:54px; border-radius:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+        <span class="material-icons-outlined" style="font-size:28px;">edit_note</span>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:16px; font-weight:700; color:#111827; letter-spacing:-0.3px; margin-bottom:4px;">Manually Build Loan</div>
+        <div style="font-size:12px; color:#6b7280; line-height:1.5;">Define deal, facility, tranches, interest components and fees from scratch using the form below. Best for new originations or custom structures.</div>
+      </div>
+    </button>
+    <button id="btn-mode-isin" style="background:linear-gradient(135deg, #ecfeff 0%, #cffafe 50%, #a5f3fc 100%); border:2px solid #67e8f9; border-radius:14px; padding:22px 26px; text-align:left; cursor:pointer; transition:all 0.2s; display:flex; gap:18px; align-items:flex-start;" onmouseover="this.style.borderColor='#0891b2'; this.style.boxShadow='0 8px 24px rgba(8,145,178,0.18)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.borderColor='#67e8f9'; this.style.boxShadow=''; this.style.transform='';">
+      <div style="background:linear-gradient(135deg, #0891b2 0%, #06b6d4 100%); color:white; width:54px; height:54px; border-radius:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 4px 14px rgba(8,145,178,0.35);">
+        <span class="material-icons-outlined" style="font-size:28px;">database</span>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:16px; font-weight:700; color:#0e7490; letter-spacing:-0.3px; margin-bottom:4px;">Load from Security Master (ISIN)</div>
+        <div style="font-size:12px; color:#155e75; line-height:1.5;">Search and select an ISIN from the leveraged loan universe. Deal, facility, tranches, pricing — all pre-populated from the security master record.</div>
+      </div>
+    </button>
+  </div>
+
+  <!-- ═══════════════════ ISIN SELECTION MODAL ═══════════════════ -->
+  <div id="isin-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:10000; align-items:flex-start; justify-content:center; padding:60px 20px; backdrop-filter:blur(4px);">
+    <div style="background:white; border-radius:16px; width:100%; max-width:900px; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 25px 60px rgba(0,0,0,0.3); overflow:hidden;">
+      <div style="background:linear-gradient(135deg, #0891b2 0%, #0e7490 100%); color:white; padding:16px 22px; display:flex; align-items:center; gap:12px;">
+        <span class="material-icons-outlined" style="font-size:24px;">database</span>
+        <div style="flex:1;">
+          <div style="font-size:16px; font-weight:700; letter-spacing:-0.2px;">Security Master · ISIN Universe</div>
+          <div style="font-size:11px; opacity:0.85; margin-top:2px;">Search and select an ISIN to load the deal into the Builder</div>
+        </div>
+        <button id="btn-isin-close" style="background:rgba(255,255,255,0.18); color:white; border:0; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:18px; line-height:1;">×</button>
+      </div>
+      <div style="padding:14px 22px; border-bottom:1px solid #e5e7eb; background:#f8fafc;">
+        <div style="position:relative;">
+          <span class="material-icons-outlined" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#9ca3af; font-size:20px;">search</span>
+          <input id="isin-search" type="text" placeholder="Search by ISIN, issuer, ticker, lien, rating, sector…" style="width:100%; border:1px solid #d1d5db; border-radius:10px; padding:10px 12px 10px 40px; font-size:13px; background:white;"/>
+        </div>
+        <div id="isin-result-count" style="font-size:11px; color:#6b7280; margin-top:6px;">— ISINs available</div>
+      </div>
+      <div id="isin-list" style="flex:1; overflow-y:auto; padding:8px;"></div>
+      <div style="border-top:1px solid #e5e7eb; padding:10px 22px; background:#f8fafc; font-size:11px; color:#6b7280; display:flex; justify-content:space-between;">
+        <span>Click any row to load the deal into the Builder.</span>
+        <span>Source: <b>Markit Loan Pricing · IHS · LSTA</b> (mock data)</span>
+      </div>
     </div>
   </div>
 
-  <!-- ─── Two-column layout: form on the left, live cashflow viewer on the right ─── -->
-  <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+  <!-- ═══════════════════ FULL-WIDTH BUILDER FORM (no right pane) ═══════════════════ -->
+  <div>
 
-    <!-- ============ LEFT COLUMN: BUILDER FORM (3/5 width on XL) ============ -->
-    <div class="xl:col-span-3 space-y-3">
-
-      <!-- ─── DEAL SETUP ─── -->
-      <details class="bg-white border border-gray-200 rounded-lg p-3" open>
-        <summary class="font-semibold text-[13px] cursor-pointer flex items-center gap-2"><span class="material-icons-outlined text-[18px]" style="color:#21295C">business</span>Deal Setup<span class="text-[11px] text-gray-500 font-normal ml-2">Counterparty, currency, framework, key dates</span></summary>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 text-[12px]">
-          <div><label class="text-[10px] uppercase text-gray-600 block">Deal Name</label><input id="b-deal-name" type="text" placeholder="e.g. Project Aurora" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white"/></div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Deal ID</label><input id="b-deal-id" type="text" placeholder="e.g. AUR-2026-001" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white"/></div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Counterparty</label><input id="b-counterparty" type="text" placeholder="e.g. Aurora Holdings plc" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white"/></div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Legal Entity (NWF)</label><input id="b-le" type="text" placeholder="e.g. NWF EMEA Credit" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white"/></div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Currency</label>
-            <select id="b-currency" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white">
-              <option value="USD">USD</option><option value="GBP">GBP</option><option value="EUR">EUR</option><option value="CHF">CHF</option><option value="JPY">JPY</option>
-            </select>
+    <!-- ─── DEAL SETUP ─── -->
+    <details class="builder-section" open>
+      <summary>
+        <div class="builder-section-icon icon-indigo"><span class="material-icons-outlined" style="font-size:20px;">business</span></div>
+        <div><div class="builder-section-title">Deal Setup</div><div class="builder-section-subtitle">Counterparty, currency, framework, key dates</div></div>
+      </summary>
+      <div class="builder-section-body">
+        <div class="b-field-grid">
+          <div><label class="b-label">Deal Name</label><input id="b-deal-name" type="text" placeholder="e.g. Project Aurora" class="b-input"/></div>
+          <div><label class="b-label">Deal ID</label><input id="b-deal-id" type="text" placeholder="e.g. AUR-2026-001" class="b-input"/></div>
+          <div><label class="b-label">Counterparty</label><input id="b-counterparty" type="text" placeholder="e.g. Aurora Holdings plc" class="b-input"/></div>
+          <div><label class="b-label">Legal Entity</label><input id="b-le" type="text" placeholder="e.g. Corporate Bank Ltd" class="b-input"/></div>
+          <div><label class="b-label">Currency</label>
+            <select id="b-currency" class="b-input"><option value="USD">USD</option><option value="GBP">GBP</option><option value="EUR">EUR</option><option value="CHF">CHF</option><option value="JPY">JPY</option></select>
           </div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Accounting Framework</label>
-            <select id="b-framework" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white">
-              <option value="IFRS">IFRS</option><option value="USGAAP">US GAAP (CECL)</option><option value="ASPE">Canadian ASPE</option>
-            </select>
+          <div><label class="b-label">Accounting Framework</label>
+            <select id="b-framework" class="b-input"><option value="IFRS">IFRS</option><option value="USGAAP">US GAAP (CECL)</option><option value="ASPE">Canadian ASPE</option><option value="AASB">AASB (Australian)</option></select>
           </div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Settlement Date</label><input id="b-settle" type="date" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white"/></div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Maturity Date</label><input id="b-maturity" type="date" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white"/></div>
-        </div>
-      </details>
-
-      <!-- ─── FACILITY SETUP ─── -->
-      <details class="bg-white border border-gray-200 rounded-lg p-3" open>
-        <summary class="font-semibold text-[13px] cursor-pointer flex items-center gap-2"><span class="material-icons-outlined text-[18px]" style="color:#21295C">account_balance</span>Facility Setup<span class="text-[11px] text-gray-500 font-normal ml-2">Total commitment, availability period, day basis</span></summary>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 text-[12px]">
-          <div><label class="text-[10px] uppercase text-gray-600 block">Total Commitment</label><input id="b-commitment" type="number" min="0" step="100000" placeholder="e.g. 25000000" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white"/></div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Availability End (last drawdown)</label><input id="b-avail-end" type="date" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white"/></div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Day Basis</label>
-            <select id="b-day-basis" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white">
-              <option value="ACT/360">ACT/360</option><option value="ACT/365">ACT/365</option><option value="ACT/ACT">ACT/ACT</option><option value="30/360">30/360</option><option value="30E/360">30E/360</option>
-            </select>
-          </div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Holiday Calendar</label>
-            <select id="b-holiday" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white">
-              <option value="none">None</option><option value="usFederal">US Federal</option><option value="ukBank">UK Bank</option><option value="target">TARGET (EUR)</option>
-            </select>
-          </div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Repayment Type</label>
-            <select id="b-repayment" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white">
-              <option value="AtMaturity">Bullet at maturity</option><option value="Periodic">Periodic (amortising)</option>
-            </select>
-          </div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Facility Type</label>
-            <select id="b-facility-type" class="w-full border border-gray-300 rounded px-2 py-1.5 bg-white">
-              <option value="termLoan">Term Loan</option><option value="revolver">Revolving Credit Facility</option><option value="delayedDraw">Delayed-Draw Term Loan</option>
-            </select>
-          </div>
-        </div>
-      </details>
-
-      <!-- ─── TRANCHES ─── -->
-      <details class="bg-white border border-gray-200 rounded-lg p-3" open>
-        <summary class="font-semibold text-[13px] cursor-pointer flex items-center gap-2"><span class="material-icons-outlined text-[18px]" style="color:#21295C">layers</span>Tranches<span class="text-[11px] text-gray-500 font-normal ml-2">One or more — independent face value, currency, interest setup</span>
-          <button id="btn-add-tranche" class="mat-btn outline ml-auto !py-0.5 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">add</span>Add tranche</button>
-        </summary>
-        <div id="tranches-container" class="mt-3 space-y-3"></div>
-      </details>
-
-      <!-- ─── FEES ─── -->
-      <details class="bg-white border border-gray-200 rounded-lg p-3" open>
-        <summary class="font-semibold text-[13px] cursor-pointer flex items-center gap-2"><span class="material-icons-outlined text-[18px]" style="color:#21295C">request_quote</span>Fees<span class="text-[11px] text-gray-500 font-normal ml-2">Fix · Float · % over interest component · % over funded / unfunded</span>
-          <button id="btn-add-fee" class="mat-btn outline ml-auto !py-0.5 !px-2 text-[11px]"><span class="material-icons-outlined text-[14px]">add</span>Add fee</button>
-        </summary>
-        <div id="fees-container" class="mt-3 space-y-2"></div>
-      </details>
-
-      <!-- ─── CASHFLOW EVENTS ─── -->
-      <details class="bg-white border border-gray-200 rounded-lg p-3">
-        <summary class="font-semibold text-[13px] cursor-pointer flex items-center gap-2"><span class="material-icons-outlined text-[18px]" style="color:#21295C">payments</span>Cashflow Events<span class="text-[11px] text-gray-500 font-normal ml-2">Drawdowns, repayments, prepayments — declared per tranche</span></summary>
-        <div id="events-container" class="mt-3 text-[11px] text-gray-500">Events are configured per tranche (see "Drawdowns / Repayments" inside each tranche card).</div>
-      </details>
-
-    </div>
-
-    <!-- ============ RIGHT COLUMN: FORWARD CASHFLOW VIEWER (2/5 width on XL) ============ -->
-    <div class="xl:col-span-2 space-y-3">
-      <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-        <div class="flex items-center gap-2 mb-2">
-          <span class="material-icons-outlined text-[18px]" style="color:#0F8A4D">visibility</span>
-          <h3 class="text-[13px] font-bold text-emerald-900">Forward Cashflow — Live Preview</h3>
-          <span id="cf-period-chip" class="chip gray text-[10px]">0 periods</span>
-        </div>
-        <p class="text-[11px] text-emerald-800">Period-end summary. <b>Click any row</b> to see the daily breakdown, each interest component, every fee component, and the journal entries. <b>Click the interest rate</b> to trace base + spread + ratchet + ESG → all-in rate.</p>
-        <div id="cf-summary-kpis" class="grid grid-cols-2 gap-2 mt-2"></div>
-      </div>
-
-      <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div id="cf-table-host" class="text-[11px] max-h-[700px] overflow-y-auto">
-          <div class="p-6 text-center text-gray-400 italic">Fill in the builder to see cashflows…</div>
+          <div><label class="b-label">Settlement Date</label><input id="b-settle" type="date" class="b-input"/></div>
+          <div><label class="b-label">Maturity Date</label><input id="b-maturity" type="date" class="b-input"/></div>
         </div>
       </div>
+    </details>
 
-      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] text-gray-700">
-        <div class="font-bold mb-1 flex items-center gap-2"><span class="material-icons-outlined text-[14px]">help_outline</span>How transparency works</div>
-        <ol class="list-decimal ml-4 space-y-0.5">
-          <li>Every period-end row is computed by summing the per-day accruals — no black-box formulas.</li>
-          <li>Each row shows the formulas inline once expanded: <code>balance × (base + spread + ratchet) × dayCount</code>.</li>
-          <li>Interest rates link to their calculation: SONIA base value · spread band as-of date · KPI ratchet hit.</li>
-          <li>Fees show their mode (fix/float/over-base) + the calculation reference.</li>
-          <li>Day-by-day daily schedule is downloadable as CSV from the bottom of the expanded row.</li>
-        </ol>
+    <!-- ─── FACILITY SETUP ─── -->
+    <details class="builder-section" open>
+      <summary>
+        <div class="builder-section-icon icon-emerald"><span class="material-icons-outlined" style="font-size:20px;">account_balance</span></div>
+        <div><div class="builder-section-title">Facility Setup</div><div class="builder-section-subtitle">Total commitment, availability period, day basis, holiday calendar</div></div>
+      </summary>
+      <div class="builder-section-body">
+        <div class="b-field-grid">
+          <div><label class="b-label">Total Commitment</label><input id="b-commitment" type="number" min="0" step="100000" placeholder="e.g. 25000000" class="b-input"/></div>
+          <div><label class="b-label">Availability End</label><input id="b-avail-end" type="date" class="b-input"/></div>
+          <div><label class="b-label">Day Basis</label>
+            <select id="b-day-basis" class="b-input"><option value="ACT/360">ACT/360</option><option value="ACT/365">ACT/365</option><option value="ACT/ACT">ACT/ACT</option><option value="30/360">30/360</option><option value="30E/360">30E/360</option></select>
+          </div>
+          <div><label class="b-label">Holiday Calendar</label>
+            <select id="b-holiday" class="b-input"><option value="none">None</option><option value="usFederal">US Federal</option><option value="ukBank">UK Bank</option><option value="target">TARGET (EUR)</option><option value="auFederal">Australian National</option></select>
+          </div>
+          <div><label class="b-label">Repayment Type</label>
+            <select id="b-repayment" class="b-input"><option value="AtMaturity">Bullet at maturity</option><option value="Periodic">Periodic (amortising)</option></select>
+          </div>
+          <div><label class="b-label">Facility Type</label>
+            <select id="b-facility-type" class="b-input"><option value="termLoan">Term Loan</option><option value="revolver">Revolving Credit Facility</option><option value="delayedDraw">Delayed-Draw Term Loan</option></select>
+          </div>
+        </div>
       </div>
+    </details>
+
+    <!-- ─── TRANCHES ─── -->
+    <details class="builder-section" open>
+      <summary>
+        <div class="builder-section-icon icon-amber"><span class="material-icons-outlined" style="font-size:20px;">layers</span></div>
+        <div style="flex:1;"><div class="builder-section-title">Tranches <span id="tranches-count-chip" style="font-size:10px; font-weight:600; background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:10px; margin-left:6px;">0</span></div><div class="builder-section-subtitle">One or more — independent face value, currency, interest setup</div></div>
+        <button id="btn-add-tranche" class="add-btn-pill" onclick="event.stopPropagation()"><span class="material-icons-outlined" style="font-size:14px;">add</span>Add tranche</button>
+      </summary>
+      <div class="builder-section-body">
+        <div id="tranches-container" style="display:grid; gap:12px;"></div>
+      </div>
+    </details>
+
+    <!-- ─── FEES ─── -->
+    <details class="builder-section" open>
+      <summary>
+        <div class="builder-section-icon icon-rose"><span class="material-icons-outlined" style="font-size:20px;">request_quote</span></div>
+        <div style="flex:1;"><div class="builder-section-title">Fees <span id="fees-count-chip" style="font-size:10px; font-weight:600; background:#ffe4e6; color:#9f1239; padding:2px 8px; border-radius:10px; margin-left:6px;">0</span></div><div class="builder-section-subtitle">Fix · Float · % over interest component · % over funded / unfunded balances</div></div>
+        <button id="btn-add-fee" class="add-btn-pill" onclick="event.stopPropagation()"><span class="material-icons-outlined" style="font-size:14px;">add</span>Add fee</button>
+      </summary>
+      <div class="builder-section-body">
+        <div id="fees-container" style="display:grid; gap:10px;"></div>
+      </div>
+    </details>
+
+    <!-- ─── MARKET DATA — ISIN STATIC + PRICING ─── -->
+    <details class="builder-section">
+      <summary>
+        <div class="builder-section-icon" style="background:linear-gradient(135deg, #ecfeff 0%, #a5f3fc 100%); color:#0e7490;"><span class="material-icons-outlined" style="font-size:20px;">trending_up</span></div>
+        <div style="flex:1;">
+          <div class="builder-section-title">Market Data — ISIN Static &amp; Pricing <span id="md-status-chip" style="font-size:10px; font-weight:600; background:#cffafe; color:#155e75; padding:2px 8px; border-radius:10px; margin-left:6px;">None</span></div>
+          <div class="builder-section-subtitle">Per-tranche ISIN/LXID · Issuer · Rating · Lien · Bid/Offer pricing series for fair-value disclosures</div>
+        </div>
+        <button id="btn-md-sample" class="add-btn-pill" onclick="event.stopPropagation()" style="background:linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);"><span class="material-icons-outlined" style="font-size:14px;">auto_awesome</span>Load Sample</button>
+        <button id="btn-md-paste-static" class="add-btn-pill" onclick="event.stopPropagation()" style="background:linear-gradient(135deg, #475569 0%, #64748b 100%); margin-left:4px;"><span class="material-icons-outlined" style="font-size:14px;">data_object</span>Paste Static</button>
+        <button id="btn-md-paste-pricing" class="add-btn-pill" onclick="event.stopPropagation()" style="background:linear-gradient(135deg, #475569 0%, #64748b 100%); margin-left:4px;"><span class="material-icons-outlined" style="font-size:14px;">price_check</span>Paste Pricing</button>
+      </summary>
+      <div class="builder-section-body">
+        <div style="display:grid; gap:14px;">
+          <div id="md-static-host"></div>
+          <div id="md-pricing-host"></div>
+        </div>
+        <div style="font-size:11px; color:#6b7280; margin-top:10px; padding:8px 12px; background:#f8fafc; border-left:3px solid #0891b2; border-radius:4px;">
+          <b>Why this matters for leveraged loans:</b> ISIN/LXID lets you tie the deal to a security master record. Pricing marks (daily bid/offer from Markit, LSTA, IHS) drive fair-value disclosures under IFRS 13, ECL collateral adjustments, and the FVOCI/FVTPL classification math. Paste your data as JSON, or click <b>Load Sample</b> for mock leveraged-loan static + a 12-week pricing series.
+        </div>
+      </div>
+    </details>
+
+    <!-- ─── CASHFLOW EVENTS ─── -->
+    <details class="builder-section">
+      <summary>
+        <div class="builder-section-icon icon-slate"><span class="material-icons-outlined" style="font-size:20px;">payments</span></div>
+        <div><div class="builder-section-title">Cashflow Events</div><div class="builder-section-subtitle">Drawdowns, repayments, prepayments — declared per tranche</div></div>
+      </summary>
+      <div class="builder-section-body">
+        <div style="font-size:12px; color:#6b7280; padding:8px 0;">Events are configured per tranche (see "Drawdowns / Paydowns" inside each tranche card).</div>
+      </div>
+    </details>
+
+    <!-- Hidden cashflow viewer — kept for backward compat with the engine that reads these IDs -->
+    <div style="display:none;">
+      <span id="cf-period-chip"></span>
+      <div id="cf-summary-kpis"></div>
+      <div id="cf-table-host"></div>
     </div>
 
   </div>
@@ -648,8 +741,77 @@
         <option value="IFRS">IFRS — International Financial Reporting Standards</option>
         <option value="USGAAP">US GAAP — FASB ASC (CECL impairment)</option>
         <option value="ASPE">Canadian ASPE — Private Enterprises (incurred-loss)</option>
+        <option value="AASB">AASB — Australian Accounting Standards Board (IFRS-aligned)</option>
       </select>
       <span class="text-[11px] text-gray-500" id="framework-source-note">Set in the Loan Builder at deal origination · override here for what-if testing</span>
+    </div>
+
+    <!-- ─── AASB EXTRAS — Australian-specific fields (only when AASB framework selected) ─── -->
+    <div id="aasb-extras-panel" class="bg-amber-50 border border-amber-200 rounded p-3 mb-3" style="display:none;">
+      <div class="flex items-center gap-2 mb-2 flex-wrap">
+        <span class="material-icons-outlined text-[16px]" style="color:#b45309;">flag</span>
+        <h4 class="text-[12px] font-bold text-amber-900">Australian (AASB) Treatment</h4>
+        <span class="chip amber text-[10px]">AASB 9 / 13 / 15 / 124</span>
+        <span class="text-[10px] text-amber-700 ml-2">AASB-specific fields visible only when AASB framework is selected</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="text-[10px] uppercase text-gray-600 mb-1 block">Reporting Tier (AASB 1053)</label>
+          <select id="opt-aasb-tier" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+            <option value="tier1">Tier 1 — Full AASB compliance (ASIC reporting)</option>
+            <option value="tier1RDR">Tier 1 — RDR (Reduced Disclosure Requirements)</option>
+            <option value="tier2">Tier 2 — Simplified Disclosures (private entities)</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[10px] uppercase text-gray-600 mb-1 block">ASIC-Reportable Entity</label>
+          <select id="opt-aasb-asic" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+            <option value="true">Yes — Form 388 / 5031 lodgement required</option>
+            <option value="false">No — Exempt or unregistered</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[10px] uppercase text-gray-600 mb-1 block">Franking Credit Treatment (Equity-Linked)</label>
+          <select id="opt-aasb-franking" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+            <option value="none">Not applicable (debt only)</option>
+            <option value="fullyFranked">Fully franked dividend income</option>
+            <option value="partiallyFranked">Partially franked dividend income</option>
+            <option value="unfranked">Unfranked dividend income</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[10px] uppercase text-gray-600 mb-1 block">Related-Party Disclosure (AASB 124)</label>
+          <select id="opt-aasb-relatedparty" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+            <option value="none">No related-party exposure</option>
+            <option value="kmp">Key Management Personnel (KMP) loan</option>
+            <option value="associate">Associate / joint venture</option>
+            <option value="subsidiary">Wholly-owned subsidiary</option>
+            <option value="parent">Parent entity</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[10px] uppercase text-gray-600 mb-1 block">GST Treatment (AASB 1031 / GST Act)</label>
+          <select id="opt-aasb-gst" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+            <option value="financialSupply">Financial supply — input-taxed (no GST recovery)</option>
+            <option value="taxable">Taxable supply (GST recoverable)</option>
+            <option value="GSTfree">GST-free supply</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[10px] uppercase text-gray-600 mb-1 block">APRA Reporting (if ADI)</label>
+          <select id="opt-aasb-apra" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+            <option value="notApplicable">Not applicable (non-ADI)</option>
+            <option value="aps220">APS 220 — Credit Risk Management</option>
+            <option value="aps221">APS 221 — Large Exposures</option>
+            <option value="aps330">APS 330 — Public Disclosure (Pillar 3)</option>
+          </select>
+        </div>
+      </div>
+      <div class="text-[11px] text-amber-900 mt-3 pt-2 border-t border-amber-200">
+        <b>Key AASB differences from IFRS:</b> AASB is largely converged with IFRS but adds tier-based disclosure (AASB 1053), ASIC lodgement obligations,
+        franking credit tracking on equity income, AASB 124 related-party rules, and APRA prudential reporting for ADIs (Authorised Deposit-Taking Institutions).
+        For non-ADIs and corporate borrowers, treatment is substantively identical to IFRS 9 / 13 / 15.
+      </div>
     </div>
     <!-- Section 0-bis — EIR Calculation Method (Interest AT / Investran spec) ──
          Only visible when framework = USGAAP. The 4-method dropdown drives
@@ -1475,7 +1637,7 @@
     <div class="flex items-center gap-2 mb-2">
       <span class="material-icons-outlined text-[18px]" style="color:var(--brand-600)">verified</span>
       <h3 class="text-[13px] font-bold">Accounting Evidence Pack</h3>
-      <span class="text-[11px] text-gray-500">All evidence the NWF agenda asks for — drill into each panel</span>
+      <span class="text-[11px] text-gray-500">All evidence the accounting agenda asks for — drill into each panel</span>
     </div>
 
     <!-- A) Month-End Close Workflow + Run Metadata -->
@@ -1493,7 +1655,7 @@
       <summary class="font-semibold text-[12.5px] cursor-pointer flex items-center gap-2">
         <span class="material-icons-outlined text-[16px]" style="color:var(--brand-600)">timeline</span>
         Subsequent Measurement — Carrying Value Waterfall
-        <span class="text-[11px] text-gray-500 font-normal ml-auto">Opening → Drawdowns → Repayments → EIR Accretion → PIK Cap → FX → Closing</span>
+        <span class="text-[11px] text-gray-500 font-normal ml-auto">Opening → Drawdowns → Paydowns → EIR Accretion → PIK Cap → FX → Closing</span>
       </summary>
       <div id="carrying-waterfall" class="mt-3"></div>
     </details>
@@ -1644,7 +1806,7 @@
     <div class="step-num-big">4</div>
     <div class="step-text">
       <div class="step-of">Step 4 of 5 · You are here</div>
-      <div class="step-name">Cash Movements — Actuals (Inbound)</div>
+      <div class="step-name">Cash Movement Actuals</div>
       <div class="step-hint">Pull or synthesise actual cash settlements from the Cash Movements GL for the posted batch</div>
     </div>
     <span class="step-state-chip" id="step-state-4">Awaiting actuals</span>
@@ -1652,7 +1814,7 @@
   <div class="flex items-start gap-3 mb-3 flex-wrap">
     <span class="stage-num">4</span>
     <div class="flex-1">
-      <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">account_balance_wallet</span>Cash Movements — Actuals (Inbound)</h2>
+      <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">account_balance_wallet</span>Cash Movement Actuals</h2>
       <p class="text-[12px] text-gray-600 mt-1">The Cash Movements system returns the actual cash receipts / disbursements after settlement (drawdowns funded, interest paid, fees received). The integration layer ingests this for reconciliation against PCS expected amounts.</p>
     </div>
     <div class="flex flex-wrap gap-2">
@@ -2086,6 +2248,38 @@ const FRAMEWORKS = {
     hedge:        { citation: 'ASPE 3856.A53', name: 'Hedge accounting (simplified)' },
     fx:           { citation: 'ASPE 1651',     name: 'Foreign currency translation' },
     waterfall:    { citation: 'ASPE 1521',     name: 'Balance sheet presentation' }
+  },
+  AASB: {
+    code: 'AASB', label: 'AASB (Australian)', long: 'AASB (Australian Accounting Standards Board)',
+    chipClass: 'amber',
+    eir:  { citation: 'AASB 9 §B5.4',     name: 'Effective Interest Rate (IFRS-aligned)' },
+    ecl:  { citation: 'AASB 9 §5.5',      name: 'Expected Credit Loss (3-stage model)',
+            model: 'staged',
+            formula: 'PD × LGD × EAD × stage_curve × macro_overlay (FLI per AASB 9 §5.5.17)',
+            traceTitle: 'AASB 9 §5.5.17 — Expected Credit Loss (forward-looking information)',
+            inputLabels: { stage: 'ECL Stage', overlay: 'FLI / macro overlay', dpdSt2: 'DPD → Stage 2', dpdSt3: 'DPD → Stage 3' } },
+    fees: {
+      eir:        { value: 'AASB9-EIR',          label: 'AASB 9 — capitalised into EIR' },
+      overTime:   { value: 'AASB15-overTime',    label: 'AASB 15 — recognised over time' },
+      pointInTime:{ value: 'AASB15-pointInTime', label: 'AASB 15 — recognised point-in-time' }
+    },
+    fv:           { citation: 'AASB 13 §93',   name: 'Fair Value (3 levels)' },
+    mod:          { citation: 'AASB 9 §5.4.3', name: 'Modification accounting',
+                    thresholdLabel: '10% PV test (substantial)' },
+    hedge:        { citation: 'AASB 9 §6',     name: 'Hedge accounting (CFH/FVH)' },
+    fx:           { citation: 'AASB 121',      name: 'Foreign-currency translation' },
+    waterfall:    { citation: 'AASB 101 §54',  name: 'Carrying value waterfall' },
+    // AASB-specific extension: Tier 1 vs Tier 2 + Australian disclosure rules
+    aasbExtras: {
+      tierOptions: [
+        { value:'tier1',     label:'Tier 1 — Full AASB compliance (ASIC reporting)' },
+        { value:'tier1RDR',  label:'Tier 1 — RDR (Reduced Disclosure Requirements)' },
+        { value:'tier2',     label:'Tier 2 — Simplified Disclosures (private entities)' }
+      ],
+      asicReportableLabel: 'ASIC-reportable entity (Form 388 / 5031)',
+      frankingCreditsLabel: 'Track franking credits on dividend-linked income',
+      capitalRaisingRulesLabel: 'AASB 124 — related-party disclosure tier'
+    }
   }
 };
 
@@ -2804,7 +2998,7 @@ function renderPortFSetupPanel(payload, inst){
     <thead><tr><th class="left">Field</th><th class="left">Value</th><th>Source</th></tr></thead>
     <tbody>${rows.map(([k,v,b]) => `<tr><td class="left text-[12px] font-semibold">${k}</td><td class="left text-[12px]">${v}</td><td style="text-align:right">${b}</td></tr>`).join('')}</tbody>
   </table>
-  <div class="text-[11px] text-gray-500 mt-1">Source legend — <strong>Excel ✱</strong>: pulled directly from the Excel · <strong>Seed •</strong>: from matched seed instrument record · <strong>Synthetic 🆕</strong>: not in the Excel and no seed match — inferred placeholder. To carry these in the Excel, add rows to the metadata block (e.g. <code>A7=Legal Entity B7=NWF Sustainable Infrastructure</code>, <code>A8=Position B8=NWF Guarantor Position · Volt covered tranche</code>).</div>`;
+  <div class="text-[11px] text-gray-500 mt-1">Source legend — <strong>Excel ✱</strong>: pulled directly from the Excel · <strong>Seed •</strong>: from matched seed instrument record · <strong>Synthetic 🆕</strong>: not in the Excel and no seed match — inferred placeholder. To carry these in the Excel, add rows to the metadata block (e.g. <code>A7=Legal Entity B7=Sustainable Infrastructure</code>, <code>A8=Position B8=Guarantor Position · covered tranche</code>).</div>`;
   $('portf-setup-section').classList.remove('hidden');
 }
 
@@ -3311,7 +3505,7 @@ function downloadDIUTemplate(){
     deal:'<<DEAL>>', position:'<<POSITION>>', incomeSecurity:'<<SECURITY>>',
     batchId:'<<BATCH-ID>>', batchType:'STANDARD',
     batchComments:'<<batch comment>>', transactionComments:'<<line comment>>',
-    jeIndex:1, txIndex:1, leDomain:'NWF'
+    jeIndex:1, txIndex:1, leDomain:'Bank'
   };
   const csv = rowsToCSV([sample]);
   downloadFile('investran-diu-template-blank.csv', csv);
@@ -3344,12 +3538,12 @@ function buildPortfolioPositionRows(inst){
   const rows = [];
   const baseLegalEntity = inst.legalEntity || '';
   const baseLEID        = inst.leid || '';
-  const baseDomain      = 'NWF';
+  const baseDomain      = 'Bank';
   const issuer          = inst.deal || '';
   const dealType        = deriveDealType(inst);
   const ccy             = inst.currency || 'GBP';
   // Security column matches what the GL worksheet's Security column carries
-  // (the deal's `position` field, e.g. "NWF Guarantor Position · Volt covered
+  // (the deal's `position` field, e.g. "Guarantor Position · covered
   // tranche"), so the two tabs are consistent.
   const securities = [];
   if(Array.isArray(inst.tranches) && inst.tranches.length){
@@ -3533,6 +3727,16 @@ function applyTreatmentFromForm(){
   if(!inst) return;
   // Accounting framework override (Section 0)
   if($('opt-framework')) inst.accountingFramework = $('opt-framework').value;
+  // AASB-specific overrides (only meaningful when framework=AASB)
+  if(inst.accountingFramework === 'AASB'){
+    inst.aasbExtras = inst.aasbExtras || {};
+    if($('opt-aasb-tier'))         inst.aasbExtras.tier         = $('opt-aasb-tier').value;
+    if($('opt-aasb-asic'))         inst.aasbExtras.asicReportable = $('opt-aasb-asic').value === 'true';
+    if($('opt-aasb-franking'))     inst.aasbExtras.frankingTreatment = $('opt-aasb-franking').value;
+    if($('opt-aasb-relatedparty')) inst.aasbExtras.relatedParty = $('opt-aasb-relatedparty').value;
+    if($('opt-aasb-gst'))          inst.aasbExtras.gstTreatment = $('opt-aasb-gst').value;
+    if($('opt-aasb-apra'))         inst.aasbExtras.apraStandard = $('opt-aasb-apra').value;
+  }
   // EIR method (US GAAP only · Section 0-bis)
   if($('opt-eir-method')){
     inst.eirMethod = $('opt-eir-method').value;
@@ -3636,9 +3840,16 @@ function applyTreatmentFromForm(){
 // labels, Modification policy citation, Capability panel title, etc.).
 function syncFrameworkChip(inst){
   const fw = frameworkOf(inst);
-  const isIFRS    = fw.ecl.model === 'staged';
-  const isUSGAAP  = fw.ecl.model === 'cecl';
-  const isASPE    = fw.ecl.model === 'incurred';
+  const isIFRS    = fw.code === 'IFRS';
+  const isUSGAAP  = fw.code === 'USGAAP';
+  const isASPE    = fw.code === 'ASPE';
+  const isAASB    = fw.code === 'AASB';
+  // AASB inherits IFRS structure for shared panels — treat as IFRS-style
+  // for SPPI / classification / staged ECL labelling.
+  const usesStagedECL = isIFRS || isAASB;
+  // Show/hide AASB-specific extras panel
+  const aasbPanel = document.getElementById('aasb-extras-panel');
+  if(aasbPanel) aasbPanel.style.display = isAASB ? '' : 'none';
 
   // The active-framework chip itself
   const chip = $('treatment-framework-chip');
@@ -3662,15 +3873,16 @@ function syncFrameworkChip(inst){
   const classLabel = document.querySelector('[data-fw-class-label]');
   if(classLabel) classLabel.textContent =
     isIFRS   ? 'IFRS 9 Classification'
+  : isAASB   ? 'AASB 9 Classification'
   : isUSGAAP ? 'ASC 326-20 Classification (HTM / AFS / FVO)'
   :            'ASPE 3856 Classification';
-  // SPPI test — IFRS-only concept. Hide its row for US GAAP / ASPE.
+  // SPPI test — IFRS-equivalent concept (also in AASB 9). Hide its row for US GAAP / ASPE.
   const sppiLabel = document.querySelector('[data-fw-sppi-label]');
   const sppiRow = sppiLabel ? sppiLabel.closest('div') : null;
   if(sppiRow){
-    if(isIFRS){
+    if(usesStagedECL){
       sppiRow.style.display = '';
-      sppiLabel.textContent = 'SPPI Test (IFRS 9 §4.1.2)';
+      sppiLabel.textContent = isAASB ? 'SPPI Test (AASB 9 §4.1.2)' : 'SPPI Test (IFRS 9 §4.1.2)';
     } else {
       sppiRow.style.display = 'none';
     }
@@ -3773,6 +3985,14 @@ function loadTreatmentForm(){
   if(!inst){ return; }
   // Framework dropdown (Section 0)
   if($('opt-framework')) $('opt-framework').value = inst.accountingFramework || 'IFRS';
+  // AASB extras — populate dropdowns from instrument if present
+  const ax = inst.aasbExtras || {};
+  if($('opt-aasb-tier'))         $('opt-aasb-tier').value         = ax.tier || 'tier1';
+  if($('opt-aasb-asic'))         $('opt-aasb-asic').value         = (ax.asicReportable === false) ? 'false' : 'true';
+  if($('opt-aasb-franking'))     $('opt-aasb-franking').value     = ax.frankingTreatment || 'none';
+  if($('opt-aasb-relatedparty')) $('opt-aasb-relatedparty').value = ax.relatedParty || 'none';
+  if($('opt-aasb-gst'))          $('opt-aasb-gst').value          = ax.gstTreatment || 'financialSupply';
+  if($('opt-aasb-apra'))         $('opt-aasb-apra').value         = ax.apraStandard || 'notApplicable';
   // EIR method dropdown (Section 0-bis · US GAAP only)
   if($('opt-eir-method')) $('opt-eir-method').value = inst.eirMethod || 'method2';
   if($('opt-eir-override')) $('opt-eir-override').value =
@@ -4923,6 +5143,17 @@ function applyEclAutoMigration(inst){
 }
 
 function runAccounting(){
+  try { return runAccountingImpl(); }
+  catch(err){
+    console.error('Run Accounting failed:', err);
+    if(typeof toast === 'function') toast('Run Accounting failed: ' + err.message);
+    // Try to surface the error somewhere visible
+    const acctStatus = document.getElementById('acct-status');
+    if(acctStatus){ acctStatus.className = 'chip red self-center'; acctStatus.textContent = 'Error — see console'; }
+    alert('Run Accounting threw: ' + err.message + '\n\n' + (err.stack || '').slice(0, 400));
+  }
+}
+function runAccountingImpl(){
   // v2 — accept either PortF data OR a builder-generated instrument. If neither
   // is loaded, fall back to the active instrument from the dropdown so the
   // user can still run accounting on any seed deal without ingestion.
@@ -4934,7 +5165,8 @@ function runAccounting(){
     M.portfData = {
       source: 'Loan Builder (v2)',
       instrument: { id: activeInst.id, deal: activeInst.deal },
-      loadedAt: new Date().toISOString()
+      loadedAt: new Date().toISOString(),
+      accrualSchedule: []
     };
   }
   // Use the deal that PortF data was loaded for — NOT the dropdown selection.
@@ -5065,9 +5297,9 @@ function runAccounting(){
   $('acct-schedule-section').classList.remove('hidden');
   // Fee Specifications panel — per-fee detail with engine-computed accrued totals.
   renderFeeSpecsPanel(inst);
-  // Stamp the run with audit metadata + log to history (NWF month-end close).
+  // Stamp the run with audit metadata + log to history (month-end close).
   stampAcctRun(inst, /*status=*/'Draft');
-  // Render the 6-panel Accounting Evidence Pack (NWF agenda).
+  // Render the 6-panel Accounting Evidence Pack.
   renderEvidencePack(inst, M.summary);
   $('evidence-pack').classList.remove('hidden');
   setStage('stage-2', 'done');
@@ -5083,9 +5315,9 @@ function runAccounting(){
 }
 
 // ============================================================
-// STAGE 2 — Accounting Evidence Pack (NWF agenda)
+// STAGE 2 — Accounting Evidence Pack
 // ============================================================
-// Six collapsible panels that surface every piece of evidence the NWF
+// Six collapsible panels that surface every piece of evidence the accounting
 // "ITT Round 2 — Accounting" agenda asks for. Each renderer is pure: it reads
 // only `inst`, `M.summary`, `M.schedule`, `M.acctJournals`, `M.acctRunMeta`,
 // `M.acctRunHistory` and writes its formatted HTML into the matching div.
@@ -5561,7 +5793,7 @@ function renderCarryingWaterfall(inst, summary){
     { lbl: '− Deferred fees at recognition (IFRS 9 EIR)', val: deferredT0, kind: 'sub'  },
     { lbl: '= Opening carrying value (gross)',            val: openCarry,  kind: 'sub-total' },
     { lbl: '+ Drawdowns',                                 val:  draws,     kind: 'add'   },
-    { lbl: '− Repayments',                                val: -reps,      kind: 'sub'   },
+    { lbl: '− Paydowns',                                val: -reps,      kind: 'sub'   },
     { lbl: '+ EIR Accretion (IFRS 9 §B5.4)',              val:  eir,       kind: 'add'   },
     { lbl: '+ Discount / OID amortisation',               val:  amort,     kind: 'add'   },
     { lbl: '+ PIK Capitalised',                           val:  cap,       kind: 'add'   },
@@ -5979,8 +6211,20 @@ function djb2(s){
   return h.toString(16).padStart(8, '0');
 }
 function pushToWorkday(){
-  if(!M.acctJournals.length){ toast('Run accounting first'); return; }
+  try { return pushToWorkdayImpl(); }
+  catch(err){
+    console.error('Push DIU to Cash Movements failed:', err);
+    if(typeof toast === 'function') toast('Push DIU failed: ' + err.message);
+    const status = document.getElementById('workday-out-status');
+    if(status){ status.className = 'chip red self-center'; status.textContent = 'Error — see console'; }
+    alert('Push DIU threw: ' + err.message + '\n\n' + (err.stack || '').slice(0, 400));
+  }
+}
+function pushToWorkdayImpl(){
+  console.log('Push DIU clicked — journals:', M.acctJournals?.length, '· instrument:', M.instrumentId);
+  if(!M.acctJournals || !M.acctJournals.length){ toast('Run accounting first — no journals to push'); return; }
   const inst = currentInstrument();
+  if(!inst){ toast('No active instrument'); return; }
   // Build the DIU batch envelope (matches Investran DIU /api/DataImport/v1/batches)
   const period = `${inst.settlementDate}-to-${inst.maturityDate}`;
   const rowsHash = djb2(JSON.stringify(M.acctJournals.map(j => `${j.effectiveDate}|${j.transactionType}|${j.amountLE}|${j.account}`)));
@@ -6199,6 +6443,17 @@ function synthesiseWorkdayActuals(){
 // STAGE 5 — Reconciliation + PortF Feedback
 // ============================================================
 function runReconciliation(){
+  try { return runReconciliationImpl(); }
+  catch(err){
+    console.error('Run Reconciliation failed:', err);
+    if(typeof toast === 'function') toast('Reconciliation failed: ' + err.message);
+    const status = document.getElementById('recon-status');
+    if(status){ status.className = 'chip red self-center'; status.textContent = 'Error — see console'; }
+    alert('Reconciliation threw: ' + err.message + '\n\n' + (err.stack || '').slice(0, 400));
+  }
+}
+function runReconciliationImpl(){
+  console.log('Run Reconciliation clicked — actuals:', !!M.workdayActuals, '· journals:', M.acctJournals?.length);
   if(!M.workdayActuals){ toast('Load Cash Movements actuals first'); return; }
   if(!M.acctJournals || !M.acctJournals.length){ toast('No PCS journals to reconcile — run accounting in Stage 2'); return; }
   const ccy = currentInstrument().currency || 'GBP';
@@ -7058,7 +7313,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // Tax & Other
     'opt-wht-rate','opt-wht-recoverable','opt-deferred-tax','opt-fx-cadence',
     // PIK contractual override
-    'opt-pik-enabled','opt-pik-rate','opt-pik-freq'
+    'opt-pik-enabled','opt-pik-rate','opt-pik-freq',
+    // AASB (Australian) extras — Tier, ASIC, franking, related-party, GST, APRA
+    'opt-aasb-tier','opt-aasb-asic','opt-aasb-franking','opt-aasb-relatedparty','opt-aasb-gst','opt-aasb-apra'
   ];
   TREATMENT_IDS.forEach(id => $(id)?.addEventListener('change', onTreatmentChange));
   ['opt-pd','opt-lgd','opt-ccf','opt-dpd-stage2','opt-dpd-stage3','opt-dpd-current','opt-macro-weight','opt-mod-threshold','opt-wht-rate','opt-pik-rate']
@@ -7448,7 +7705,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       { id: 'stage-1', title: '1 · Cashflow Generation',  chip: 'portf-status' },
       { id: 'stage-2', title: '2 · Accounting Engine',    chip: 'acct-status' },
       { id: 'stage-3', title: '3 · Cash Movements Out',     chip: 'workday-out-status' },
-      { id: 'stage-4', title: '4 · Cash Movements In', chip: 'workday-in-status' },
+      { id: 'stage-4', title: '4 · Cash Movement Actuals', chip: 'workday-in-status' },
       { id: 'stage-5', title: '5 · Reconciliation',       chip: 'recon-status' }
     ];
     for(const s of stages){
@@ -8424,16 +8681,31 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
                    class="w-full border border-gray-300 rounded px-2 py-1 bg-white text-[11px]"/></div>
           <div><label class="text-[10px] uppercase text-gray-600 block">Drawdowns</label>
             <span class="text-[11px] py-1 text-gray-600">${t.drawdowns.length} scheduled · <button data-t-action="addDraw" data-tidx="${idx}" class="text-indigo-700 underline">+ add</button></span></div>
+          <div><label class="text-[10px] uppercase text-gray-600 block">Paydowns</label>
+            <span class="text-[11px] py-1 text-gray-600">${(t.repayments || []).length} scheduled · <button data-t-action="addPaydown" data-tidx="${idx}" class="text-emerald-700 underline">+ add</button></span></div>
         </div>
 
-        <!-- Drawdown / repayment schedules -->
-        ${(t.drawdowns.length || t.repayments.length) ? `
+        <!-- Drawdown / paydown schedules -->
+        ${(t.drawdowns.length || (t.repayments || []).length) ? `
           <div class="bg-white border border-indigo-100 rounded p-2 mb-2 text-[11px]">
-            ${t.drawdowns.length ? `<div class="font-semibold text-gray-700 mb-1">Drawdowns</div>` + t.drawdowns.map((d,di) => `
+            ${t.drawdowns.length ? `<div class="font-semibold text-rose-700 mb-1 flex items-center gap-1"><span class="material-icons-outlined text-[12px]">south_west</span>Drawdowns <span class="text-[9px] text-gray-500 font-normal">cash out from lender</span></div>` + t.drawdowns.map((d,di) => `
               <div class="flex gap-2 items-center mb-1">
                 <input data-t-draw-date="${di}" data-tidx="${idx}" type="date" value="${d.date || ''}" class="border rounded px-1 py-0.5 text-[11px]"/>
                 <input data-t-draw-amount="${di}" data-tidx="${idx}" type="number" min="0" step="100000" value="${d.amount || ''}" placeholder="amount" class="border rounded px-1 py-0.5 text-[11px] w-36"/>
                 <button data-t-action="rmDraw" data-tidx="${idx}" data-didx="${di}" class="text-red-600 underline text-[11px]">remove</button>
+              </div>`).join('') : ''}
+            ${(t.repayments || []).length ? `<div class="font-semibold text-emerald-700 mb-1 mt-2 flex items-center gap-1"><span class="material-icons-outlined text-[12px]">north_east</span>Paydowns <span class="text-[9px] text-gray-500 font-normal">cash in to lender</span></div>` + t.repayments.map((r,ri) => `
+              <div class="flex gap-2 items-center mb-1">
+                <input data-t-pay-date="${ri}" data-tidx="${idx}" type="date" value="${r.date || ''}" class="border rounded px-1 py-0.5 text-[11px]"/>
+                <input data-t-pay-amount="${ri}" data-tidx="${idx}" type="number" min="0" step="100000" value="${r.amount || ''}" placeholder="amount" class="border rounded px-1 py-0.5 text-[11px] w-36"/>
+                <select data-t-pay-kind="${ri}" data-tidx="${idx}" class="border rounded px-1 py-0.5 text-[11px] bg-white" title="Paydown type">
+                  <option value="scheduled" ${(r.kind||'scheduled')==='scheduled'?'selected':''}>Scheduled</option>
+                  <option value="voluntary" ${r.kind==='voluntary'?'selected':''}>Voluntary prepayment</option>
+                  <option value="mandatory" ${r.kind==='mandatory'?'selected':''}>Mandatory (ECF sweep)</option>
+                  <option value="changeOfControl" ${r.kind==='changeOfControl'?'selected':''}>Change-of-control</option>
+                  <option value="assetSale" ${r.kind==='assetSale'?'selected':''}>Asset sale proceeds</option>
+                </select>
+                <button data-t-action="rmPaydown" data-tidx="${idx}" data-payidx="${ri}" class="text-red-600 underline text-[11px]">remove</button>
               </div>`).join('') : ''}
           </div>` : ''}
 
@@ -8579,12 +8851,41 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
         recompute();
       };
     });
+    // Paydown date / amount / kind fields
+    document.querySelectorAll(`[data-tidx="${idx}"][data-t-pay-date]`).forEach(el => {
+      el.oninput = el.onchange = () => {
+        t.repayments = t.repayments || [];
+        const i = +el.dataset.tPayDate;
+        if(!t.repayments[i]) t.repayments[i] = {};
+        t.repayments[i].date = el.value;
+        recompute();
+      };
+    });
+    document.querySelectorAll(`[data-tidx="${idx}"][data-t-pay-amount]`).forEach(el => {
+      el.oninput = el.onchange = () => {
+        t.repayments = t.repayments || [];
+        const i = +el.dataset.tPayAmount;
+        if(!t.repayments[i]) t.repayments[i] = {};
+        t.repayments[i].amount = parseFloat(el.value) || 0;
+        recompute();
+      };
+    });
+    document.querySelectorAll(`[data-tidx="${idx}"][data-t-pay-kind]`).forEach(el => {
+      el.oninput = el.onchange = () => {
+        t.repayments = t.repayments || [];
+        const i = +el.dataset.tPayKind;
+        if(!t.repayments[i]) t.repayments[i] = {};
+        t.repayments[i].kind = el.value;
+        recompute();
+      };
+    });
     // Action buttons
     document.querySelectorAll(`[data-tidx="${idx}"][data-t-action]`).forEach(el => {
       el.onclick = () => {
         const a = el.dataset.tAction;
         const tidx = +el.dataset.tidx, icidx = +el.dataset.icidx, tidx2 = +el.dataset.tidx2,
-              spidx = +el.dataset.spidx, ridx = +el.dataset.ridx, didx = +el.dataset.didx;
+              spidx = +el.dataset.spidx, ridx = +el.dataset.ridx, didx = +el.dataset.didx,
+              payidx = +el.dataset.payidx;
         if(a === 'remove'){ B.tranches.splice(tidx,1); }
         else if(a === 'addIC'){ t.interestComponents.push(newInterestComponent()); }
         else if(a === 'rmIC'){ t.interestComponents.splice(icidx,1); }
@@ -8599,6 +8900,18 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
         else if(a === 'rmTier'){ t.interestComponents[icidx].ratchet.tiers.splice(ridx,1); }
         else if(a === 'addDraw'){ t.drawdowns.push({date: B.deal.settle || '', amount: 0}); }
         else if(a === 'rmDraw'){ t.drawdowns.splice(didx,1); }
+        else if(a === 'addPaydown'){
+          t.repayments = t.repayments || [];
+          // Default to a sensible date (mid-life) and zero amount
+          const settle = B.deal.settle ? new Date(B.deal.settle) : new Date();
+          const mat = B.deal.maturity ? new Date(B.deal.maturity) : new Date();
+          const mid = new Date((settle.getTime() + mat.getTime()) / 2);
+          t.repayments.push({ date: mid.toISOString().slice(0,10), amount: 0, kind:'scheduled' });
+        }
+        else if(a === 'rmPaydown'){
+          t.repayments = t.repayments || [];
+          t.repayments.splice(payidx, 1);
+        }
         renderTranches();
         recompute();
       };
@@ -8727,15 +9040,69 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
     let totalInterest = 0;
     let totalFees = 0;
     let totalBalance = 0;
+    let totalDrawdowns = 0;
+    let totalRepayments = 0;
     const interestBreakdown = [];   // per-component contributions
     const feeBreakdown = [];
+    const drawdownsBreakdown = [];  // per-tranche drawdowns in this period
+    const repaymentsBreakdown = []; // per-tranche repayments in this period
+    // Treat the deal settlement date as the start of the first period for
+    // detecting "initial draws". Anything dated EXACTLY at settle counts as
+    // an initial draw in period 0 only.
+    const isFirstPeriod = periodIdx === 0;
 
     B.tranches.forEach((t, ti) => {
+      // Period-specific drawdowns: include initial draw on first period,
+      // plus any scheduled drawdowns dated within [p.start, p.end).
+      const inPeriodDrawdowns = t.drawdowns.filter(d =>
+        d.date && d.date >= p.start && d.date < p.end);
+      const periodDrawdownAmt = (isFirstPeriod ? (t.drawnInitially || 0) : 0)
+                              + inPeriodDrawdowns.reduce((s, d) => s + (d.amount || 0), 0);
+      if(periodDrawdownAmt > 0.005){
+        totalDrawdowns += periodDrawdownAmt;
+        if(isFirstPeriod && (t.drawnInitially || 0) > 0){
+          drawdownsBreakdown.push({ trancheName: t.name, date: B.deal.settle, amount: t.drawnInitially, label:'Initial draw' });
+        }
+        inPeriodDrawdowns.forEach(d => drawdownsBreakdown.push({
+          trancheName: t.name, date: d.date, amount: d.amount || 0, label:'Scheduled draw'
+        }));
+      }
+      // Period-specific repayments
+      const inPeriodRepayments = (t.repayments || []).filter(r =>
+        r.date && r.date >= p.start && r.date < p.end);
+      const periodRepaymentAmt = inPeriodRepayments.reduce((s, r) => s + (r.amount || 0), 0);
+      if(periodRepaymentAmt > 0.005){
+        totalRepayments += periodRepaymentAmt;
+        inPeriodRepayments.forEach(r => repaymentsBreakdown.push({
+          trancheName: t.name, date: r.date, amount: r.amount || 0, label:'Scheduled'
+        }));
+      }
+
       // Determine drawn balance for this period (initial + all drawdowns up to start)
       const drawnBalance = (t.drawnInitially || 0) + t.drawdowns
         .filter(d => d.date && d.date <= p.start)
-        .reduce((s, d) => s + (d.amount || 0), 0);
+        .reduce((s, d) => s + (d.amount || 0), 0)
+        - (t.repayments || [])
+          .filter(r => r.date && r.date <= p.start)
+          .reduce((s, r) => s + (r.amount || 0), 0);
       totalBalance += drawnBalance;
+
+      // ─── MATURITY PAYOFF ───
+      // If the loan's maturity date falls in this period, auto-emit a repayment
+      // for the outstanding balance at maturity (i.e. opening balance MINUS any
+      // scheduled repayments in this period). This makes bullet loans show their
+      // final paydown row instead of vanishing silently at the right edge.
+      const matDate = B.deal.maturity;
+      if(matDate && matDate >= p.start && matDate <= p.end){
+        const outstandingAtMaturity = drawnBalance - periodRepaymentAmt;
+        if(outstandingAtMaturity > 0.005){
+          totalRepayments += outstandingAtMaturity;
+          repaymentsBreakdown.push({
+            trancheName: t.name, date: matDate, amount: outstandingAtMaturity,
+            label: 'Maturity Payoff'
+          });
+        }
+      }
       // For each interest component, compute rate and accrual
       t.interestComponents.forEach((ic, ici) => {
         const rate = computeAllInRate(ic, p.start);
@@ -8757,11 +9124,21 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
       }
     });
 
+    // Net cashflow from the lender's perspective:
+    //   + interest received, + fees received, + principal repayments
+    //   – drawdowns disbursed
+    const netCash = totalInterest + totalFees + totalRepayments - totalDrawdowns;
+
     return {
       idx: periodIdx, start: p.start, end: p.end,
-      balance: totalBalance, interest: totalInterest, fees: totalFees,
-      total: totalInterest + totalFees,
-      interestBreakdown, feeBreakdown
+      balance: totalBalance,
+      drawdowns: totalDrawdowns,
+      repayments: totalRepayments,
+      interest: totalInterest, fees: totalFees,
+      netCash,                              // signed net cashflow
+      total: totalInterest + totalFees,     // legacy alias used by render
+      interestBreakdown, feeBreakdown,
+      drawdownsBreakdown, repaymentsBreakdown
     };
   }
 
@@ -8863,13 +9240,25 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
     const valid = B.deal.name && B.deal.settle && B.deal.maturity && B.tranches.length && B.tranches.some(t => t.face > 0);
     const status = $b('builder-status');
     if(status){
-      if(valid){ status.className = 'chip green self-center'; status.textContent = 'Ready · ' + B.tranches.length + ' tranche(s)'; }
-      else { status.className = 'chip gray self-center'; status.textContent = 'Incomplete'; }
+      status.textContent = valid ? ('Ready · ' + B.tranches.length + ' tranche' + (B.tranches.length===1?'':'s')) : 'Incomplete';
+      status.style.background = valid ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.12)';
     }
     const sub = $b('tabsub-builder');
     if(sub) sub.textContent = valid ? B.deal.name : 'No deal built';
     const stepState = $b('step-state-builder');
-    if(stepState) stepState.textContent = valid ? 'Ready' : 'Empty';
+    if(stepState){
+      stepState.textContent = valid ? 'Ready' : 'Empty';
+      stepState.style.background = valid ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.18)';
+    }
+    // Update hero strip live stats
+    if($b('hero-deal-name')) $b('hero-deal-name').textContent = B.deal.name || 'Loan Builder';
+    if($b('hero-commitment')) $b('hero-commitment').textContent = B.facility.commitment ? fmtCcy(B.facility.commitment) : '—';
+    if($b('hero-tranches')) $b('hero-tranches').textContent = B.tranches.length;
+    if($b('hero-components')) $b('hero-components').textContent = B.tranches.reduce((s,t) => s + (t.interestComponents?.length || 0), 0);
+    if($b('hero-fees-count')) $b('hero-fees-count').textContent = B.fees.length;
+    if($b('hero-framework')) $b('hero-framework').textContent = B.deal.framework || 'IFRS';
+    if($b('tranches-count-chip')) $b('tranches-count-chip').textContent = B.tranches.length;
+    if($b('fees-count-chip')) $b('fees-count-chip').textContent = B.fees.length;
   }
 
   function renderCashflowTable(rows){
@@ -8943,22 +9332,59 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
         <td class="px-2 py-1 text-[9px] text-gray-600 font-mono">${escapeHtml(f.formula)}</td>
         <td class="px-2 py-1 text-right font-semibold text-amber-700">${fmtCcy(f.amount)}</td>
       </tr>`).join('');
+    const drawRows = (r.drawdownsBreakdown || []).map(d => `
+      <tr class="border-t border-gray-200">
+        <td class="px-2 py-1">${escapeHtml(d.trancheName)}</td>
+        <td class="px-2 py-1 text-[10px] text-gray-600">${d.date}</td>
+        <td class="px-2 py-1 text-[10px] text-gray-600">${escapeHtml(d.label || 'Draw')}</td>
+        <td class="px-2 py-1 text-right font-semibold text-rose-700">−${fmtCcy(d.amount)}</td>
+      </tr>`).join('');
+    const repRows = (r.repaymentsBreakdown || []).map(p => {
+      const isMaturity = p.label === 'Maturity Payoff';
+      const badge = isMaturity
+        ? '<span style="background:#dcfce7; color:#15803d; padding:1px 7px; border-radius:8px; font-size:9px; font-weight:700; margin-left:4px;">MATURITY</span>'
+        : '<span style="background:#e0f2fe; color:#075985; padding:1px 7px; border-radius:8px; font-size:9px; font-weight:700; margin-left:4px;">SCHEDULED</span>';
+      return `
+      <tr class="border-t border-gray-200">
+        <td class="px-2 py-1">${escapeHtml(p.trancheName)}${badge}</td>
+        <td class="px-2 py-1 text-[10px] text-gray-600">${p.date}</td>
+        <td class="px-2 py-1 text-right font-semibold text-emerald-700">${fmtCcy(p.amount)}</td>
+      </tr>`;
+    }).join('');
     return `
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div style="display:grid; grid-template-columns: 1fr; gap:12px;">
+        ${(r.drawdownsBreakdown && r.drawdownsBreakdown.length) ? `
         <div>
-          <div class="font-bold text-[11px] mb-1 text-indigo-900">Interest breakdown · ${r.start} → ${r.end}</div>
+          <div class="font-bold text-[11px] mb-1 text-rose-900">Drawdowns (cash out — disbursed to borrower) · ${r.start} → ${r.end}</div>
           <table class="w-full text-[10px]">
-            <thead><tr class="bg-indigo-100"><th class="text-left px-2 py-1">Tranche · Component</th><th class="text-right px-2 py-1">Balance</th><th class="text-right px-2 py-1">Rate</th><th class="text-right px-2 py-1">DCF</th><th class="text-right px-2 py-1">Accrual</th></tr></thead>
-            <tbody>${intRows || '<tr><td colspan="5" class="text-gray-500 px-2 py-2 italic">No interest accrual</td></tr>'}</tbody>
+            <thead><tr class="bg-rose-100"><th class="text-left px-2 py-1">Tranche</th><th class="text-left px-2 py-1">Date</th><th class="text-left px-2 py-1">Type</th><th class="text-right px-2 py-1">Amount</th></tr></thead>
+            <tbody>${drawRows}</tbody>
           </table>
-          <div class="text-[9px] text-gray-500 mt-1">Click any rate to see how it was calculated (base + spread + ESG + ratchet).</div>
-        </div>
+        </div>` : ''}
+        ${(r.repaymentsBreakdown && r.repaymentsBreakdown.length) ? `
         <div>
-          <div class="font-bold text-[11px] mb-1 text-amber-900">Fees breakdown · ${r.start} → ${r.end}</div>
+          <div class="font-bold text-[11px] mb-1 text-emerald-900">Paydowns (cash in — principal returned) · ${r.start} → ${r.end}</div>
           <table class="w-full text-[10px]">
-            <thead><tr class="bg-amber-100"><th class="text-left px-2 py-1">Fee</th><th class="text-left px-2 py-1">Mode</th><th class="text-left px-2 py-1">Formula</th><th class="text-right px-2 py-1">Amount</th></tr></thead>
-            <tbody>${feeRows || '<tr><td colspan="4" class="text-gray-500 px-2 py-2 italic">No fees in this period</td></tr>'}</tbody>
+            <thead><tr class="bg-emerald-100"><th class="text-left px-2 py-1">Tranche</th><th class="text-left px-2 py-1">Date</th><th class="text-right px-2 py-1">Amount</th></tr></thead>
+            <tbody>${repRows}</tbody>
           </table>
+        </div>` : ''}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <div class="font-bold text-[11px] mb-1 text-indigo-900">Interest breakdown · ${r.start} → ${r.end}</div>
+            <table class="w-full text-[10px]">
+              <thead><tr class="bg-indigo-100"><th class="text-left px-2 py-1">Tranche · Component</th><th class="text-right px-2 py-1">Balance</th><th class="text-right px-2 py-1">Rate</th><th class="text-right px-2 py-1">DCF</th><th class="text-right px-2 py-1">Accrual</th></tr></thead>
+              <tbody>${intRows || '<tr><td colspan="5" class="text-gray-500 px-2 py-2 italic">No interest accrual</td></tr>'}</tbody>
+            </table>
+            <div class="text-[9px] text-gray-500 mt-1">Click any rate to see how it was calculated (base + spread + ESG + ratchet).</div>
+          </div>
+          <div>
+            <div class="font-bold text-[11px] mb-1 text-amber-900">Fees breakdown · ${r.start} → ${r.end}</div>
+            <table class="w-full text-[10px]">
+              <thead><tr class="bg-amber-100"><th class="text-left px-2 py-1">Fee</th><th class="text-left px-2 py-1">Mode</th><th class="text-left px-2 py-1">Formula</th><th class="text-right px-2 py-1">Amount</th></tr></thead>
+              <tbody>${feeRows || '<tr><td colspan="4" class="text-gray-500 px-2 py-2 italic">No fees in this period</td></tr>'}</tbody>
+            </table>
+          </div>
         </div>
       </div>`;
   }
@@ -8997,36 +9423,128 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
   function registerBuilderInstrument(){
     const inst = builderToInstrument();
     if(!inst){ alert('Builder incomplete — define deal name, dates, and at least one tranche with a face value.'); return null; }
-    if(typeof INSTRUMENTS !== 'undefined'){
-      const existing = INSTRUMENTS.findIndex(x => x.id === inst.id);
-      if(existing >= 0) INSTRUMENTS[existing] = inst; else INSTRUMENTS.push(inst);
-      if(typeof populateInstrumentPicker === 'function') populateInstrumentPicker();
-      if(typeof M !== 'undefined') M.instrumentId = inst.id;
-      if(document.getElementById('sel-instrument')) document.getElementById('sel-instrument').value = inst.id;
-      // Synthesise the portfData stub the rest of the pipeline expects
-      if(typeof M !== 'undefined'){
-        M.portfData = {
-          source: 'Loan Builder (v2)',
-          instrument: { id: inst.id, deal: inst.deal },
-          loadedAt: new Date().toISOString(),
-          // Synthesise an empty accrualSchedule so any code reading payload.accrualSchedule
-          // doesn't crash. The actual schedule is computed by buildSchedule() in the engine.
-          accrualSchedule: []
-        };
-      }
-      if(typeof snapshotTreatmentDefaults === 'function') snapshotTreatmentDefaults(inst);
-      if(typeof loadTreatmentForm === 'function') loadTreatmentForm();
-      // Enable the Run Accounting button + mark Stage 1 done / Stage 2 active
-      const btn = document.getElementById('btn-acct-run');
-      if(btn) btn.disabled = false;
-      const acctStatus = document.getElementById('acct-status');
-      if(acctStatus){ acctStatus.className = 'chip blue self-center'; acctStatus.textContent = 'Ready to run'; }
-      const portfStatus = document.getElementById('portf-status');
-      if(portfStatus){ portfStatus.className = 'chip green self-center'; portfStatus.textContent = 'Built · ' + inst.deal; }
-      if(typeof setStage === 'function'){ setStage('stage-1', 'done'); setStage('stage-2', 'active'); }
+    if(typeof INSTRUMENTS === 'undefined'){ console.warn('INSTRUMENTS array missing'); return null; }
+    const existing = INSTRUMENTS.findIndex(x => x.id === inst.id);
+    if(existing >= 0) INSTRUMENTS[existing] = inst; else INSTRUMENTS.push(inst);
+    // v2: skip populateInstrumentPicker() — that would rebuild the dropdown
+    // with the v1 INSTRUMENTS list and wipe our 10 v2 presets. Instead, just
+    // restore the v2 preset list and keep whatever was last selected.
+    populateV2Dropdown();
+    // Find which preset key the just-built instrument came from so we can
+    // restore the dropdown's selection. Match by deal id (B.deal.dealId).
+    const sel = document.getElementById('sel-instrument');
+    if(sel){
+      const presetMatch = PRESETS.find(p => {
+        const b = p.build();
+        return b.deal.dealId === B.deal.dealId;
+      });
+      sel.value = presetMatch ? ('v2:' + presetMatch.key) : '';
     }
+    if(typeof M !== 'undefined') M.instrumentId = inst.id;
+    // Synthesise the portfData stub the rest of the pipeline expects so
+    // runAccounting()'s guard passes.
+    if(typeof M !== 'undefined'){
+      M.portfData = {
+        source: 'Loan Builder (v2)',
+        instrument: { id: inst.id, deal: inst.deal },
+        loadedAt: new Date().toISOString(),
+        accrualSchedule: []
+      };
+      // Also clear any stale downstream state so it doesn't show old data
+      M.schedule = []; M.summary = null; M.acctJournals = [];
+      M.workdayBatch = null; M.workdayActuals = null;
+      M.actualsBatches = []; M.reconciliations = []; M.reconciliation = null;
+    }
+    if(typeof snapshotTreatmentDefaults === 'function') snapshotTreatmentDefaults(inst);
+    if(typeof loadTreatmentForm === 'function') loadTreatmentForm();
+    // Enable the Run Accounting button + mark Stage 1 done / Stage 2 active
+    enableRunAccountingButton(inst);
     return inst;
   }
+
+  function enableRunAccountingButton(inst){
+    const btn = document.getElementById('btn-acct-run');
+    if(btn){
+      btn.disabled = false;
+      // Defensively re-bind in case the original wiring captured a stale closure
+      // (e.g. when init() ran before any v2 instrument existed).
+      btn.onclick = function(){
+        console.log('Run Accounting clicked — instrument:', M?.instrumentId, '· portfData:', !!M?.portfData);
+        if(typeof runAccounting === 'function') runAccounting();
+        else alert('runAccounting function not loaded');
+      };
+    }
+    const acctStatus = document.getElementById('acct-status');
+    if(acctStatus){ acctStatus.className = 'chip blue self-center'; acctStatus.textContent = 'Ready to run'; }
+    const portfStatus = document.getElementById('portf-status');
+    if(portfStatus){ portfStatus.className = 'chip green self-center'; portfStatus.textContent = inst ? 'Built · ' + (inst.deal || inst.id) : 'Built'; }
+    if(typeof setStage === 'function'){ setStage('stage-1', 'done'); setStage('stage-2', 'active'); }
+    // Defensively re-bind the Stage 3 / 4 buttons too — they share the same
+    // problem if init()'s closure captured the wrong function references.
+    const pushBtn = document.getElementById('btn-workday-push');
+    if(pushBtn){
+      pushBtn.onclick = function(){
+        console.log('Push DIU clicked — instrument:', M?.instrumentId);
+        if(typeof pushToWorkday === 'function') pushToWorkday();
+        else alert('pushToWorkday function not loaded');
+      };
+    }
+    const csvBtn = document.getElementById('btn-workday-csv');
+    if(csvBtn){
+      csvBtn.onclick = function(){
+        if(typeof downloadWorkdayCSV === 'function') downloadWorkdayCSV();
+      };
+    }
+    const actualsBtn = document.getElementById('btn-workday-actuals');
+    if(actualsBtn){
+      actualsBtn.onclick = function(){
+        if(typeof openJsonModal === 'function' && typeof applyWorkdayActuals === 'function'){
+          openJsonModal({
+            title: 'Load Cash Movements — Actual Cash',
+            subtitle: 'Paste the actuals JSON returned by the Cash Movements GL after posting (status: POSTED / CANCELLED)',
+            onSubmit: payload => { applyWorkdayActuals(payload); closeJsonModal(); }
+          });
+        }
+      };
+    }
+    const actualsSampleBtn = document.getElementById('btn-workday-actuals-sample');
+    if(actualsSampleBtn){
+      actualsSampleBtn.onclick = function(){
+        if(typeof synthesiseWorkdayActuals === 'function') synthesiseWorkdayActuals();
+      };
+    }
+    // Stage 5 — Reconciliation + Feedback
+    const reconBtn = document.getElementById('btn-recon-run');
+    if(reconBtn){
+      reconBtn.onclick = function(){
+        console.log('Run Reconciliation clicked — actuals loaded:', !!M?.workdayActuals);
+        if(typeof runReconciliation === 'function') runReconciliation();
+        else alert('runReconciliation function not loaded');
+      };
+    }
+    const feedbackBtn = document.getElementById('btn-portf-feedback');
+    if(feedbackBtn){
+      feedbackBtn.onclick = function(){
+        console.log('Send Feedback clicked');
+        if(typeof sendPortFFeedback === 'function') sendPortFFeedback();
+      };
+    }
+  }
+
+  // Defensive re-enable: every time the user navigates to Stage 2 by any path
+  // (tab click, programmatic switch, deep link), if M.portfData is set,
+  // make sure the Run Accounting button is enabled. This avoids the case where
+  // some other code path disabled it after registerBuilderInstrument primed it.
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.tab-btn[data-tab="stage-2"]');
+    if(!btn) return;
+    setTimeout(() => {
+      if(typeof M !== 'undefined' && M.portfData){
+        const activeInst = (typeof currentInstrument === 'function') ? currentInstrument() : null;
+        enableRunAccountingButton(activeInst);
+      }
+    }, 20);
+  });
 
   // ─── Send to Stage 1 — Cashflow Generation (default) ───
   function sendToCashflowGen(){
@@ -9041,7 +9559,17 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
     const inst = registerBuilderInstrument();
     if(!inst) return;
     document.querySelector('.tab-btn[data-tab="stage-2"]')?.click();
-    if(typeof toast === 'function') toast('Sent "' + inst.deal + '" to Accounting Engine');
+    if(typeof toast === 'function') toast('Sent "' + inst.deal + '" to Accounting Engine — running…');
+    // v2 — auto-fire Run Accounting so JEs appear immediately. Wrap in setTimeout
+    // so the tab switch's render pass completes first.
+    setTimeout(() => {
+      try {
+        if(typeof runAccounting === 'function') runAccounting();
+      } catch(err){
+        console.error('Auto-run accounting failed:', err);
+        if(typeof toast === 'function') toast('Auto-run failed: ' + err.message);
+      }
+    }, 100);
   }
 
   function builderToInstrument(){
@@ -9055,12 +9583,12 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
       id,
       positionId: 'POS-V2-' + id, securityId: 'SEC-V2-' + id,
       instrumentKind: B.facility.type === 'revolver' ? 'revolver' : 'loan',
-      legalEntity: B.deal.le || 'NWF', leid: 99,
+      legalEntity: B.deal.le || 'Bank', leid: 99,
       deal: B.deal.name,
-      position: 'NWF v2 builder · ' + B.deal.name,
+      position: 'v2 builder · ' + B.deal.name,
       incomeSecurity: B.deal.name,
       counterpartyId: B.deal.counterparty || 'V2', transactionId: id,
-      bilateralFlag: 'Bilateral', agentName: 'NWF',
+      bilateralFlag: 'Bilateral', agentName: 'Bank',
       currency: B.deal.currency,
       accountingFramework: B.deal.framework,
       faceValue: totalFace, purchasePrice: totalFace, commitment: B.facility.commitment || totalFace,
@@ -9096,15 +9624,1355 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
       })),
       ifrs: { ifrs9Classification:'AmortisedCost', sppiPassed: true, businessModel:'HoldToCollect',
               ecLStage: 1, pdAnnual: 0.005, lgd: 0.30, qFactor: 1.0 },
+      // AASB-specific extras carried from the Builder when the framework is
+      // AASB (Australian). Read by loadTreatmentForm to populate the Stage 2
+      // amber AASB Extras panel (tier, ASIC, franking, related-party, GST, APRA).
+      aasbExtras: B.aasbExtras ? { ...B.aasbExtras } : undefined,
       _builderSource: B   // round-trip metadata
     };
     return inst;
   }
 
   // ─── Preset: load a worked example ──────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  //  v2 PRESET LIBRARY — 10 scenarios from simple to complex
+  // ═══════════════════════════════════════════════════════════════════
+  const PRESETS = [
+    {
+      key:'riverside-vanilla', team:'Corporate', participationPct:100, tag:'Simple', complexity:1,
+      label:'Riverside Industries — Vanilla Bullet (3Y · Fixed 5%)',
+      build: () => ({
+        deal: { name:'Riverside Industries', dealId:'RVR-2026-001', counterparty:'Riverside Industries plc',
+                le:'Corporate Bank', currency:'USD', framework:'IFRS',
+                settle:'2026-04-01', maturity:'2029-04-01' },
+        facility: { commitment: 5_000_000, availEnd:'2026-04-01', dayBasis:'ACT/360',
+                    holiday:'usFederal', repayment:'AtMaturity', type:'termLoan' },
+        tranches: [{
+          id: uid('TRN'), name:'Term Loan A', currency:'USD',
+          face: 5_000_000, drawnInitially: 5_000_000, drawdowns:[], repayments:[],
+          interestComponents:[{
+            id: uid('IC'), name:'Fixed Coupon', baseIndex:'FIXED', baseValue: 0.0500,
+            terms:[{ tenor:'3M', lookbackDays:0, observationShift:0, lockoutDays:0, dailyCompounding:false, weighted:false }],
+            spreads:[{ from:'2026-04-01', to:'2029-04-01', bps: 0, note:'Flat fixed rate' }],
+            ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0
+          }]
+        }],
+        fees: [{
+          id: uid('FEE'), label:'Arrangement Fee', kind:'arrangement', mode:'fixPct',
+          pct: 0.0100, bps:0, flatAmount:0, base:'commitment',
+          linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-04-08', ifrs:'IFRS9-EIR'
+        }]
+      })
+    },
+    {
+      key:'sapphire-floating', team:'Corporate', participationPct:100, tag:'Simple', complexity:2,
+      label:'Sapphire Manufacturing — Floating SOFR + Step-Down (5Y)',
+      build: () => ({
+        deal: { name:'Sapphire Manufacturing', dealId:'SPH-2026-002', counterparty:'Sapphire Manufacturing Inc.',
+                le:'Corporate Bank', currency:'USD', framework:'IFRS',
+                settle:'2026-05-15', maturity:'2031-05-15' },
+        facility: { commitment: 10_000_000, availEnd:'2026-05-15', dayBasis:'ACT/360',
+                    holiday:'usFederal', repayment:'AtMaturity', type:'termLoan' },
+        tranches: [{
+          id: uid('TRN'), name:'Term Loan A', currency:'USD',
+          face: 10_000_000, drawnInitially: 10_000_000, drawdowns:[], repayments:[],
+          interestComponents:[{
+            id: uid('IC'), name:'Margin over Term SOFR', baseIndex:'TermSOFR', baseValue: 0.0475,
+            terms:[{ tenor:'3M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+            spreads:[
+              { from:'2026-05-15', to:'2028-05-15', bps: 300, note:'Years 1-2 — opening margin' },
+              { from:'2028-05-15', to:'2030-05-15', bps: 275, note:'Years 3-4 — step-down' },
+              { from:'2030-05-15', to:'2031-05-15', bps: 250, note:'Year 5 — final step-down' }
+            ],
+            ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0
+          }]
+        }],
+        fees: [{
+          id: uid('FEE'), label:'Arrangement Fee', kind:'arrangement', mode:'fixPct',
+          pct: 0.0125, bps:0, flatAmount:0, base:'commitment',
+          linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-05-22', ifrs:'IFRS9-EIR'
+        }]
+      })
+    },
+    {
+      key:'halcyon-bridge', team:'Real Estate', participationPct:100, tag:'Simple+', complexity:2,
+      label:'Halcyon Bridge — Interest-Only + Balloon (2Y · 6%)',
+      build: () => ({
+        deal: { name:'Halcyon Bridge', dealId:'HAL-2026-003', counterparty:'Halcyon Properties Ltd.',
+                le:'Real Estate Finance', currency:'USD', framework:'IFRS',
+                settle:'2026-06-01', maturity:'2028-06-01' },
+        facility: { commitment: 25_000_000, availEnd:'2026-06-01', dayBasis:'ACT/360',
+                    holiday:'usFederal', repayment:'AtMaturity', type:'termLoan' },
+        tranches: [{
+          id: uid('TRN'), name:'Bridge Loan', currency:'USD',
+          face: 25_000_000, drawnInitially: 25_000_000, drawdowns:[], repayments:[],
+          interestComponents:[{
+            id: uid('IC'), name:'Fixed Coupon', baseIndex:'FIXED', baseValue: 0.0600,
+            terms:[{ tenor:'1M', lookbackDays:0, observationShift:0, lockoutDays:0, dailyCompounding:false, weighted:false }],
+            spreads:[{ from:'2026-06-01', to:'2028-06-01', bps: 0, note:'Flat fixed rate · interest-only' }],
+            ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0
+          }]
+        }],
+        fees: [
+          { id: uid('FEE'), label:'Arrangement Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0150, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-06-08', ifrs:'IFRS9-EIR' },
+          { id: uid('FEE'), label:'Exit Fee', kind:'other', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 250_000, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2028-06-01', ifrs:'IFRS15-pointInTime' }
+        ]
+      })
+    },
+    {
+      key:'aurora-multitranche', team:'Leveraged Finance', participationPct:60, tag:'Medium', complexity:3,
+      label:'Project Aurora — Multi-tranche Senior + Junior (5Y · Leverage Ratchet)',
+      build: () => ({
+        deal: { name:'Project Aurora', dealId:'AUR-2026-004', counterparty:'Aurora Holdings plc',
+                le:'Leveraged Finance', currency:'USD', framework:'IFRS',
+                settle:'2026-09-01', maturity:'2031-09-01' },
+        facility: { commitment: 25_000_000, availEnd:'2028-09-01', dayBasis:'ACT/360',
+                    holiday:'usFederal', repayment:'AtMaturity', type:'termLoan' },
+        tranches: [
+          {
+            id: uid('TRN'), name:'Tranche A — Senior', currency:'USD',
+            face: 15_000_000, drawnInitially: 15_000_000, drawdowns:[], repayments:[],
+            interestComponents:[{
+              id: uid('IC'), name:'Margin over Term SOFR', baseIndex:'TermSOFR', baseValue: 0.0475,
+              terms:[{ tenor:'3M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+              spreads:[
+                { from:'2026-09-01', to:'2027-09-01', bps: 275, note:'Year 1' },
+                { from:'2027-09-01', to:'2029-09-01', bps: 250, note:'Years 2-3' },
+                { from:'2029-09-01', to:'2031-09-01', bps: 225, note:'Years 4-5' }
+              ],
+              ratchet:{ kpi:'leverageRatio', tiers:[
+                { from:0, to:3.0, marginBps:0 }, { from:3.0, to:4.5, marginBps:25 },
+                { from:4.5, to:6.0, marginBps:50 }, { from:6.0, to:null, marginBps:100 }
+              ]},
+              esgAdjustmentBps: -2.5
+            }]
+          },
+          {
+            id: uid('TRN'), name:'Tranche B — Junior', currency:'USD',
+            face: 10_000_000, drawnInitially: 5_000_000,
+            drawdowns:[{ date:'2027-03-01', amount: 5_000_000 }], repayments:[],
+            interestComponents:[{
+              id: uid('IC'), name:'Margin over Term SOFR (Junior)', baseIndex:'TermSOFR', baseValue: 0.0475,
+              terms:[{ tenor:'3M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+              spreads:[{ from:'2026-09-01', to:'2031-09-01', bps: 425, note:'Junior margin · flat' }],
+              ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0
+            }]
+          }
+        ],
+        fees: [
+          { id: uid('FEE'), label:'Arrangement Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0175, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-09-08', ifrs:'IFRS9-EIR' },
+          { id: uid('FEE'), label:'Commitment Fee', kind:'commitment', mode:'overUnfunded',
+            pct: 0.0050, bps:0, flatAmount:0, base:'unfunded',
+            linkedComponentId:'', frequency:'quarterly', paymentDate:'', ifrs:'IFRS15-overTime' },
+          { id: uid('FEE'), label:'Agency Fee', kind:'agency', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 25_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2027-09-01', ifrs:'IFRS15-overTime' }
+        ]
+      })
+    },
+    {
+      key:'cedar-rcf', team:'Corporate', participationPct:100, tag:'Medium', complexity:3,
+      label:'Cedar Ridge RCF — Revolver with Commitment Fee on Unfunded',
+      build: () => ({
+        deal: { name:'Cedar Ridge RCF', dealId:'CDR-2026-005', counterparty:'Cedar Ridge Capital LLC',
+                le:'Corporate Bank', currency:'USD', framework:'IFRS',
+                settle:'2026-07-01', maturity:'2030-07-01' },
+        facility: { commitment: 20_000_000, availEnd:'2030-07-01', dayBasis:'ACT/360',
+                    holiday:'usFederal', repayment:'AtMaturity', type:'revolver' },
+        tranches: [{
+          id: uid('TRN'), name:'Revolving Facility', currency:'USD',
+          face: 20_000_000, drawnInitially: 8_000_000,
+          drawdowns:[
+            { date:'2027-01-15', amount: 5_000_000 },
+            { date:'2028-04-01', amount: 4_000_000 }
+          ],
+          repayments:[
+            { date:'2029-01-15', amount: 7_000_000 }
+          ],
+          interestComponents:[{
+            id: uid('IC'), name:'Margin over Term SOFR', baseIndex:'TermSOFR', baseValue: 0.0475,
+            terms:[{ tenor:'1M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+            spreads:[{ from:'2026-07-01', to:'2030-07-01', bps: 200, note:'RCF margin' }],
+            ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0
+          }]
+        }],
+        fees: [
+          { id: uid('FEE'), label:'Arrangement Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0100, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-07-08', ifrs:'IFRS9-EIR' },
+          { id: uid('FEE'), label:'Commitment Fee (on undrawn)', kind:'commitment', mode:'overUnfunded',
+            pct: 0.0075, bps:0, flatAmount:0, base:'unfunded',
+            linkedComponentId:'', frequency:'quarterly', paymentDate:'', ifrs:'IFRS15-overTime' },
+          { id: uid('FEE'), label:'Utilisation Fee', kind:'utilisation', mode:'overFunded',
+            pct: 0.0025, bps:0, flatAmount:0, base:'funded',
+            linkedComponentId:'', frequency:'quarterly', paymentDate:'', ifrs:'IFRS15-overTime' }
+        ]
+      })
+    },
+    {
+      key:'pinnacle-esg-sll', team:'Sustainable Finance', participationPct:100, tag:'Medium', complexity:3,
+      label:'Pinnacle Real Estate — ESG-Linked Sustainability Loan',
+      build: () => ({
+        deal: { name:'Pinnacle Real Estate SLL', dealId:'PNK-2026-006', counterparty:'Pinnacle Properties REIT',
+                le:'Sustainable Finance', currency:'EUR', framework:'IFRS',
+                settle:'2026-10-01', maturity:'2032-10-01' },
+        facility: { commitment: 15_000_000, availEnd:'2026-10-01', dayBasis:'ACT/365',
+                    holiday:'target', repayment:'AtMaturity', type:'termLoan' },
+        tranches: [{
+          id: uid('TRN'), name:'Green Term Loan', currency:'EUR',
+          face: 15_000_000, drawnInitially: 15_000_000, drawdowns:[], repayments:[],
+          interestComponents:[{
+            id: uid('IC'), name:'Margin over EURIBOR', baseIndex:'EURIBOR', baseValue: 0.0350,
+            terms:[{ tenor:'3M', lookbackDays:2, observationShift:0, lockoutDays:0, dailyCompounding:false, weighted:false }],
+            spreads:[{ from:'2026-10-01', to:'2032-10-01', bps: 175, note:'SLL base margin' }],
+            ratchet:{ kpi:'esgScore', tiers:[
+              { from:90, to:100, marginBps:-15 },  // top performer → margin reduction
+              { from:75, to:90,  marginBps:0 },    // neutral
+              { from:60, to:75,  marginBps:10 },   // underperform → uplift
+              { from:0,  to:60,  marginBps:25 }    // failure → max uplift
+            ]},
+            esgAdjustmentBps: -10                  // initial sustainability discount
+          }]
+        }],
+        fees: [{
+          id: uid('FEE'), label:'Arrangement Fee', kind:'arrangement', mode:'fixPct',
+          pct: 0.0125, bps:0, flatAmount:0, base:'commitment',
+          linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-10-08', ifrs:'IFRS9-EIR'
+        }]
+      })
+    },
+    {
+      key:'marigold-amortising', team:'Corporate', participationPct:100, tag:'Medium', complexity:3,
+      label:'Marigold Healthcare — Quarterly Amortising Term Loan',
+      build: () => ({
+        deal: { name:'Marigold Healthcare', dealId:'MGD-2026-007', counterparty:'Marigold Healthcare Group',
+                le:'Healthcare Finance', currency:'USD', framework:'USGAAP',
+                settle:'2026-01-15', maturity:'2030-01-15' },
+        facility: { commitment: 12_000_000, availEnd:'2026-01-15', dayBasis:'ACT/360',
+                    holiday:'usFederal', repayment:'Periodic', type:'termLoan' },
+        tranches: [{
+          id: uid('TRN'), name:'Amortising Term Loan', currency:'USD',
+          face: 12_000_000, drawnInitially: 12_000_000, drawdowns:[],
+          // Level principal amortisation: $750k each quarter for 16 quarters = $12m
+          repayments:[
+            { date:'2026-04-15', amount: 750_000 }, { date:'2026-07-15', amount: 750_000 },
+            { date:'2026-10-15', amount: 750_000 }, { date:'2027-01-15', amount: 750_000 },
+            { date:'2027-04-15', amount: 750_000 }, { date:'2027-07-15', amount: 750_000 },
+            { date:'2027-10-15', amount: 750_000 }, { date:'2028-01-15', amount: 750_000 },
+            { date:'2028-04-15', amount: 750_000 }, { date:'2028-07-15', amount: 750_000 },
+            { date:'2028-10-15', amount: 750_000 }, { date:'2029-01-15', amount: 750_000 },
+            { date:'2029-04-15', amount: 750_000 }, { date:'2029-07-15', amount: 750_000 },
+            { date:'2029-10-15', amount: 750_000 }, { date:'2030-01-15', amount: 750_000 }
+          ],
+          interestComponents:[{
+            id: uid('IC'), name:'Fixed Coupon', baseIndex:'FIXED', baseValue: 0.0525,
+            terms:[{ tenor:'3M', lookbackDays:0, observationShift:0, lockoutDays:0, dailyCompounding:false, weighted:false }],
+            spreads:[{ from:'2026-01-15', to:'2030-01-15', bps:0, note:'Flat coupon' }],
+            ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0
+          }]
+        }],
+        fees: [{
+          id: uid('FEE'), label:'Arrangement Fee', kind:'arrangement', mode:'fixPct',
+          pct: 0.0100, bps:0, flatAmount:0, base:'commitment',
+          linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-01-22', ifrs:'IFRS9-EIR'
+        }]
+      })
+    },
+    {
+      key:'aurora-solar-multifx', team:'Sustainable Finance', participationPct:100, tag:'Complex', complexity:4,
+      label:'Aurora Solar — Multi-Currency (USD + EUR Tranches)',
+      build: () => ({
+        deal: { name:'Aurora Solar Multi-Ccy', dealId:'ASR-2026-008', counterparty:'Aurora Solar AG',
+                le:'Cross-Border Finance', currency:'EUR', framework:'IFRS',
+                settle:'2026-11-01', maturity:'2031-11-01' },
+        facility: { commitment: 30_000_000, availEnd:'2027-11-01', dayBasis:'ACT/360',
+                    holiday:'target', repayment:'AtMaturity', type:'termLoan' },
+        tranches: [
+          {
+            id: uid('TRN'), name:'EUR Tranche', currency:'EUR',
+            face: 18_000_000, drawnInitially: 18_000_000, drawdowns:[], repayments:[],
+            interestComponents:[{
+              id: uid('IC'), name:'EUR Margin over ESTR', baseIndex:'ESTR', baseValue: 0.0325,
+              terms:[{ tenor:'3M', lookbackDays:2, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+              spreads:[{ from:'2026-11-01', to:'2031-11-01', bps: 225, note:'EUR base margin' }],
+              ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0
+            }]
+          },
+          {
+            id: uid('TRN'), name:'USD Tranche', currency:'USD',
+            face: 12_000_000, drawnInitially: 12_000_000, drawdowns:[], repayments:[],
+            interestComponents:[{
+              id: uid('IC'), name:'USD Margin over Term SOFR', baseIndex:'TermSOFR', baseValue: 0.0475,
+              terms:[{ tenor:'3M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+              spreads:[{ from:'2026-11-01', to:'2031-11-01', bps: 250, note:'USD base margin' }],
+              ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0
+            }]
+          }
+        ],
+        fees: [
+          { id: uid('FEE'), label:'Arrangement Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0175, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-11-08', ifrs:'IFRS9-EIR' },
+          { id: uid('FEE'), label:'FX Hedge Fee', kind:'other', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 75_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2027-11-01', ifrs:'IFRS15-overTime' }
+        ]
+      })
+    },
+    {
+      key:'kestrel-projfin', team:'Project Finance', participationPct:40, tag:'Complex', complexity:4,
+      label:'Kestrel Wind Farm — Project Finance (Delayed-Draw · 10Y)',
+      build: () => ({
+        deal: { name:'Kestrel Wind Farm', dealId:'KST-2026-009', counterparty:'Kestrel Renewables Ltd.',
+                le:'Project Finance', currency:'GBP', framework:'IFRS',
+                settle:'2026-04-01', maturity:'2036-04-01' },
+        facility: { commitment: 50_000_000, availEnd:'2028-04-01', dayBasis:'ACT/365',
+                    holiday:'ukBank', repayment:'AtMaturity', type:'delayedDraw' },
+        tranches: [{
+          id: uid('TRN'), name:'Senior Project Loan', currency:'GBP',
+          face: 50_000_000, drawnInitially: 15_000_000,
+          drawdowns:[
+            { date:'2026-10-01', amount: 12_000_000 },
+            { date:'2027-04-01', amount: 12_000_000 },
+            { date:'2027-10-01', amount: 11_000_000 }
+          ],
+          repayments:[],
+          interestComponents:[
+            {
+              id: uid('IC'), name:'SONIA + Margin', baseIndex:'SONIA', baseValue: 0.0500,
+              terms:[
+                { tenor:'3M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:true },
+                { tenor:'6M', lookbackDays:5, observationShift:0, lockoutDays:2, dailyCompounding:true, weighted:true }
+              ],
+              spreads:[
+                { from:'2026-04-01', to:'2028-04-01', bps: 350, note:'Construction phase' },
+                { from:'2028-04-01', to:'2032-04-01', bps: 275, note:'Early operational' },
+                { from:'2032-04-01', to:'2036-04-01', bps: 225, note:'Mature operational' }
+              ],
+              ratchet:{ kpi:'dscr', tiers:[
+                { from:1.5, to:null, marginBps: 0 },
+                { from:1.2, to:1.5,  marginBps: 25 },
+                { from:1.0, to:1.2,  marginBps: 75 },
+                { from:0,   to:1.0,  marginBps: 150 }
+              ]},
+              esgAdjustmentBps: -5
+            }
+          ]
+        }],
+        fees: [
+          { id: uid('FEE'), label:'Arrangement Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0200, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-04-08', ifrs:'IFRS9-EIR' },
+          { id: uid('FEE'), label:'Commitment Fee (delayed draw)', kind:'commitment', mode:'overUnfunded',
+            pct: 0.0040, bps:0, flatAmount:0, base:'unfunded',
+            linkedComponentId:'', frequency:'quarterly', paymentDate:'', ifrs:'IFRS15-overTime' },
+          { id: uid('FEE'), label:'Agency Fee', kind:'agency', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 50_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2027-04-01', ifrs:'IFRS15-overTime' }
+        ]
+      })
+    },
+    {
+      key:'atlas-syndicated', team:'Leveraged Finance', participationPct:25, tag:'Complex', complexity:5,
+      label:'Atlas Acquisition — Syndicated Mega-Deal (3 Tranches · 6 Fees · Full Ratchets)',
+      build: () => ({
+        deal: { name:'Atlas Acquisition Finance', dealId:'ATL-2026-010', counterparty:'Atlas Industries SA',
+                le:'Syndicated Lending', currency:'USD', framework:'IFRS',
+                settle:'2026-12-01', maturity:'2033-12-01' },
+        facility: { commitment: 100_000_000, availEnd:'2029-12-01', dayBasis:'ACT/360',
+                    holiday:'usFederal', repayment:'AtMaturity', type:'termLoan' },
+        tranches: [
+          {
+            id: uid('TRN'), name:'Tranche A — Senior Term', currency:'USD',
+            face: 50_000_000, drawnInitially: 50_000_000, drawdowns:[], repayments:[],
+            interestComponents:[{
+              id: uid('IC'), name:'Senior Margin over Term SOFR', baseIndex:'TermSOFR', baseValue: 0.0475,
+              terms:[{ tenor:'3M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+              spreads:[
+                { from:'2026-12-01', to:'2028-12-01', bps: 250, note:'Y1-2' },
+                { from:'2028-12-01', to:'2031-12-01', bps: 225, note:'Y3-5' },
+                { from:'2031-12-01', to:'2033-12-01', bps: 200, note:'Y6-7' }
+              ],
+              ratchet:{ kpi:'leverageRatio', tiers:[
+                { from:0,   to:3.5, marginBps: 0 },
+                { from:3.5, to:5.0, marginBps: 25 },
+                { from:5.0, to:6.5, marginBps: 75 },
+                { from:6.5, to:null, marginBps: 150 }
+              ]},
+              esgAdjustmentBps: -2.5
+            }]
+          },
+          {
+            id: uid('TRN'), name:'Tranche B — Mezz', currency:'USD',
+            face: 30_000_000, drawnInitially: 15_000_000,
+            drawdowns:[{ date:'2027-06-01', amount: 15_000_000 }], repayments:[],
+            interestComponents:[
+              { id: uid('IC'), name:'Mezz Cash Margin', baseIndex:'TermSOFR', baseValue: 0.0475,
+                terms:[{ tenor:'3M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+                spreads:[{ from:'2026-12-01', to:'2033-12-01', bps: 500, note:'Mezz cash margin' }],
+                ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0 },
+              { id: uid('IC'), name:'Mezz PIK Component', baseIndex:'FIXED', baseValue: 0.0300,
+                terms:[{ tenor:'3M', lookbackDays:0, observationShift:0, lockoutDays:0, dailyCompounding:false, weighted:false }],
+                spreads:[{ from:'2026-12-01', to:'2033-12-01', bps: 0, note:'PIK kicker' }],
+                ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0 }
+            ]
+          },
+          {
+            id: uid('TRN'), name:'Tranche C — RCF', currency:'USD',
+            face: 20_000_000, drawnInitially: 0,
+            drawdowns:[{ date:'2027-12-01', amount: 8_000_000 }],
+            repayments:[{ date:'2029-06-01', amount: 8_000_000 }],
+            interestComponents:[{
+              id: uid('IC'), name:'RCF Margin', baseIndex:'TermSOFR', baseValue: 0.0475,
+              terms:[{ tenor:'1M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+              spreads:[{ from:'2026-12-01', to:'2033-12-01', bps: 200, note:'RCF base margin' }],
+              ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0
+            }]
+          }
+        ],
+        fees: [
+          { id: uid('FEE'), label:'Underwriting Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0225, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-12-08', ifrs:'IFRS9-EIR' },
+          { id: uid('FEE'), label:'Tranche A Upfront Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0100, bps:0, flatAmount:0, base:'tranche-face',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-12-08', ifrs:'IFRS9-EIR' },
+          { id: uid('FEE'), label:'RCF Commitment Fee', kind:'commitment', mode:'overUnfunded',
+            pct: 0.0075, bps:0, flatAmount:0, base:'unfunded',
+            linkedComponentId:'', frequency:'quarterly', paymentDate:'', ifrs:'IFRS15-overTime' },
+          { id: uid('FEE'), label:'RCF Utilisation Fee', kind:'utilisation', mode:'overFunded',
+            pct: 0.0040, bps:0, flatAmount:0, base:'funded',
+            linkedComponentId:'', frequency:'quarterly', paymentDate:'', ifrs:'IFRS15-overTime' },
+          { id: uid('FEE'), label:'Agency Fee', kind:'agency', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 150_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2027-12-01', ifrs:'IFRS15-overTime' },
+          { id: uid('FEE'), label:'Coordination Fee', kind:'other', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 250_000, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-12-15', ifrs:'IFRS15-pointInTime' }
+        ]
+      })
+    }
+  ,
+    {
+      key:'orion-leveraged-tlb', team:'Leveraged Finance', participationPct: 35, tag:'Complex', complexity:4,
+      label:'Orion Acquisition — Leveraged TLB (7Y · OID · Springing Covenant · ECF Sweep)',
+      build: () => ({
+        deal: { name:'Orion Acquisition LBO', dealId:'ORI-2026-011', counterparty:'Orion Industries Inc.',
+                le:'Leveraged Finance', currency:'USD', framework:'IFRS',
+                settle:'2026-08-15', maturity:'2033-08-15' },
+        facility: { commitment: 200_000_000, availEnd:'2026-08-15', dayBasis:'ACT/360',
+                    holiday:'usFederal', repayment:'AtMaturity', type:'termLoan' },
+        tranches: [{
+          id: uid('TRN'), name:'TLB · Senior Secured (1st Lien)', currency:'USD',
+          face: 200_000_000, drawnInitially: 200_000_000, drawdowns:[], repayments:[],
+          interestComponents:[{
+            id: uid('IC'), name:'Margin over Term SOFR (TLB)', baseIndex:'TermSOFR', baseValue: 0.0475,
+            terms:[{ tenor:'3M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+            spreads:[{ from:'2026-08-15', to:'2033-08-15', bps: 400, note:'TLB base margin · institutional' }],
+            ratchet:{ kpi:'leverageRatio', tiers:[
+              { from:0,   to:4.5, marginBps: -25 },   // de-leveraged → margin reduction
+              { from:4.5, to:5.5, marginBps: 0 },
+              { from:5.5, to:6.5, marginBps: 25 },
+              { from:6.5, to:null, marginBps: 75 }    // springing covenant tier — accelerator
+            ]},
+            esgAdjustmentBps: 0
+          }]
+        }],
+        fees: [
+          { id: uid('FEE'), label:'Underwriting Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0250, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-08-22', ifrs:'IFRS9-EIR' },
+          { id: uid('FEE'), label:'Original Issue Discount (OID 2pt)', kind:'arrangement', mode:'fixPct',
+            pct: 0.0200, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-08-15', ifrs:'IFRS9-EIR' },
+          { id: uid('FEE'), label:'Agency Fee', kind:'agency', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 250_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2027-08-15', ifrs:'IFRS15-overTime' },
+          { id: uid('FEE'), label:'Excess Cash Flow Sweep Fee', kind:'other', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 50_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2027-08-15', ifrs:'IFRS15-overTime' }
+        ]
+      })
+    },
+    {
+      key:'phoenix-second-lien', team:'Leveraged Finance', participationPct: 50, tag:'Complex', complexity:5,
+      label:'Phoenix Capital — 2nd-Lien Term Loan (8Y · L+800 · PIK Toggle · Call Protection)',
+      build: () => ({
+        deal: { name:'Phoenix Capital 2L', dealId:'PHX-2026-012', counterparty:'Phoenix Capital Holdings',
+                le:'Leveraged Finance', currency:'USD', framework:'IFRS',
+                settle:'2026-09-15', maturity:'2034-09-15' },
+        facility: { commitment: 75_000_000, availEnd:'2026-09-15', dayBasis:'ACT/360',
+                    holiday:'usFederal', repayment:'AtMaturity', type:'termLoan' },
+        tranches: [{
+          id: uid('TRN'), name:'Second-Lien Term Loan', currency:'USD',
+          face: 75_000_000, drawnInitially: 75_000_000, drawdowns:[], repayments:[],
+          interestComponents:[
+            { id: uid('IC'), name:'2L Cash Margin over Term SOFR', baseIndex:'TermSOFR', baseValue: 0.0475,
+              terms:[{ tenor:'3M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+              spreads:[{ from:'2026-09-15', to:'2034-09-15', bps: 800, note:'2L cash margin · L+800' }],
+              ratchet:{ kpi:'leverageRatio', tiers:[
+                { from:0,   to:5.0, marginBps: 0 },
+                { from:5.0, to:6.0, marginBps: 50 },
+                { from:6.0, to:null, marginBps: 100 }
+              ]}, esgAdjustmentBps: 0 },
+            { id: uid('IC'), name:'2L PIK Toggle Margin', baseIndex:'FIXED', baseValue: 0.0500,
+              terms:[{ tenor:'3M', lookbackDays:0, observationShift:0, lockoutDays:0, dailyCompounding:false, weighted:false }],
+              spreads:[{ from:'2026-09-15', to:'2034-09-15', bps: 0, note:'PIK toggle on full coupon if cash flow weak' }],
+              ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0 }
+          ]
+        }],
+        fees: [
+          { id: uid('FEE'), label:'2L Upfront Fee (4pt)', kind:'arrangement', mode:'fixPct',
+            pct: 0.0400, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-09-22', ifrs:'IFRS9-EIR' },
+          { id: uid('FEE'), label:'Call Protection Fee (Y1 NC)', kind:'other', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 750_000, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2027-09-15', ifrs:'IFRS15-pointInTime' },
+          { id: uid('FEE'), label:'Agency Fee', kind:'agency', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 100_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2027-09-15', ifrs:'IFRS15-overTime' }
+        ]
+      })
+    },
+    // ─── Australian example — AASB framework, AUD, BBSW, Tier 1 RDR, APRA APS 220 ───
+    {
+      key:'pilbara-aasb-au', team:'Corporate', participationPct:100, tag:'Medium', complexity:3,
+      label:'Australian Example — Pilbara Mining Term Loan (AUD · BBSW · AASB 9 · APRA)',
+      build: () => ({
+        deal: { name:'Pilbara Resources Term Loan', dealId:'PIL-2026-AU01', counterparty:'Pilbara Resources Pty Ltd (ABN 41 132 758 619)',
+                le:'Corporate Bank — Sydney Branch', currency:'AUD', framework:'AASB',
+                settle:'2026-07-01', maturity:'2031-07-01' },
+        facility: { commitment: 80_000_000, availEnd:'2026-07-01', dayBasis:'ACT/365',
+                    holiday:'auFederal', repayment:'AtMaturity', type:'termLoan' },
+        tranches: [{
+          id: uid('TRN'), name:'Senior Secured Term Loan A', currency:'AUD',
+          face: 80_000_000, drawnInitially: 80_000_000, drawdowns:[], repayments:[],
+          interestComponents:[{
+            id: uid('IC'), name:'Margin over 3M BBSW', baseIndex:'BBSW', baseValue: 0.0435,
+            terms:[{ tenor:'3M', lookbackDays:0, observationShift:0, lockoutDays:0, dailyCompounding:false, weighted:false }],
+            spreads:[
+              { from:'2026-07-01', to:'2028-07-01', bps: 285, note:'Years 1-2 — opening margin (BBSW + 285bps)' },
+              { from:'2028-07-01', to:'2030-07-01', bps: 260, note:'Years 3-4 — step-down' },
+              { from:'2030-07-01', to:'2031-07-01', bps: 240, note:'Year 5 — final step-down' }
+            ],
+            ratchet:{ kpi:'leverageRatio', tiers:[
+              { from:0,   to:2.5, marginBps: 0 },
+              { from:2.5, to:3.5, marginBps: 25 },
+              { from:3.5, to:4.5, marginBps: 50 },
+              { from:4.5, to:null, marginBps: 100 }
+            ]},
+            esgAdjustmentBps: -5
+          }]
+        }],
+        fees: [
+          { id: uid('FEE'), label:'Establishment Fee (Upfront)', kind:'arrangement', mode:'fixPct',
+            pct: 0.0125, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2026-07-08', ifrs:'AASB9-EIR' },
+          { id: uid('FEE'), label:'Agency Fee (Annual)', kind:'agency', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 50_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2027-07-01', ifrs:'AASB15-overTime' },
+          { id: uid('FEE'), label:'Line Fee (Undrawn)', kind:'commitment', mode:'fixPct',
+            pct: 0.0050, bps:0, flatAmount:0, base:'undrawn',
+            linkedComponentId:'', frequency:'quarterly', paymentDate:'2026-10-01', ifrs:'AASB15-overTime' }
+        ],
+        // AASB-specific extras populated into Treatment panel when loaded
+        aasbExtras: {
+          tier: 'tier1RDR',                  // Tier 1 — RDR (private corporate borrower)
+          asicReportable: true,              // ASIC Form 388 lodgement
+          frankingTreatment: 'none',         // No franking on interest income (only dividends)
+          relatedParty: 'aasb124-disclose',  // Group entity — AASB 124 disclosure required
+          gstTreatment: 'financialSupply',   // Interest is GST-free financial supply
+          apraStandard: 'aps220'             // APRA APS 220 — Credit Risk Management
+        }
+      })
+    }
+  ];
+
+  // Load a v2 preset by its key into the Builder state, render, recompute.
+  // If the current view mode is 'participation' AND the preset has a
+  // participationPct < 100, scale all face values, drawdowns, repayments,
+  // commitments, and fixed-amount fees by that percentage so the cashflows +
+  // JEs reflect only the lender's share of the syndicated deal.
+  function loadPresetByKey(key){
+    const p = PRESETS.find(x => x.key === key);
+    if(!p){ console.warn('Preset not found:', key); return null; }
+    const built = p.build();
+    const viewMode = (window.V2_CTX && V2_CTX.viewMode) || 'syndication';
+    const pct = p.participationPct || 100;
+    if(viewMode === 'participation' && pct < 100){
+      const scale = pct / 100;
+      built.facility.commitment = Math.round(built.facility.commitment * scale);
+      built.tranches.forEach(t => {
+        t.face            = Math.round(t.face * scale);
+        t.drawnInitially  = Math.round(t.drawnInitially * scale);
+        t.drawdowns       = t.drawdowns.map(d => ({ ...d, amount: Math.round(d.amount * scale) }));
+        t.repayments      = (t.repayments || []).map(r => ({ ...r, amount: Math.round(r.amount * scale) }));
+      });
+      built.fees.forEach(f => {
+        if(f.mode === 'fixAmount') f.flatAmount = Math.round(f.flatAmount * scale);
+      });
+      // Tag the deal name visibly so the user sees they're viewing their share
+      built.deal.name = built.deal.name + ' · ' + pct + '% share';
+      built.deal.dealId = built.deal.dealId + '-PART';
+    }
+    B.deal     = built.deal;
+    B.facility = built.facility;
+    B.tranches = built.tranches;
+    B.fees     = built.fees;
+    // AASB extras — preset-defined Australian-specific accounting fields
+    // (tier, ASIC reportable, franking, related-party, GST, APRA). Captured on
+    // B so builderToInstrument can copy them onto the synthesised instrument
+    // and loadTreatmentForm can populate the Stage 2 panel.
+    B.aasbExtras = built.aasbExtras || null;
+    // Clear market data when switching deals — it's deal-specific
+    B.marketData = { static: [], pricing: {}, ingestedAt: null };
+    populateDealForm();
+    renderTranches();
+    renderFees();
+    recompute();
+    if(typeof renderMarketData === 'function') renderMarketData();
+    if(typeof toast === 'function'){
+      const viewLabel = viewMode === 'participation' && pct < 100
+        ? ' (' + pct + '% participation)'
+        : '';
+      toast('Loaded · ' + p.label + viewLabel);
+    }
+    return p;
+  }
+  // Expose for the dropdown handler
+  window.loadPresetByKey = loadPresetByKey;
+  window.PRESETS = PRESETS;
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  MARKET DATA LAYER — ISIN static + pricing series
+  // ═══════════════════════════════════════════════════════════════════
+  // Stored on B.marketData. Shape:
+  //   { static: [{ isin, lxid, issuer, ticker, lien, rating, country, coupon,
+  //                maturity, issueDate, currency, faceUSD, trancheRef }],
+  //     pricing: { 'isin1': [{ date, bid, offer, mid, source }], ... },
+  //     ingestedAt: ISO }
+  function ensureMarketData(){
+    B.marketData = B.marketData || { static: [], pricing: {}, ingestedAt: null };
+    return B.marketData;
+  }
+
+  // ─── Sample Leveraged Loan Security Master ───────────────────────────
+  // A canonical example of the static + pricing data a real security master
+  // (Bloomberg / Markit / IHS) returns for a leveraged loan. Used by both
+  // Load Sample (which builds a complete deal from it) and as the reference
+  // shape for the Paste Static JSON input.
+  function sampleSecurityMasterRecord(){
+    const today = new Date();
+    // Generate 12 weeks of pricing for a 1st-lien TLB at mid-95s
+    function genPricing(startMid, spreadBp){
+      const series = [];
+      let mid = startMid;
+      for(let w = 12; w >= 1; w--){
+        const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (w*7));
+        mid = Math.max(70, Math.min(102, mid + (Math.random() - 0.5) * 0.6));
+        const bid = +(mid - spreadBp/2).toFixed(3);
+        const offer = +(mid + spreadBp/2).toFixed(3);
+        series.push({ date: date.toISOString().slice(0,10), bid, offer, mid: +mid.toFixed(3), source:'Markit' });
+      }
+      return series;
+    }
+    return {
+      // dealMeta drives Builder population
+      dealMeta: {
+        name: 'Crestline Industries Acquisition',
+        dealId: 'CRS-2026-001',
+        counterparty: 'Crestline Industries Inc.',
+        le: 'Leveraged Finance',
+        currency: 'USD',
+        framework: 'IFRS',
+        settle: '2026-09-15',
+        maturity: '2033-09-15',
+        commitment: 350_000_000,
+        availEnd: '2026-09-15',
+        dayBasis: 'ACT/360',
+        holiday: 'usFederal',
+        repayment: 'AtMaturity',
+        facilityType: 'termLoan'
+      },
+      // Tranches from the security master
+      tranches: [
+        {
+          name: 'TLB · Senior Secured (1st Lien)',
+          currency: 'USD',
+          face: 250_000_000,
+          drawnInitially: 250_000_000,
+          baseIndex: 'TermSOFR', baseValue: 0.0475,
+          spreadBps: 425, ratchet: 'leverageRatio'
+        },
+        {
+          name: '2nd Lien Notes',
+          currency: 'USD',
+          face: 100_000_000,
+          drawnInitially: 100_000_000,
+          baseIndex: 'TermSOFR', baseValue: 0.0475,
+          spreadBps: 800, ratchet: 'none'
+        }
+      ],
+      // Static security data
+      static: [
+        {
+          isin: 'XS2587431029',
+          lxid: 'LX738291',
+          issuer: 'Crestline Industries Inc.',
+          ticker: 'CRES',
+          lien: '1st Lien',
+          rating: 'B+',
+          country: 'US',
+          coupon: 'SOFR + 425bps',
+          maturity: '2033-09-15',
+          issueDate: '2026-09-15',
+          currency: 'USD',
+          faceUSD: 250_000_000,
+          trancheName: 'TLB · Senior Secured (1st Lien)'
+        },
+        {
+          isin: 'XS2587431037',
+          lxid: 'LX738292',
+          issuer: 'Crestline Industries Inc.',
+          ticker: 'CRES',
+          lien: '2nd Lien',
+          rating: 'CCC+',
+          country: 'US',
+          coupon: 'SOFR + 800bps',
+          maturity: '2034-09-15',
+          issueDate: '2026-09-15',
+          currency: 'USD',
+          faceUSD: 100_000_000,
+          trancheName: '2nd Lien Notes'
+        }
+      ],
+      pricing: {
+        'XS2587431029': genPricing(97.5, 0.50),
+        'XS2587431037': genPricing(93.0, 1.50)
+      }
+    };
+  }
+
+  // Build the full Builder state from a security master record (the shape
+  // sampleSecurityMasterRecord returns, which is also the shape Paste Static
+  // can accept when it includes dealMeta + tranches arrays).
+  function buildFromSecurityMaster(rec){
+    if(!rec || !rec.dealMeta){ console.warn('No dealMeta on record'); return; }
+    const dm = rec.dealMeta;
+    B.deal = {
+      name: dm.name, dealId: dm.dealId, counterparty: dm.counterparty,
+      le: dm.le || 'Leveraged Finance', currency: dm.currency || 'USD',
+      framework: dm.framework || 'IFRS',
+      settle: dm.settle, maturity: dm.maturity
+    };
+    B.facility = {
+      commitment: dm.commitment || 0,
+      availEnd:   dm.availEnd   || dm.settle,
+      dayBasis:   dm.dayBasis   || 'ACT/360',
+      holiday:    dm.holiday    || 'usFederal',
+      repayment:  dm.repayment  || 'AtMaturity',
+      type:       dm.facilityType || 'termLoan'
+    };
+    // Build tranches from the records' tranche array (decorated with interest components)
+    B.tranches = (rec.tranches || []).map(t => ({
+      id: uid('TRN'),
+      name: t.name,
+      currency: t.currency || B.deal.currency,
+      face: t.face || 0,
+      drawnInitially: t.drawnInitially || t.face || 0,
+      drawdowns: t.drawdowns || [],
+      repayments: t.repayments || [],
+      interestComponents: [{
+        id: uid('IC'),
+        name: 'Margin over ' + (t.baseIndex || 'SOFR'),
+        baseIndex: t.baseIndex || 'TermSOFR',
+        baseValue: t.baseValue || 0.0475,
+        terms: [{ tenor:'3M', lookbackDays:5, observationShift:0, lockoutDays:0, dailyCompounding:true, weighted:false }],
+        spreads: [{ from: B.deal.settle, to: B.deal.maturity, bps: t.spreadBps || 400,
+                    note:'From security master' }],
+        ratchet: (t.ratchet === 'leverageRatio')
+          ? { kpi:'leverageRatio', tiers:[
+              { from:0,   to:4.5, marginBps: -25 },
+              { from:4.5, to:5.5, marginBps: 0 },
+              { from:5.5, to:6.5, marginBps: 25 },
+              { from:6.5, to:null, marginBps: 75 }
+            ]}
+          : { kpi:'none', tiers:[] },
+        esgAdjustmentBps: 0
+      }]
+    }));
+    // Standard fee set for a leveraged loan
+    B.fees = [
+      { id: uid('FEE'), label:'Underwriting Fee', kind:'arrangement', mode:'fixPct',
+        pct: 0.0225, bps:0, flatAmount:0, base:'commitment',
+        linkedComponentId:'', frequency:'oneOff',
+        paymentDate: B.deal.settle, ifrs:'IFRS9-EIR' },
+      { id: uid('FEE'), label:'Original Issue Discount (OID 2pt)', kind:'arrangement', mode:'fixPct',
+        pct: 0.0200, bps:0, flatAmount:0, base:'commitment',
+        linkedComponentId:'', frequency:'oneOff',
+        paymentDate: B.deal.settle, ifrs:'IFRS9-EIR' },
+      { id: uid('FEE'), label:'Agency Fee', kind:'agency', mode:'fixAmount',
+        pct:0, bps:0, flatAmount: 150_000, base:'commitment',
+        linkedComponentId:'', frequency:'annual',
+        paymentDate:'', ifrs:'IFRS15-overTime' }
+    ];
+    // Set the market data so the static/pricing tables render below
+    B.marketData = {
+      static: (rec.static || []).map(s => Object.assign({}, s)),
+      pricing: Object.assign({}, rec.pricing || {}),
+      ingestedAt: new Date().toISOString()
+    };
+    // Link static records back to the newly-created tranches by name
+    B.marketData.static.forEach(s => {
+      const t = B.tranches.find(tr => tr.name === s.trancheName);
+      if(t) s.trancheRef = t.id;
+    });
+  }
+
+  function loadSampleMarketData(){
+    const rec = sampleSecurityMasterRecord();
+    buildFromSecurityMaster(rec);
+    populateDealForm();
+    renderTranches();
+    renderFees();
+    recompute();
+    renderMarketData();
+    if(typeof registerBuilderInstrument === 'function') registerBuilderInstrument();
+    if(typeof toast === 'function') toast('Built deal from security master · Crestline Industries Acquisition');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  ISIN UNIVERSE — mock leveraged loan security master
+  // ═══════════════════════════════════════════════════════════════════
+  // Each entry is a complete security master record (compatible with
+  // buildFromSecurityMaster). Click a row in the modal → builds the deal.
+  function genPricingSeries(startMid, spreadBp, weeks){
+    const series = [];
+    const today = new Date();
+    let mid = startMid;
+    for(let w = (weeks||12); w >= 1; w--){
+      const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (w*7));
+      mid = Math.max(70, Math.min(102, mid + (Math.random() - 0.5) * 0.6));
+      const bid = +(mid - spreadBp/2).toFixed(3);
+      const offer = +(mid + spreadBp/2).toFixed(3);
+      series.push({ date: date.toISOString().slice(0,10), bid, offer, mid: +mid.toFixed(3), source:'Markit' });
+    }
+    return series;
+  }
+  function mkSec(opts){
+    return {
+      isin: opts.isin, lxid: opts.lxid, issuer: opts.issuer, ticker: opts.ticker,
+      lien: opts.lien, rating: opts.rating, country: opts.country || 'US',
+      coupon: opts.coupon, maturity: opts.maturity, issueDate: opts.issueDate,
+      currency: opts.currency || 'USD', faceUSD: opts.face, trancheName: opts.trancheName,
+      sector: opts.sector || 'Industrial'
+    };
+  }
+  function isinRecord(meta){
+    // meta: {isin, deal:{name, ticker, sector}, settle, maturity, currency, framework, commitment, tranches:[...]}
+    const tranches = meta.tranches.map(t => ({
+      name: t.name, currency: t.currency || meta.currency,
+      face: t.face, drawnInitially: t.drawnInitially || t.face,
+      baseIndex: t.baseIndex || 'TermSOFR', baseValue: t.baseValue || 0.0475,
+      spreadBps: t.spreadBps, ratchet: t.ratchet || 'none'
+    }));
+    const statics = meta.tranches.map(t => mkSec({
+      isin: t.isin, lxid: t.lxid, issuer: meta.deal.name,
+      ticker: meta.deal.ticker, lien: t.lien, rating: t.rating,
+      country: meta.country || 'US', coupon: t.couponLabel,
+      maturity: t.maturity || meta.maturity, issueDate: meta.settle,
+      currency: t.currency || meta.currency, face: t.face,
+      trancheName: t.name, sector: meta.deal.sector
+    }));
+    const pricing = {};
+    meta.tranches.forEach(t => { pricing[t.isin] = genPricingSeries(t.startMid || 97, t.bidOfferBp || 0.5, 12); });
+    return {
+      dealMeta: {
+        name: meta.deal.name + ' ' + (meta.deal.suffix || 'LBO'),
+        dealId: meta.dealId,
+        counterparty: meta.deal.name,
+        le: 'Leveraged Finance',
+        currency: meta.currency || 'USD',
+        framework: meta.framework || 'IFRS',
+        settle: meta.settle, maturity: meta.maturity,
+        commitment: meta.commitment, availEnd: meta.settle,
+        dayBasis: 'ACT/360', holiday: 'usFederal',
+        repayment: 'AtMaturity', facilityType: 'termLoan',
+        sector: meta.deal.sector
+      },
+      tranches, static: statics, pricing
+    };
+  }
+
+  const ISIN_UNIVERSE = [
+    isinRecord({
+      dealId:'CRS-2026-001', settle:'2026-09-15', maturity:'2033-09-15', currency:'USD', commitment:350_000_000,
+      deal:{ name:'Crestline Industries', ticker:'CRES', sector:'Industrial', suffix:'Acquisition' },
+      tranches:[
+        { isin:'XS2587431029', lxid:'LX738291', name:'TLB · Senior Secured (1st Lien)', face:250_000_000, lien:'1st Lien', rating:'B+', couponLabel:'SOFR + 425bps', spreadBps:425, ratchet:'leverageRatio', startMid:97.5, bidOfferBp:0.5 },
+        { isin:'XS2587431037', lxid:'LX738292', name:'2nd Lien Notes', face:100_000_000, lien:'2nd Lien', rating:'CCC+', couponLabel:'SOFR + 800bps', spreadBps:800, ratchet:'none', startMid:93.0, bidOfferBp:1.5 }
+      ]
+    }),
+    isinRecord({
+      dealId:'APX-2026-002', settle:'2026-06-15', maturity:'2032-06-15', currency:'USD', commitment:480_000_000,
+      deal:{ name:'Apex Healthcare', ticker:'APEX', sector:'Healthcare' },
+      tranches:[
+        { isin:'XS2601840583', lxid:'LX812450', name:'TLB · Senior Secured', face:480_000_000, lien:'1st Lien', rating:'B', couponLabel:'SOFR + 375bps', spreadBps:375, ratchet:'leverageRatio', startMid:98.0, bidOfferBp:0.5 }
+      ]
+    }),
+    isinRecord({
+      dealId:'BCN-2026-003', settle:'2026-04-30', maturity:'2034-04-30', currency:'USD', commitment:175_000_000,
+      deal:{ name:'Beacon Energy', ticker:'BCNE', sector:'Energy' },
+      tranches:[
+        { isin:'XS2598271905', lxid:'LX780123', name:'2nd Lien Term Loan', face:175_000_000, lien:'2nd Lien', rating:'B-', couponLabel:'SOFR + 700bps', spreadBps:700, ratchet:'none', startMid:94.5, bidOfferBp:1.25 }
+      ]
+    }),
+    isinRecord({
+      dealId:'CPH-2026-004', settle:'2026-07-01', maturity:'2033-07-01', currency:'USD', commitment:625_000_000,
+      deal:{ name:'Cipher Defense', ticker:'CIPH', sector:'Defense' },
+      tranches:[
+        { isin:'XS2610923847', lxid:'LX825611', name:'TLB · 1st Lien', face:625_000_000, lien:'1st Lien', rating:'BB-', couponLabel:'SOFR + 325bps', spreadBps:325, ratchet:'leverageRatio', startMid:99.5, bidOfferBp:0.375 }
+      ]
+    }),
+    isinRecord({
+      dealId:'DRK-2026-005', settle:'2026-05-20', maturity:'2032-05-20', currency:'USD', commitment:520_000_000,
+      deal:{ name:'Drake Pharmaceutical', ticker:'DRKP', sector:'Pharma' },
+      tranches:[
+        { isin:'XS2592847102', lxid:'LX768401', name:'TLB · 1st Lien', face:400_000_000, lien:'1st Lien', rating:'B+', couponLabel:'SOFR + 400bps', spreadBps:400, ratchet:'leverageRatio', startMid:97.75, bidOfferBp:0.5 },
+        { isin:'XS2592847110', lxid:'LX768402', name:'Mezzanine Notes', face:120_000_000, lien:'Mezz', rating:'CCC', couponLabel:'Fixed 11.50% (PIK toggle)', spreadBps:0, ratchet:'none', startMid:91.0, bidOfferBp:2.0 }
+      ]
+    }),
+    isinRecord({
+      dealId:'ECH-2026-006', settle:'2026-08-15', maturity:'2031-08-15', currency:'USD', commitment:280_000_000,
+      deal:{ name:'Echo Logistics', ticker:'ECHO', sector:'Logistics' },
+      tranches:[
+        { isin:'XS2605918374', lxid:'LX801572', name:'TLB · Senior Secured', face:280_000_000, lien:'1st Lien', rating:'B', couponLabel:'SOFR + 350bps', spreadBps:350, ratchet:'leverageRatio', startMid:98.5, bidOfferBp:0.5 }
+      ]
+    }),
+    isinRecord({
+      dealId:'FRG-2026-007', settle:'2026-10-01', maturity:'2033-10-01', currency:'USD', commitment:750_000_000,
+      deal:{ name:'Forge Aerospace', ticker:'FRGE', sector:'Aerospace' },
+      tranches:[
+        { isin:'XS2617305928', lxid:'LX847230', name:'TLB · 1st Lien', face:550_000_000, lien:'1st Lien', rating:'B+', couponLabel:'SOFR + 375bps', spreadBps:375, ratchet:'leverageRatio', startMid:98.25, bidOfferBp:0.5 },
+        { isin:'XS2617305936', lxid:'LX847231', name:'2nd Lien Notes', face:200_000_000, lien:'2nd Lien', rating:'CCC+', couponLabel:'SOFR + 825bps', spreadBps:825, ratchet:'none', startMid:92.5, bidOfferBp:1.5 }
+      ]
+    }),
+    isinRecord({
+      dealId:'GMN-2026-008', settle:'2026-03-15', maturity:'2031-03-15', currency:'USD', commitment:425_000_000,
+      deal:{ name:'Gemini Software', ticker:'GMNI', sector:'Technology' },
+      tranches:[
+        { isin:'XS2580173645', lxid:'LX721904', name:'TLB · 1st Lien', face:425_000_000, lien:'1st Lien', rating:'B+', couponLabel:'SOFR + 400bps', spreadBps:400, ratchet:'leverageRatio', startMid:98.0, bidOfferBp:0.5 }
+      ]
+    }),
+    isinRecord({
+      dealId:'HLX-2026-009', settle:'2026-09-01', maturity:'2034-09-01', currency:'USD', commitment:580_000_000,
+      deal:{ name:'Helix Industrial', ticker:'HLIX', sector:'Industrial' },
+      tranches:[
+        { isin:'XS2612458103', lxid:'LX831045', name:'TLB · 1st Lien', face:480_000_000, lien:'1st Lien', rating:'B', couponLabel:'SOFR + 425bps', spreadBps:425, ratchet:'leverageRatio', startMid:97.0, bidOfferBp:0.625 },
+        { isin:'XS2612458111', lxid:'LX831046', name:'Holdco PIK Notes', face:100_000_000, lien:'PIK', rating:'CCC-', couponLabel:'Fixed 13.00% PIK', spreadBps:0, ratchet:'none', startMid:88.0, bidOfferBp:2.5 }
+      ]
+    }),
+    isinRecord({
+      dealId:'IRS-2026-010', settle:'2026-05-01', maturity:'2033-05-01', currency:'EUR', commitment:340_000_000,
+      deal:{ name:'Iris Telecom', ticker:'IRIS', sector:'Telecom' },
+      tranches:[
+        { isin:'XS2589371204', lxid:'LX755390', name:'2nd Lien Term Loan', face:340_000_000, lien:'2nd Lien', rating:'B-', couponLabel:'EURIBOR + 650bps', spreadBps:650, ratchet:'none', startMid:93.5, bidOfferBp:1.25 }
+      ]
+    }),
+    isinRecord({
+      dealId:'JNS-2026-011', settle:'2026-07-15', maturity:'2031-07-15', currency:'USD', commitment:200_000_000,
+      deal:{ name:'Janus Capital', ticker:'JNSC', sector:'Financial' },
+      tranches:[
+        { isin:'XS2603847291', lxid:'LX792815', name:'RCF · Revolving Credit Facility', face:200_000_000, lien:'1st Lien', rating:'BB', couponLabel:'SOFR + 250bps', spreadBps:250, ratchet:'leverageRatio', startMid:99.75, bidOfferBp:0.25 }
+      ]
+    }),
+    isinRecord({
+      dealId:'KAP-2026-012', settle:'2026-02-15', maturity:'2032-02-15', currency:'USD', commitment:380_000_000,
+      deal:{ name:'Kappa Manufacturing', ticker:'KAPP', sector:'Manufacturing' },
+      tranches:[
+        { isin:'XS2576384950', lxid:'LX710245', name:'TLB · Senior Secured', face:380_000_000, lien:'1st Lien', rating:'B', couponLabel:'SOFR + 425bps', spreadBps:425, ratchet:'leverageRatio', startMid:97.5, bidOfferBp:0.5 }
+      ]
+    }),
+    isinRecord({
+      dealId:'LMN-2026-013', settle:'2026-04-01', maturity:'2033-04-01', currency:'USD', commitment:190_000_000,
+      deal:{ name:'Lumina Media', ticker:'LMNA', sector:'Media' },
+      tranches:[
+        { isin:'XS2584029175', lxid:'LX738502', name:'2nd Lien Notes', face:190_000_000, lien:'2nd Lien', rating:'CCC+', couponLabel:'SOFR + 750bps', spreadBps:750, ratchet:'none', startMid:92.5, bidOfferBp:1.5 }
+      ]
+    }),
+    isinRecord({
+      dealId:'MPL-2026-014', settle:'2026-06-30', maturity:'2031-06-30', currency:'USD', commitment:265_000_000,
+      deal:{ name:'Maple Foods', ticker:'MPLF', sector:'Consumer' },
+      tranches:[
+        { isin:'XS2600158397', lxid:'LX785014', name:'TLB · 1st Lien', face:265_000_000, lien:'1st Lien', rating:'B+', couponLabel:'SOFR + 375bps', spreadBps:375, ratchet:'leverageRatio', startMid:98.25, bidOfferBp:0.5 }
+      ]
+    }),
+    isinRecord({
+      dealId:'NVR-2026-015', settle:'2026-01-15', maturity:'2031-01-15', currency:'USD', commitment:155_000_000,
+      deal:{ name:'Nova Retail', ticker:'NOVR', sector:'Retail' },
+      tranches:[
+        { isin:'XS2572948106', lxid:'LX702384', name:'TLB · Senior Secured (distressed)', face:155_000_000, lien:'1st Lien', rating:'CCC', couponLabel:'SOFR + 500bps', spreadBps:500, ratchet:'leverageRatio', startMid:78.5, bidOfferBp:2.5 }
+      ]
+    })
+  ];
+  // Flatten ISIN_UNIVERSE into a flat list of records keyed by ISIN for easy search
+  const ISIN_INDEX = ISIN_UNIVERSE.flatMap(rec => rec.static.map(s => ({
+    isin: s.isin, lxid: s.lxid, issuer: s.issuer, ticker: s.ticker,
+    lien: s.lien, rating: s.rating, coupon: s.coupon, maturity: s.maturity,
+    currency: s.currency, face: s.faceUSD, sector: s.sector || rec.dealMeta.sector,
+    dealName: rec.dealMeta.name, dealId: rec.dealMeta.dealId,
+    record: rec
+  })));
+
+  function openISINModal(){
+    const modal = document.getElementById('isin-modal');
+    if(!modal) return;
+    modal.style.display = 'flex';
+    document.getElementById('isin-search').value = '';
+    renderISINList('');
+    setTimeout(() => document.getElementById('isin-search')?.focus(), 100);
+  }
+  function closeISINModal(){
+    const modal = document.getElementById('isin-modal');
+    if(modal) modal.style.display = 'none';
+  }
+  function renderISINList(query){
+    const host = document.getElementById('isin-list');
+    const countEl = document.getElementById('isin-result-count');
+    if(!host) return;
+    const q = (query || '').toLowerCase().trim();
+    const matches = ISIN_INDEX.filter(r => !q || [r.isin, r.lxid, r.issuer, r.ticker, r.lien, r.rating, r.sector, r.coupon, r.currency, r.dealName].some(v => (v||'').toLowerCase().includes(q)));
+    if(countEl) countEl.textContent = matches.length + ' of ' + ISIN_INDEX.length + ' ISINs match';
+    if(!matches.length){
+      host.innerHTML = '<div style="padding:40px; text-align:center; color:#9ca3af; font-size:13px;">No ISINs match "' + (query||'') + '"</div>';
+      return;
+    }
+    host.innerHTML = matches.map(r => {
+      const ratingColor = /^A/.test(r.rating) ? '#16a34a' : /^BB/.test(r.rating) ? '#65a30d' : /^B/.test(r.rating) ? '#ca8a04' : /^C/.test(r.rating) ? '#dc2626' : '#475569';
+      const lienBg = r.lien==='1st Lien' ? '#dbeafe' : r.lien==='2nd Lien' ? '#fef3c7' : r.lien==='Mezz' ? '#fce7f3' : r.lien==='PIK' ? '#fae8ff' : '#f1f5f9';
+      const lienFg = r.lien==='1st Lien' ? '#1e40af' : r.lien==='2nd Lien' ? '#92400e' : r.lien==='Mezz' ? '#9f1239' : r.lien==='PIK' ? '#86198f' : '#475569';
+      return '<div data-isin="' + r.isin + '" style="display:grid; grid-template-columns: 130px 1fr 90px 70px 110px 110px 90px; gap:12px; align-items:center; padding:12px 14px; border-radius:10px; cursor:pointer; transition:background 0.12s; border:1px solid transparent;" onmouseover="this.style.background=\'#ecfeff\'; this.style.borderColor=\'#67e8f9\';" onmouseout="this.style.background=\'\'; this.style.borderColor=\'transparent\';">' +
+        '<div style="font-family:monospace; font-size:11px; font-weight:700; color:#0e7490;">' + r.isin + '<div style="color:#6b7280; font-weight:400; font-size:10px; margin-top:1px;">' + (r.lxid || '') + '</div></div>' +
+        '<div><div style="font-weight:600; font-size:13px; color:#111827;">' + r.dealName + '</div>' +
+          '<div style="font-size:10px; color:#6b7280; margin-top:1px;">' + r.ticker + ' · ' + (r.sector||'') + '</div></div>' +
+        '<div><span style="background:' + lienBg + '; color:' + lienFg + '; padding:3px 8px; border-radius:8px; font-size:10px; font-weight:700;">' + r.lien + '</span></div>' +
+        '<div style="text-align:center;"><span style="background:' + ratingColor + '; color:white; padding:3px 8px; border-radius:8px; font-size:10px; font-weight:700;">' + r.rating + '</span></div>' +
+        '<div style="font-family:monospace; font-size:10px; color:#374151;">' + r.coupon + '</div>' +
+        '<div style="font-size:11px; color:#374151;">' + r.maturity + '<div style="font-size:10px; color:#6b7280;">' + r.currency + '</div></div>' +
+        '<div style="text-align:right; font-weight:700; font-size:11px; color:#1f2937;">' + fmtCcy(r.face) + '</div>' +
+      '</div>';
+    }).join('');
+    host.querySelectorAll('[data-isin]').forEach(el => {
+      el.addEventListener('click', () => {
+        const isin = el.dataset.isin;
+        const entry = ISIN_INDEX.find(r => r.isin === isin);
+        if(!entry) return;
+        buildFromSecurityMaster(entry.record);
+        populateDealForm();
+        renderTranches();
+        renderFees();
+        recompute();
+        renderMarketData();
+        if(typeof registerBuilderInstrument === 'function') registerBuilderInstrument();
+        closeISINModal();
+        if(typeof toast === 'function') toast('Loaded ISIN ' + isin + ' · ' + entry.dealName);
+      });
+    });
+  }
+
+  function wireISINModalButtons(){
+    document.getElementById('btn-mode-manual')?.addEventListener('click', () => {
+      // Just scroll to the Deal Setup section
+      document.querySelector('details.builder-section')?.setAttribute('open', '');
+      document.querySelector('details.builder-section')?.scrollIntoView({ behavior:'smooth', block:'start' });
+      if(typeof toast === 'function') toast('Build a loan manually — start with Deal Setup below');
+    });
+    document.getElementById('btn-mode-isin')?.addEventListener('click', openISINModal);
+    document.getElementById('btn-isin-close')?.addEventListener('click', closeISINModal);
+    document.getElementById('isin-modal')?.addEventListener('click', e => {
+      if(e.target.id === 'isin-modal') closeISINModal();
+    });
+    document.getElementById('isin-search')?.addEventListener('input', e => {
+      renderISINList(e.target.value);
+    });
+    document.addEventListener('keydown', e => {
+      if(e.key === 'Escape' && document.getElementById('isin-modal')?.style.display === 'flex'){
+        closeISINModal();
+      }
+    });
+  }
+  window.openISINModal = openISINModal;
+
+  function pasteMarketDataStatic(){
+    const raw = prompt(
+      'Paste security master JSON. Two accepted shapes:\\n\\n' +
+      '1) FULL security master record (BUILDS DEAL too):\\n' +
+      '   {"dealMeta":{"name":"…","counterparty":"…","settle":"…","maturity":"…","commitment":…,"currency":"USD","framework":"IFRS"},\\n' +
+      '    "tranches":[{"name":"TLB","face":250000000,"baseIndex":"TermSOFR","baseValue":0.0475,"spreadBps":425}],\\n' +
+      '    "static":[…], "pricing":{…}}\\n\\n' +
+      '2) STATIC-ONLY array (decorates existing deal):\\n' +
+      '   [{"isin":"XS…","issuer":"…","lien":"1st Lien","rating":"B+","maturity":"…","coupon":"SOFR+400bps","trancheRef":"…"}]'
+    );
+    if(!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      // Shape detection
+      if(Array.isArray(parsed)){
+        // Static-only — just decorate
+        const md = ensureMarketData();
+        md.static = parsed;
+        md.ingestedAt = new Date().toISOString();
+        renderMarketData();
+        if(typeof toast === 'function') toast('Ingested ' + parsed.length + ' static records (deal unchanged)');
+      } else if(parsed && parsed.dealMeta){
+        // Full security master record — build the deal
+        buildFromSecurityMaster(parsed);
+        populateDealForm();
+        renderTranches();
+        renderFees();
+        recompute();
+        renderMarketData();
+        if(typeof registerBuilderInstrument === 'function') registerBuilderInstrument();
+        if(typeof toast === 'function') toast('Built deal from security master · ' + parsed.dealMeta.name);
+      } else if(parsed && parsed.static){
+        // Object with `static` array but no dealMeta — decorate only
+        const md = ensureMarketData();
+        md.static = parsed.static;
+        if(parsed.pricing) md.pricing = parsed.pricing;
+        md.ingestedAt = new Date().toISOString();
+        renderMarketData();
+        if(typeof toast === 'function') toast('Ingested ' + md.static.length + ' static records + pricing');
+      } else {
+        throw new Error('Unrecognised shape. Expected an array, or an object with dealMeta or static.');
+      }
+    } catch(err){
+      alert('JSON parse error: ' + err.message);
+    }
+  }
+
+  function pasteMarketDataPricing(){
+    const raw = prompt('Paste pricing series as JSON object keyed by ISIN. Each value is an array of marks.\\n\\nExample: {"XS1234567890":[{"date":"2026-08-01","bid":99.5,"offer":100.0,"source":"Markit"}, …]}');
+    if(!raw) return;
+    try {
+      const obj = JSON.parse(raw);
+      if(typeof obj !== 'object' || Array.isArray(obj)) throw new Error('Expected an object keyed by ISIN');
+      const md = ensureMarketData();
+      md.pricing = Object.assign(md.pricing || {}, obj);
+      // Compute mid if absent
+      for(const k of Object.keys(obj)){
+        md.pricing[k] = (obj[k] || []).map(m => ({
+          date: m.date, bid: +m.bid || 0, offer: +m.offer || 0,
+          mid: m.mid != null ? +m.mid : ((+m.bid + +m.offer)/2),
+          source: m.source || 'Manual'
+        }));
+      }
+      md.ingestedAt = new Date().toISOString();
+      renderMarketData();
+      if(typeof toast === 'function') toast('Ingested pricing for ' + Object.keys(obj).length + ' securities');
+    } catch(err){
+      alert('JSON parse error: ' + err.message);
+    }
+  }
+
+  function renderMarketData(){
+    const md = B.marketData || { static: [], pricing: {} };
+    const staticHost = document.getElementById('md-static-host');
+    const pricingHost = document.getElementById('md-pricing-host');
+    const chip = document.getElementById('md-status-chip');
+    if(!staticHost || !pricingHost) return;
+    if(!md.static.length){
+      staticHost.innerHTML = '<div style="font-size:11px; color:#9ca3af; font-style:italic; padding:10px 0;">No static data ingested. Click <b>Load Sample</b> or <b>Paste Static</b> above.</div>';
+      pricingHost.innerHTML = '';
+      if(chip){ chip.textContent = 'None'; chip.style.background='#fee2e2'; chip.style.color='#991b1b'; }
+      return;
+    }
+    if(chip){
+      const priceCount = Object.values(md.pricing||{}).reduce((s, arr) => s + (arr?.length || 0), 0);
+      chip.textContent = md.static.length + ' securities · ' + priceCount + ' marks';
+      chip.style.background='#dcfce7'; chip.style.color='#166534';
+    }
+    // STATIC TABLE
+    staticHost.innerHTML = '<div style="font-size:12px; font-weight:700; margin-bottom:6px; color:#0e7490;">Security Static Data</div>' +
+      '<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:11px;">' +
+      '<thead><tr style="background:#ecfeff; color:#0e7490;">' +
+        '<th style="text-align:left; padding:6px 8px;">ISIN / LXID</th>' +
+        '<th style="text-align:left; padding:6px 8px;">Issuer</th>' +
+        '<th style="text-align:left; padding:6px 8px;">Lien</th>' +
+        '<th style="text-align:center; padding:6px 8px;">Rating</th>' +
+        '<th style="text-align:left; padding:6px 8px;">Coupon</th>' +
+        '<th style="text-align:left; padding:6px 8px;">Maturity</th>' +
+        '<th style="text-align:right; padding:6px 8px;">Face</th>' +
+        '<th style="text-align:right; padding:6px 8px;">Latest Mid</th>' +
+        '<th style="text-align:center; padding:6px 8px;">Mark Date</th>' +
+      '</tr></thead><tbody>' +
+      md.static.map(s => {
+        const series = (md.pricing && md.pricing[s.isin]) || [];
+        const last = series.length ? series[series.length-1] : null;
+        const ratingColor = /^A/.test(s.rating) ? '#16a34a' : /^BB/.test(s.rating) ? '#65a30d' : /^B/.test(s.rating) ? '#ca8a04' : /^C/.test(s.rating) ? '#dc2626' : '#475569';
+        return '<tr style="border-top:1px solid #e5e7eb;">' +
+          '<td style="padding:6px 8px; font-family:monospace; font-size:10px;"><div style="font-weight:600;">' + (s.isin || '—') + '</div>' +
+            (s.lxid ? '<div style="color:#6b7280;">' + s.lxid + '</div>' : '') + '</td>' +
+          '<td style="padding:6px 8px;"><div style="font-weight:600;">' + (s.issuer || '—') + '</div>' +
+            (s.ticker ? '<div style="font-size:9px; color:#6b7280;">' + s.ticker + '</div>' : '') + '</td>' +
+          '<td style="padding:6px 8px;"><span style="background:' + (s.lien==='2nd Lien' ? '#fef3c7' : '#dbeafe') + '; color:' + (s.lien==='2nd Lien' ? '#92400e' : '#1e40af') + '; padding:2px 8px; border-radius:8px; font-size:10px; font-weight:600;">' + (s.lien || '—') + '</span></td>' +
+          '<td style="padding:6px 8px; text-align:center;"><span style="background:' + ratingColor + '; color:white; padding:2px 8px; border-radius:8px; font-size:10px; font-weight:700;">' + (s.rating || '—') + '</span></td>' +
+          '<td style="padding:6px 8px; font-family:monospace; font-size:10px;">' + (s.coupon || '—') + '</td>' +
+          '<td style="padding:6px 8px;">' + (s.maturity || '—') + '</td>' +
+          '<td style="padding:6px 8px; text-align:right; font-weight:600;">' + (s.faceUSD ? fmtCcy(s.faceUSD) : '—') + '</td>' +
+          '<td style="padding:6px 8px; text-align:right;">' + (last ? '<span style="font-weight:700; color:' + (last.mid >= 99 ? '#16a34a' : last.mid >= 95 ? '#0891b2' : last.mid >= 85 ? '#ca8a04' : '#dc2626') + ';">' + last.mid.toFixed(3) + '</span>' : '<span style="color:#9ca3af;">—</span>') + '</td>' +
+          '<td style="padding:6px 8px; text-align:center; font-size:10px; color:#6b7280;">' + (last ? last.date : '—') + '</td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div>';
+    // PRICING SPARKLINES
+    const isinsWithPricing = md.static.filter(s => md.pricing && md.pricing[s.isin]?.length);
+    if(!isinsWithPricing.length){
+      pricingHost.innerHTML = '';
+      return;
+    }
+    pricingHost.innerHTML = '<div style="font-size:12px; font-weight:700; margin-bottom:6px; color:#0e7490;">Pricing Series · Bid / Offer Marks</div>' +
+      '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:10px;">' +
+      isinsWithPricing.map(s => {
+        const series = md.pricing[s.isin];
+        const mids = series.map(p => p.mid);
+        const min = Math.min(...mids), max = Math.max(...mids), range = max - min || 1;
+        const w = 240, h = 60, pad = 4;
+        const stepX = (w - 2*pad) / Math.max(1, series.length - 1);
+        const points = series.map((p, i) => {
+          const x = pad + i*stepX;
+          const y = h - pad - ((p.mid - min) / range) * (h - 2*pad);
+          return x.toFixed(1) + ',' + y.toFixed(1);
+        }).join(' ');
+        const last = series[series.length-1];
+        const first = series[0];
+        const delta = last.mid - first.mid;
+        const deltaColor = delta >= 0 ? '#16a34a' : '#dc2626';
+        return '<div style="background:white; border:1px solid #cffafe; border-radius:8px; padding:10px;">' +
+          '<div style="display:flex; justify-content:space-between; margin-bottom:4px;">' +
+            '<div style="font-size:10px; font-family:monospace; color:#0e7490; font-weight:600;">' + s.isin + '</div>' +
+            '<div style="font-size:10px; color:' + deltaColor + '; font-weight:700;">' + (delta>=0?'+':'') + delta.toFixed(2) + ' pts</div>' +
+          '</div>' +
+          '<div style="font-size:11px; font-weight:600; color:#1f2937; margin-bottom:4px;">' + (s.trancheName || s.issuer) + '</div>' +
+          '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%; height:60px;">' +
+            '<polyline points="' + points + '" fill="none" stroke="#0891b2" stroke-width="1.5"/>' +
+          '</svg>' +
+          '<div style="display:flex; justify-content:space-between; font-size:9px; color:#6b7280; margin-top:2px;">' +
+            '<span>' + first.date + ' · ' + first.mid.toFixed(2) + '</span>' +
+            '<span style="font-weight:700; color:#1f2937;">Last: ' + last.mid.toFixed(3) + '</span>' +
+            '<span>' + last.date + '</span>' +
+          '</div>' +
+          '<div style="display:flex; gap:6px; margin-top:4px; font-size:9px;">' +
+            '<span style="background:#eff6ff; color:#1e40af; padding:1px 6px; border-radius:6px;">Bid ' + last.bid.toFixed(3) + '</span>' +
+            '<span style="background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:6px;">Offer ' + last.offer.toFixed(3) + '</span>' +
+            '<span style="background:#f1f5f9; color:#475569; padding:1px 6px; border-radius:6px;">' + last.source + '</span>' +
+          '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+  }
+
+  // Wire the buttons after DOM is ready
+  function wireMarketDataButtons(){
+    document.getElementById('btn-md-sample')?.addEventListener('click', loadSampleMarketData);
+    document.getElementById('btn-md-paste-static')?.addEventListener('click', pasteMarketDataStatic);
+    document.getElementById('btn-md-paste-pricing')?.addEventListener('click', pasteMarketDataPricing);
+  }
+  window.renderMarketData = renderMarketData;
+  window.wireMarketDataButtons = wireMarketDataButtons;
+
+  // ─── User context (mock) — selected team + view mode ───
+  // In a real deployment these come from a logged-in user session. Here we
+  // expose them as inline controls in the header so the demo can swap them.
+  window.V2_CTX = window.V2_CTX || { team:'All', viewMode:'syndication' };
+
+  // Populate the Active Deal dropdown with the v2 presets, filtered by team.
+  function populateV2Dropdown(){
+    const sel = document.getElementById('sel-instrument');
+    if(!sel) return;
+    const team = (window.V2_CTX && V2_CTX.team) || 'All';
+    const filtered = PRESETS.filter(p => team === 'All' || p.team === team);
+    const groupOrder = ['Simple','Simple+','Medium','Complex'];
+    const groups = {};
+    filtered.forEach(p => { (groups[p.tag] = groups[p.tag] || []).push(p); });
+    let html = '<option value="">— pick a scenario —</option>';
+    for(const g of groupOrder){
+      if(!groups[g]) continue;
+      html += '<optgroup label="' + g + ' scenarios · ' + groups[g].length + '">';
+      for(const p of groups[g]){
+        const stars = '★'.repeat(p.complexity) + '☆'.repeat(5 - p.complexity);
+        const shareTag = (p.participationPct && p.participationPct < 100) ? ' · ' + p.participationPct + '% share' : '';
+        html += '<option value="v2:' + p.key + '">' + stars + ' · ' + p.label + shareTag + '</option>';
+      }
+      html += '</optgroup>';
+    }
+    if(filtered.length === 0){
+      html = '<option value="">— No deals visible for ' + team + ' team —</option>';
+    }
+    sel.innerHTML = html;
+  }
+
+  // Mount inline Team + View controls into the header next to the Active Deal dropdown
+  function mountV2HeaderControls(){
+    const sel = document.getElementById('sel-instrument');
+    if(!sel) return;
+    if(document.getElementById('v2-team-select')) return;
+    const teams = ['All','Corporate','Leveraged Finance','Project Finance','Real Estate','Sustainable Finance'];
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex; gap:6px; align-items:center; margin-right:8px; font-size:11px;';
+    wrap.innerHTML =
+      '<label style="font-size:10px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:#6b7280;">Team</label>' +
+      '<select id="v2-team-select" style="border:1px solid #d1d5db; border-radius:6px; padding:4px 8px; background:white; font-size:12px;">' +
+        teams.map(t => '<option value="' + t + '" ' + (V2_CTX.team===t?'selected':'') + '>' + t + '</option>').join('') +
+      '</select>' +
+      '<label style="font-size:10px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:#6b7280; margin-left:8px;">View</label>' +
+      '<select id="v2-view-select" style="border:1px solid #d1d5db; border-radius:6px; padding:4px 8px; background:white; font-size:12px;">' +
+        '<option value="syndication" ' + (V2_CTX.viewMode==='syndication'?'selected':'') + '>Total Syndication</option>' +
+        '<option value="participation" ' + (V2_CTX.viewMode==='participation'?'selected':'') + '>Your Participation</option>' +
+      '</select>';
+    // The label is now inside a wrapper div alongside the select; insert the
+    // Team/View controls BEFORE that wrapper so they sit to the left of the
+    // Active Deal label+dropdown as a single visual unit.
+    const selGroup = sel.closest('.flex-nowrap') || sel.parentNode;
+    if(selGroup && selGroup.parentNode) selGroup.parentNode.insertBefore(wrap, selGroup);
+    document.getElementById('v2-team-select').addEventListener('change', e => {
+      V2_CTX.team = e.target.value;
+      populateV2Dropdown();
+      if(typeof toast === 'function') toast('Showing deals for ' + V2_CTX.team + ' team');
+    });
+    document.getElementById('v2-view-select').addEventListener('change', e => {
+      V2_CTX.viewMode = e.target.value;
+      // Reload the currently-selected preset so the participation scaling
+      // applies (or unwinds) to face values, drawdowns, fees, JEs.
+      const sel = document.getElementById('sel-instrument');
+      const currentVal = sel && sel.value;
+      if(currentVal && currentVal.startsWith('v2:')){
+        const key = currentVal.slice(3);
+        const currentTab = document.querySelector('.stage-tab-content.tab-visible')?.id || 'builder';
+        loadPresetByKey(key);
+        if(typeof registerBuilderInstrument === 'function') registerBuilderInstrument();
+        setTimeout(() => { try { if(typeof runAccounting === 'function') runAccounting(); } catch(_){} }, 50);
+        // Restore the user's tab
+        if(currentTab !== document.querySelector('.stage-tab-content.tab-visible')?.id){
+          document.querySelector('.tab-btn[data-tab="' + currentTab + '"]')?.click();
+        }
+      }
+      if(typeof toast === 'function') toast('View: ' + (V2_CTX.viewMode==='syndication' ? 'Total Syndication' : 'Your Participation'));
+    });
+  }
+
   function loadPreset(){
+    // Default preset = Project Aurora (multi-tranche)
+    loadPresetByKey('aurora-multitranche');
+  }
+
+  // Legacy form-population body kept below for compatibility
+  function _legacyLoadPreset(){
     B.deal = { name:'Project Aurora', dealId:'AUR-2026-001', counterparty:'Aurora Holdings plc',
-               le:'NWF EMEA Credit', currency:'USD', framework:'IFRS',
+               le:'Leveraged Finance', currency:'USD', framework:'IFRS',
                settle:'2026-09-01', maturity:'2031-09-01' };
     B.facility = { commitment: 25_000_000, availEnd:'2028-09-01', dayBasis:'ACT/360',
                    holiday:'usFederal', repayment:'AtMaturity', type:'termLoan' };
@@ -9218,18 +11086,23 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
       if(status){ status.className = 'chip gray self-center'; status.textContent = 'No cashflows generated yet'; }
       return;
     }
-    const totalInt  = rows.reduce((s, r) => s + r.interest, 0);
-    const totalFee  = rows.reduce((s, r) => s + r.fees, 0);
-    const peakBal   = Math.max(...rows.map(r => r.balance));
+    const totalInt   = rows.reduce((s, r) => s + r.interest, 0);
+    const totalFee   = rows.reduce((s, r) => s + r.fees, 0);
+    const totalDraws = rows.reduce((s, r) => s + (r.drawdowns||0), 0);
+    const totalReps  = rows.reduce((s, r) => s + (r.repayments||0), 0);
+    const netCash    = rows.reduce((s, r) => s + (r.netCash||0), 0);
+    const peakBal    = Math.max(...rows.map(r => r.balance));
     if(chip){ chip.className = 'chip green text-[10px]'; chip.textContent = rows.length + ' periods'; }
     if(status){ status.className = 'chip green self-center'; status.textContent = 'Generated · ' + rows.length + ' periods'; }
     if(kpis){
       kpis.innerHTML = [
-        { label:'Peak Balance', value: fmtCcy(peakBal) },
-        { label:'Total Interest', value: fmtCcy(totalInt) },
-        { label:'Total Fees', value: fmtCcy(totalFee) },
-        { label:'Total Cashflows', value: fmtCcy(totalInt + totalFee) }
-      ].map(k => `<div class="bg-white border border-emerald-200 rounded px-2 py-1"><div class="text-[9px] uppercase text-gray-500">${k.label}</div><div class="font-bold text-emerald-900">${k.value}</div></div>`).join('');
+        { label:'Total Drawdowns', value: fmtCcy(totalDraws), color:'text-rose-700' },
+        { label:'Peak Balance',    value: fmtCcy(peakBal) },
+        { label:'Total Interest',  value: fmtCcy(totalInt), color:'text-indigo-700' },
+        { label:'Total Fees',      value: fmtCcy(totalFee), color:'text-amber-700' },
+        { label:'Paydowns',      value: fmtCcy(totalReps), color:'text-emerald-700' },
+        { label:'Net Cash to Lender', value: fmtCcy(netCash), color:'text-emerald-900' }
+      ].map(k => `<div class="bg-white border border-emerald-200 rounded px-2 py-1"><div class="text-[9px] uppercase text-gray-500">${k.label}</div><div class="font-bold ${k.color || 'text-emerald-900'}">${k.value}</div></div>`).join('');
     }
     const html = `<table class="w-full text-[11px]">
       <thead class="sticky top-0 bg-emerald-100">
@@ -9237,9 +11110,11 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
           <th class="text-left px-2 py-1">Period Start</th>
           <th class="text-left px-2 py-1">Period End</th>
           <th class="text-right px-2 py-1">Balance</th>
+          <th class="text-right px-2 py-1" title="Cash disbursed to borrower">Drawdowns</th>
           <th class="text-right px-2 py-1">Interest</th>
           <th class="text-right px-2 py-1">Fees</th>
-          <th class="text-right px-2 py-1">Total Cash</th>
+          <th class="text-right px-2 py-1" title="Principal paid down">Paydowns</th>
+          <th class="text-right px-2 py-1" title="Interest + Fees + Paydowns − Drawdowns">Net Cash</th>
         </tr>
       </thead>
       <tbody>
@@ -9248,12 +11123,14 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
           <td class="px-2 py-1">${r.start}</td>
           <td class="px-2 py-1">${r.end}</td>
           <td class="px-2 py-1 text-right">${fmtCcy(r.balance)}</td>
+          <td class="px-2 py-1 text-right ${r.drawdowns>0?'text-rose-700 font-semibold':'text-gray-300'}">${r.drawdowns>0 ? '−'+fmtCcy(r.drawdowns) : '—'}</td>
           <td class="px-2 py-1 text-right text-indigo-700 font-semibold">${fmtCcy(r.interest)}</td>
           <td class="px-2 py-1 text-right text-amber-700 font-semibold">${fmtCcy(r.fees)}</td>
-          <td class="px-2 py-1 text-right font-bold">${fmtCcy(r.total)}</td>
+          <td class="px-2 py-1 text-right ${r.repayments>0?'text-emerald-700 font-semibold':'text-gray-300'}">${r.repayments>0 ? fmtCcy(r.repayments) : '—'}</td>
+          <td class="px-2 py-1 text-right font-bold ${r.netCash<0?'text-rose-900':'text-emerald-900'}">${r.netCash<0?'−'+fmtCcy(-r.netCash):fmtCcy(r.netCash)}</td>
         </tr>
         <tr class="hidden" data-s1-detail="${i}">
-          <td colspan="6" class="bg-gray-50 px-3 py-2">${renderRowDetail(r)}</td>
+          <td colspan="8" class="bg-gray-50 px-3 py-2">${renderRowDetail(r)}</td>
         </tr>
       `).join('')}
       </tbody>
@@ -9295,6 +11172,41 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
     wireStage1Buttons();
     renderTranches(); renderFees(); updateBuilderStatus();
     renderStage1Cashflows([]);
+    // ─── v2: replace dropdown with v2 presets + mount Team/View controls ───
+    mountV2HeaderControls();
+    populateV2Dropdown();
+    wireMarketDataButtons();
+    wireISINModalButtons();
+    renderMarketData();
+    const sel = document.getElementById('sel-instrument');
+    if(sel){
+      sel.addEventListener('change', () => {
+        const val = sel.value;
+        if(!val) return;
+        // v2 preset key (e.g. 'v2:aurora-multitranche')
+        if(val.startsWith('v2:')){
+          const key = val.slice(3);
+          // Capture which stage the user is currently on so we DON'T move them
+          const currentTab = document.querySelector('.stage-tab-content.tab-visible')?.id || 'builder';
+          const preset = loadPresetByKey(key);
+          if(!preset) return;
+          // Register the built instrument so the rest of the pipeline picks it up
+          if(typeof registerBuilderInstrument === 'function') registerBuilderInstrument();
+          // Auto-run accounting in the background so Stage 2 is ready when the
+          // user navigates there manually
+          setTimeout(() => {
+            try { if(typeof runAccounting === 'function') runAccounting(); }
+            catch(err){ console.error('Auto-run on preset switch failed:', err); }
+          }, 100);
+          // Stay on whatever stage the user was on before the switch.
+          // registerBuilderInstrument may have called setStage('stage-2','active')
+          // but it shouldn't have switched the visible tab. Confirm:
+          if(currentTab !== document.querySelector('.stage-tab-content.tab-visible')?.id){
+            document.querySelector('.tab-btn[data-tab="' + currentTab + '"]')?.click();
+          }
+        }
+      });
+    }
   }
 
   if(document.readyState === 'loading'){
