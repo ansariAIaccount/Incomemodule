@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Loan Module v2 · Builder → PCS → Cash Movements</title>
+<title>PCS Loan Module</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined" rel="stylesheet"/>
@@ -285,28 +285,97 @@
 </head>
 <body class="min-h-screen">
 
-<!-- ===== Header ===== -->
-<header class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
-  <div class="max-w-[1400px] mx-auto px-6 py-3 flex items-center gap-4 flex-wrap">
+<!-- ===== Header — sticky at top of viewport ===== -->
+<header class="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-md" style="backdrop-filter:saturate(180%) blur(8px); background:rgba(255,255,255,0.96);">
+  <!-- Row 1: branding + session controls -->
+  <div class="max-w-[1400px] mx-auto px-6 pt-3 pb-2 flex items-center gap-4 flex-wrap">
     <div class="flex items-center gap-3">
+      <!-- FIS placeholder mark — black panel, gradient-green dot sequence
+           above a lowercase 'fis' wordmark. Recreated inline so it renders
+           offline; swap in the official brand asset when available. -->
+      <a href="#" title="FIS" aria-label="FIS"
+         style="display:inline-flex; align-items:center; text-decoration:none; flex-shrink:0;">
+        <svg width="76" height="40" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="0" y="0" width="200" height="100" rx="8" fill="#000000"/>
+          <!-- 5 dots above, getting brighter green left → right -->
+          <circle cx="74"  cy="28" r="4" fill="#0a3d1c"/>
+          <circle cx="90"  cy="28" r="4" fill="#1d6e2c"/>
+          <circle cx="106" cy="28" r="4" fill="#2fa040"/>
+          <circle cx="122" cy="28" r="4" fill="#43d052"/>
+          <circle cx="138" cy="28" r="4" fill="#4cf76c"/>
+          <!-- fis wordmark -->
+          <text x="100" y="84" text-anchor="middle"
+                font-family="'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif"
+                font-size="56" font-weight="900" fill="#4cd964"
+                letter-spacing="-1">fis</text>
+        </svg>
+      </a>
+      <div style="border-left:1px solid #d1d5db; height:34px; margin:0 2px;"></div>
       <span class="material-icons-outlined text-[28px] text-brand-600" style="color:var(--brand-600)">hub</span>
       <div>
-        <h1 class="text-lg font-bold leading-tight">Loan Module v2 · Builder Edition <span class="chip blue text-[10px] align-middle">v2</span></h1>
+        <h1 class="text-lg font-bold leading-tight">PCS Loan Module</h1>
         <div class="text-[11px] text-gray-500">Loan Builder → Cashflow Generation → Accounting Engine → Cash Movements (GL) → Reconciliation</div>
       </div>
     </div>
-    <div class="ml-auto flex items-center gap-3 flex-wrap">
+    <div class="ml-auto flex items-center gap-2 flex-wrap">
+      <span id="active-deal-chip" class="chip blue" style="font-size:11px;" title="Currently-loaded deal">No deal loaded</span>
       <button id="btn-session-save" class="mat-btn outline text-xs" title="Save current pipeline state — usable from any stage">
         <span class="material-icons-outlined text-[16px]">save</span>Save Session
       </button>
       <button id="btn-session-load" class="mat-btn outline text-xs" title="Load a previously-saved session">
         <span class="material-icons-outlined text-[16px]">folder_open</span>Load Session
       </button>
-      <div class="flex items-center gap-2 flex-nowrap whitespace-nowrap">
-        <label for="sel-instrument" class="text-[11px] text-gray-500 font-semibold uppercase tracking-wider leading-none">Active Deal</label>
-        <select id="sel-instrument" class="border border-gray-300 rounded-md px-2 py-1.5 text-sm" style="min-width:280px"></select>
-      </div>
     </div>
+  </div>
+  <!-- Row 2: THREE primary entry buttons — full-bleed gradient cards inside the
+       sticky header so the user can pivot at any stage. Click → routes to the
+       respective flow (manual builder / ISIN modal / active deal picker). -->
+  <div class="max-w-[1400px] mx-auto px-6 pb-3">
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+      <button id="btn-header-manual" type="button"
+              onclick="window.handleHeaderManualClick && window.handleHeaderManualClick()"
+              style="background:white; border:2px solid #e5e7eb; border-radius:12px; padding:10px 14px; text-align:left; cursor:pointer; transition:all 0.18s; display:flex; gap:12px; align-items:center;"
+              onmouseover="this.style.borderColor='#21295C'; this.style.boxShadow='0 6px 18px rgba(33,41,92,0.12)'; this.style.transform='translateY(-1px)';"
+              onmouseout="this.style.borderColor='#e5e7eb'; this.style.boxShadow=''; this.style.transform='';">
+        <div style="background:linear-gradient(135deg, #eef2ff 0%, #c7d2fe 100%); color:#4338ca; width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <span class="material-icons-outlined" style="font-size:22px;">edit_note</span>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:700; color:#111827; letter-spacing:-0.2px;">Manually Build New Loan</div>
+          <div style="font-size:11px; color:#6b7280; line-height:1.3;">Define deal / facility / tranches / fees from scratch</div>
+        </div>
+      </button>
+      <button id="btn-header-isin" type="button"
+              onclick="window.handleHeaderIsinClick && window.handleHeaderIsinClick()"
+              style="background:linear-gradient(135deg, #ecfeff 0%, #cffafe 50%, #a5f3fc 100%); border:2px solid #67e8f9; border-radius:12px; padding:10px 14px; text-align:left; cursor:pointer; transition:all 0.18s; display:flex; gap:12px; align-items:center;"
+              onmouseover="this.style.borderColor='#0891b2'; this.style.boxShadow='0 6px 18px rgba(8,145,178,0.18)'; this.style.transform='translateY(-1px)';"
+              onmouseout="this.style.borderColor='#67e8f9'; this.style.boxShadow=''; this.style.transform='';">
+        <div style="background:linear-gradient(135deg, #0891b2 0%, #06b6d4 100%); color:white; width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 3px 10px rgba(8,145,178,0.35);">
+          <span class="material-icons-outlined" style="font-size:22px;">database</span>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:700; color:#0e7490; letter-spacing:-0.2px;">Load from Security Master</div>
+          <div style="font-size:11px; color:#155e75; line-height:1.3;">ISIN search · Markit / IHS / LSTA pricing</div>
+        </div>
+      </button>
+      <button id="btn-header-active-deal" type="button"
+              onclick="window.handleHeaderActiveDealClick && window.handleHeaderActiveDealClick()"
+              style="background:linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%); border:2px solid #6ee7b7; border-radius:12px; padding:10px 14px; text-align:left; cursor:pointer; transition:all 0.18s; display:flex; gap:12px; align-items:center;"
+              onmouseover="this.style.borderColor='#059669'; this.style.boxShadow='0 6px 18px rgba(5,150,105,0.18)'; this.style.transform='translateY(-1px)';"
+              onmouseout="this.style.borderColor='#6ee7b7'; this.style.boxShadow=''; this.style.transform='';">
+        <div style="background:linear-gradient(135deg, #059669 0%, #10b981 100%); color:white; width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 3px 10px rgba(5,150,105,0.35);">
+          <span class="material-icons-outlined" style="font-size:22px;">folder_open</span>
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:700; color:#065f46; letter-spacing:-0.2px;">Load Active Deal</div>
+          <div style="font-size:11px; color:#047857; line-height:1.3;">Pick from preset library — simple → complex</div>
+        </div>
+      </button>
+    </div>
+    <!-- Hidden compatibility select — populateV2Dropdown / V2_CTX team filter /
+         change-handler all keep reading this; the Active Deal modal writes
+         sel.value + dispatches a change event when a card is clicked. -->
+    <select id="sel-instrument" style="display:none;"></select>
   </div>
   <div class="max-w-[1400px] mx-auto px-6 pb-3 text-[11px] text-gray-500 leading-snug">
     Integration architecture: the Loan Builder is the self-contained system of record for deal capture; Cashflow Generation computes transparent forward cashflows; the Accounting Engine is the IFRS-aligned accounting sub-ledger; the Cash Movements system is the downstream General Ledger. This module orchestrates the data flow between them with full reconciliation.
@@ -419,7 +488,23 @@
     .hero-stat { background: rgba(255,255,255,0.08); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 8px 14px; min-width: 100px; }
     .hero-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; opacity: 0.65; }
     .hero-stat-val { font-size: 16px; font-weight: 700; margin-top: 2px; letter-spacing: -0.3px; }
-    .builder-section { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 0; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); overflow: hidden; transition: box-shadow 0.2s; }
+    .builder-section { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 0; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); overflow: hidden; transition: box-shadow 0.2s; scroll-margin-top: 180px; }
+  /* Stage 2 → Stage 1 manual sync button.
+     Default state = neutral outline. "needs sync" state = amber background +
+     pulsing shadow ring to grab attention without being annoying. */
+  #btn-sync-cashflow.sync-cashflow-needs {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+    color: white !important;
+    border-color: #d97706 !important;
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55);
+    animation: syncPulse 1.6s ease-in-out infinite;
+  }
+  #btn-sync-cashflow.sync-cashflow-needs .material-icons-outlined { color: white; }
+  @keyframes syncPulse {
+    0%   { box-shadow: 0 0 0 0  rgba(245,158,11,0.55); }
+    70%  { box-shadow: 0 0 0 8px rgba(245,158,11,0); }
+    100% { box-shadow: 0 0 0 0  rgba(245,158,11,0); }
+  }
     .builder-section:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
     .builder-section > summary { list-style: none; padding: 14px 18px; cursor: pointer; display: flex; align-items: center; gap: 12px; user-select: none; transition: background 0.15s; }
     .builder-section > summary::-webkit-details-marker { display: none; }
@@ -445,27 +530,13 @@
     .icon-slate { background: linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 100%); color: #334155; }
   </style>
 
-  <!-- ═══════════════════ ENTRY CHOICE — Manual vs ISIN ═══════════════════ -->
-  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:18px;">
-    <button id="btn-mode-manual" style="background:white; border:2px solid #e5e7eb; border-radius:14px; padding:22px 26px; text-align:left; cursor:pointer; transition:all 0.2s; display:flex; gap:18px; align-items:flex-start;" onmouseover="this.style.borderColor='#21295C'; this.style.boxShadow='0 8px 24px rgba(33,41,92,0.12)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.borderColor='#e5e7eb'; this.style.boxShadow=''; this.style.transform='';">
-      <div style="background:linear-gradient(135deg, #eef2ff 0%, #c7d2fe 100%); color:#4338ca; width:54px; height:54px; border-radius:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-        <span class="material-icons-outlined" style="font-size:28px;">edit_note</span>
-      </div>
-      <div style="flex:1;">
-        <div style="font-size:16px; font-weight:700; color:#111827; letter-spacing:-0.3px; margin-bottom:4px;">Manually Build Loan</div>
-        <div style="font-size:12px; color:#6b7280; line-height:1.5;">Define deal, facility, tranches, interest components and fees from scratch using the form below. Best for new originations or custom structures.</div>
-      </div>
-    </button>
-    <button id="btn-mode-isin" style="background:linear-gradient(135deg, #ecfeff 0%, #cffafe 50%, #a5f3fc 100%); border:2px solid #67e8f9; border-radius:14px; padding:22px 26px; text-align:left; cursor:pointer; transition:all 0.2s; display:flex; gap:18px; align-items:flex-start;" onmouseover="this.style.borderColor='#0891b2'; this.style.boxShadow='0 8px 24px rgba(8,145,178,0.18)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.borderColor='#67e8f9'; this.style.boxShadow=''; this.style.transform='';">
-      <div style="background:linear-gradient(135deg, #0891b2 0%, #06b6d4 100%); color:white; width:54px; height:54px; border-radius:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 4px 14px rgba(8,145,178,0.35);">
-        <span class="material-icons-outlined" style="font-size:28px;">database</span>
-      </div>
-      <div style="flex:1;">
-        <div style="font-size:16px; font-weight:700; color:#0e7490; letter-spacing:-0.3px; margin-bottom:4px;">Load from Security Master (ISIN)</div>
-        <div style="font-size:12px; color:#155e75; line-height:1.5;">Search and select an ISIN from the leveraged loan universe. Deal, facility, tranches, pricing — all pre-populated from the security master record.</div>
-      </div>
-    </button>
-  </div>
+  <!-- Entry choice cards moved to the global header (Manual / Security Master /
+       Active Deal). The old Stage 0 cards used to live here; they are now the
+       three primary buttons next to the active-deal chip in the page header.
+       Hidden helper buttons retained so legacy event handlers that reference
+       btn-mode-manual / btn-mode-isin (e.g. wireISINModalButtons) still work. -->
+  <button id="btn-mode-manual" style="display:none;" aria-hidden="true"></button>
+  <button id="btn-mode-isin"   style="display:none;" aria-hidden="true"></button>
 
   <!-- ═══════════════════ ISIN SELECTION MODAL ═══════════════════ -->
   <div id="isin-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:10000; align-items:flex-start; justify-content:center; padding:60px 20px; backdrop-filter:blur(4px);">
@@ -707,10 +778,17 @@
     <span class="stage-num">2</span>
     <div class="flex-1">
       <h2 class="text-base font-bold flex items-center gap-2"><span class="material-icons-outlined text-[20px]" style="color:var(--brand-600)">account_balance</span><span data-fw-stage-header>Accounting Engine — IFRS-Aligned</span></h2>
-      <p data-fw-stage-desc class="text-[12px] text-gray-600 mt-1">Translates the generated cashflows into IFRS-compliant accounting: classification, initial recognition, EIR, fair value, IFRS 15 fees, ECL staging, modifications, hedge accounting, FX. Outputs balanced double-entry journals on the Investran chart and a DIU-ready batch.</p>
+      <p data-fw-stage-desc class="text-[12px] text-gray-600 mt-1" style="display:none;"></p>
     </div>
     <div class="flex flex-wrap gap-2 items-center">
       <button id="btn-acct-run" class="mat-btn primary" disabled><span class="material-icons-outlined text-[16px]">play_arrow</span>Run Accounting</button>
+      <!-- Manual sync — highlights pulsing-amber when a Stage 2 transtype
+           (mandatory/voluntary prepay, loan sale, recovery, D4E, participation)
+           has been added/removed and Stage 1 needs to be re-rendered. -->
+      <button id="btn-sync-cashflow" class="mat-btn outline" onclick="window.syncCashflowsFromStage2 && window.syncCashflowsFromStage2()"
+              title="Stage 1 cashflows are already in sync with Stage 2">
+        <span class="material-icons-outlined text-[16px]">sync_alt</span>Sync to Cashflow
+      </button>
       <button id="btn-diu-template" class="mat-btn outline"><span class="material-icons-outlined text-[16px]">download</span>DIU Template (blank)</button>
       <button id="btn-diu-filled" class="mat-btn outline" disabled title="Download Investran DIU workbook with two tabs: GL (journal entries) + PortfolioPosition (security master)"><span class="material-icons-outlined text-[16px]">file_download</span>Filled DIU XLSX</button>
       <div class="flex items-center gap-1 border border-gray-300 rounded px-2 py-1 bg-white" title="Date this JE batch is posted to the GL. Leave blank for AUTO mode (glDate = effectiveDate per row). Set a date to override every row to that close date.">
@@ -2161,6 +2239,67 @@
   </div>
 </div>
 
+<!-- ─── Journal Entry detail modal — opens when the user clicks the green
+     "Ready · X JE rows" chip in Stage 2. Renders every JE row in detail,
+     grouped by jeIndex, with DR/CR totals and a balance check per JE. ─── -->
+<div id="je-detail-modal" class="json-modal" style="display:none">
+  <div class="json-modal-bd" data-close-je="1"></div>
+  <div class="json-modal-pn" style="width:min(1180px,96vw); max-height:90vh;">
+    <div class="json-modal-h">
+      <div>
+        <div class="font-semibold text-[14px] flex items-center gap-2">
+          <span class="material-icons-outlined text-[18px]" style="color:#16a34a">receipt_long</span>
+          Journal Entry Detail
+        </div>
+        <div id="je-detail-sub" class="text-[11px] text-gray-500">—</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-je-detail-copy" class="mat-btn outline !py-1 !px-2 text-[11px]" title="Copy JE rows as TSV to clipboard">
+          <span class="material-icons-outlined text-[14px]">content_copy</span>Copy TSV
+        </button>
+        <button class="mat-btn outline !py-1 !px-2" data-close-je="1" title="Close">
+          <span class="material-icons-outlined text-[16px]">close</span>
+        </button>
+      </div>
+    </div>
+    <div class="json-modal-b" id="je-detail-body" style="font-size:12px;"></div>
+    <div class="json-modal-f">
+      <span id="je-detail-totals" class="text-[11px] text-gray-600 mr-auto">—</span>
+      <button class="mat-btn outline" data-close-je="1">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Active Deal picker modal — opens from the header "Load Active Deal"
+     button. Renders every preset as a card with framework chip, team,
+     complexity (★), tag, and a Load button. Replaces the inline dropdown. ─── -->
+<div id="active-deal-modal" class="json-modal" style="display:none">
+  <div class="json-modal-bd" data-close-active-deal="1"></div>
+  <div class="json-modal-pn" style="width:min(1080px,96vw); max-height:90vh;">
+    <div class="json-modal-h">
+      <div>
+        <div class="font-semibold text-[14px] flex items-center gap-2">
+          <span class="material-icons-outlined text-[18px]" style="color:#16a34a">folder_open</span>
+          Select an Active Deal
+        </div>
+        <div class="text-[11px] text-gray-500">Preset library — pick a scenario to load into the Builder &amp; downstream pipeline.</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <input id="active-deal-search" type="text" placeholder="Search by name, framework, team…"
+               class="border border-gray-300 rounded px-2 py-1 text-[12px]" style="min-width:240px"/>
+        <button class="mat-btn outline !py-1 !px-2" data-close-active-deal="1" title="Close">
+          <span class="material-icons-outlined text-[16px]">close</span>
+        </button>
+      </div>
+    </div>
+    <div class="json-modal-b" id="active-deal-body" style="font-size:12px;"></div>
+    <div class="json-modal-f">
+      <span id="active-deal-count" class="text-[11px] text-gray-600 mr-auto">—</span>
+      <button class="mat-btn outline" data-close-active-deal="1">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== Engine + Pipeline scripts (loaded from external files generated below) ===== -->
 <script src="loan-module-engine.js"></script>
 <script src="loan-module-instruments.js"></script>
@@ -2294,6 +2433,7 @@ const M = {
   schedule: [],                 // Engine-built daily schedule
   summary: null,                // Engine-summarised period totals
   acctJournals: [],             // Generated DIU JE rows (PCS accounting output)
+  stage1SyncNeeded: false,      // Stage 2 has unsynced transtype changes — drives btn-sync-cashflow pulse
   workdayBatch: null,           // The DIU batch we sent to the Cash Movements GL (with externalKey)
   workdayActuals: null,         // Actual cash payload received from the Cash Movements GL
   reconciliation: null,         // Per-line reconciliation results
@@ -2379,6 +2519,8 @@ function resetPipeline(){
   $('portf-status').className = 'chip gray self-center'; $('portf-status').textContent = 'Not loaded';
   $('portf-summary').classList.add('hidden'); $('portf-details').classList.add('hidden');
   $('btn-acct-run').disabled = true; $('acct-status').className = 'chip gray self-center'; $('acct-status').textContent = 'Awaiting Stage 1';
+  // Tear down the clickable state — no JEs to drill into when we reset
+  $('acct-status').style.cursor = ''; $('acct-status').onclick = null; $('acct-status').title = '';
   $('acct-kpis').classList.add('hidden'); $('acct-journal-section').classList.add('hidden');
   $('acct-schedule-section')?.classList.add('hidden');
   $('acct-fees-section')?.classList.add('hidden');
@@ -2745,7 +2887,7 @@ function applyPortFExcel(file){
         exportedAt: new Date().toISOString(),
         instrument: {
           id:           inst.id,
-          legalEntity:  pick('legalEntity',  parsed.legalEntity,    inst.legalEntity,    'PortF Excel Import'),
+          legalEntity:  pick('legalEntity',  parsed.legalEntity,    inst.legalEntity,    'Cashflow Excel Import'),
           leid:         pick('leid',         parsed.leid,           inst.leid,           0),
           deal:         pick('deal',         parsed.company,        inst.deal,           parsed.company),
           position:     pick('position',     parsed.position,       inst.position,       parsed.company + ' (Excel imported)'),
@@ -2813,7 +2955,7 @@ function buildSyntheticInstrumentFromExcel(parsed){
   const couponRate = interestFee ? interestFee.rate : 0;
   return {
     id,
-    legalEntity: 'PortF Excel Import',
+    legalEntity: 'Cashflow Excel Import',
     leid: 0,
     deal: parsed.company,
     position: parsed.company + ' (Excel imported)',
@@ -2911,7 +3053,7 @@ function applyPortFPayload(payload){
     { label:'Total Drawdowns',      value: fmtMoney(M.summary.totalDraws, ccy), sub: 'Settled + forecast' },
     { label:'Total Interest (life)',value: fmtMoney(M.summary.totalCashAccrual, ccy) },
     { label:'Total Fees (life)',    value: fmtMoney(M.summary.totalFees, ccy) },
-    { label:'Cashflow Rows',        value: payload.accrualSchedule.length.toLocaleString(), sub: 'periods exported by PortF' }
+    { label:'Cashflow Rows',        value: payload.accrualSchedule.length.toLocaleString(), sub: 'periods generated by Loan Builder' }
   ];
   $('portf-summary').innerHTML = kpis.map(k =>
     `<div class="kpi"><div class="label">${k.label}</div><div class="value text-[14px]">${k.value}</div><div class="sub">${k.sub||''}</div></div>`
@@ -2946,7 +3088,7 @@ function applyPortFPayload(payload){
   $('btn-acct-run').disabled = false;
   $('acct-status').className = 'chip blue self-center';
   $('acct-status').textContent = 'Ready to run';
-  toast('Loaded PortF payload — ' + payload.accrualSchedule.length + ' periods');
+  toast('Loaded cashflow payload — ' + payload.accrualSchedule.length + ' periods');
 }
 
 // Render Phase 1 "Setup Info" panel — every metadata key/value pair the parser
@@ -3276,7 +3418,7 @@ function buildCapabilityCards(inst){
 
   // Card 1 — deal-record sourced (framework-neutral)
   const card1 = { icon:'rule', title:'Accounting determined from deal record',
-      desc:'Classification, EIR, fees and treatment all derive from the PortF instrument JSON — no manual configuration required for each booking.',
+      desc:'Classification, EIR, fees and treatment all derive from the Loan Builder instrument — no manual configuration required for each booking.',
       status: inst ? 'green' : 'gray',
       detail: inst ? `Active deal: ${inst.deal} · ${classDisplay} · ${ccy} · ${fw.label}` : '—' };
 
@@ -3397,7 +3539,7 @@ function buildCapabilityCards(inst){
 
   // Card 10 — Journal export (framework-neutral)
   const card10 = { icon:'cloud_upload', title:'Journal export to Cash Movements GL + reconciliation',
-    desc:'Balanced double-entry batch pushed via DIU to the Cash Movements GL. Actual cash returned from the GL is reconciled back to PortF source data (Stage 4-5).',
+    desc:'Balanced double-entry batch pushed via DIU to the Cash Movements GL. Actual cash returned from the GL is reconciled back to Loan Builder source data (Stage 4-5).',
     status: 'green',
     detail: 'DIU batch with deterministic externalKey · idempotent retries' };
 
@@ -3863,11 +4005,9 @@ function syncFrameworkChip(inst){
   const stageHeader = document.querySelector('[data-fw-stage-header]');
   if(stageHeader) stageHeader.textContent =
     'Accounting Engine — ' + fw.label + '-Aligned';
-  const stageDesc = document.querySelector('[data-fw-stage-desc]');
-  if(stageDesc) stageDesc.textContent =
-    'Translates PortF cashflows into ' + fw.label + '-compliant accounting: classification, initial recognition, '
-    + fw.eir.name + ', fair value, fee recognition, ' + fw.ecl.name + ', modifications, hedge accounting, FX. '
-    + 'Outputs balanced double-entry journals on the Investran chart and a DIU-ready batch.';
+  // Stage 2 long description removed at user request — kept the element in
+  // the DOM for compatibility but it's hidden via display:none and not
+  // populated. The framework label still shows in the stage header chip.
 
   // Treatment panel labels
   const classLabel = document.querySelector('[data-fw-class-label]');
@@ -5037,9 +5177,119 @@ function renderTier1StatusChips(inst){
     'principalSchedule');
 }
 
+// ============================================================
+// STAGE 2 → STAGE 1 manual sync helpers
+// ============================================================
+// Determines whether the instrument has any Group A (cash-bearing) or Group C
+// (non-cash but balance-affecting) Stage 2 transtypes that would change the
+// Stage 1 cashflow view. If yes, the "Sync to Cashflow" button is highlighted
+// amber-pulsing in the Stage 2 toolbar. The user must click it to push the
+// changes to Stage 1.
+function stage1SyncRelevant(inst){
+  if(!inst || !Array.isArray(inst.principalSchedule)) return false;
+  const types = new Set(['prepayment','mandatoryPrepayment','loanSale','recovery',
+                         'debtEquitySwap','participation']);
+  return inst.principalSchedule.some(e => types.has(e.type));
+}
+
+// Style the btn-sync-cashflow button based on M.stage1SyncNeeded.
+function refreshStage1SyncButton(){
+  const btn = document.getElementById('btn-sync-cashflow');
+  if(!btn) return;
+  const need = !!M.stage1SyncNeeded;
+  btn.classList.toggle('sync-cashflow-needs', need);
+  if(need){
+    btn.title = 'Stage 1 cashflows are out of sync with Stage 2 transtypes — click to update';
+    btn.disabled = false;
+  } else {
+    btn.title = 'Stage 1 cashflows are already in sync with Stage 2';
+  }
+}
+
+// User clicked Sync to Cashflow → push transtypes into Stage 1, clear flag,
+// switch to Stage 1 tab so user sees the result. The recompute fires BOTH
+// before AND after the tab switch — the second pass guarantees the cashflow
+// table re-paints even if the first render landed while Stage 1 was still
+// hidden (which could leave the user looking at stale rows).
+function syncCashflowsFromStage2(){
+  if(typeof window.recomputeStage1 !== 'function'){
+    if(typeof toast === 'function') toast('Cashflow recompute not available');
+    return;
+  }
+  // First pass — refresh data while Stage 2 is still active
+  try { window.recomputeStage1(); }
+  catch(err){
+    console.error('Sync recompute failed:', err);
+    if(typeof toast === 'function') toast('Sync failed: ' + err.message);
+    return;
+  }
+  M.stage1SyncNeeded = false;
+  refreshStage1SyncButton();
+  // Switch to Stage 1
+  document.querySelector('.tab-btn[data-tab="stage-1"]')?.click();
+  // Second pass — after the tab is visible, re-render so the user sees the
+  // updated cashflow table immediately. Wrap in a short setTimeout so the
+  // visibility flip lands first.
+  setTimeout(() => {
+    try { window.recomputeStage1(); } catch(_){}
+    if(typeof toast === 'function') toast('Stage 1 cashflows updated from Stage 2 transtypes');
+  }, 80);
+}
+
+window.refreshStage1SyncButton = refreshStage1SyncButton;
+window.syncCashflowsFromStage2  = syncCashflowsFromStage2;
+window.stage1SyncRelevant       = stage1SyncRelevant;
+
+// Re-paint Stage 2 (status chip, KPIs, journal section, sync button, all
+// Treatment panel event lists) from M / inst state. Called by switchTab
+// whenever the user navigates to stage-2 so JEs and Stage 2 adjustments
+// (prepayments, loan sales, write-offs, etc.) never silently disappear
+// after a tab round-trip.
+window.repaintStage2FromState = function(){
+  const journalsLen = (M && Array.isArray(M.acctJournals)) ? M.acctJournals.length : 0;
+  if(journalsLen > 0){
+    // Restore the green "Ready · N JE rows" chip + the click affordance
+    const chip = document.getElementById('acct-status');
+    if(chip){
+      chip.className = 'chip green self-center';
+      chip.innerHTML = 'Ready · ' + journalsLen + ' JE rows ' +
+        '<span class="material-icons-outlined" style="font-size:13px; vertical-align:-2px; margin-left:2px;">visibility</span>';
+      if(typeof makeAcctStatusClickable === 'function') makeAcctStatusClickable();
+    }
+    // Reveal the KPI + journal sections in case they were hidden
+    document.getElementById('acct-kpis')?.classList.remove('hidden');
+    document.getElementById('acct-journal-section')?.classList.remove('hidden');
+    // Enable the Run Accounting button (it's safe to re-run; idempotent)
+    const runBtn = document.getElementById('btn-acct-run');
+    if(runBtn) runBtn.disabled = false;
+  }
+  // Re-sync ALL Treatment-panel forms + event lists from the current
+  // instrument's state — including the prepayment / loan-sale / write-off /
+  // participation / D4E / mandatory-prepay event lists. This means a $50m
+  // prepayment added before navigating away will still appear when the
+  // user comes back. loadTreatmentForm re-reads inst and re-renders every
+  // sub-section (Transtypes #1-25), so it's the right hammer.
+  if(typeof loadTreatmentForm === 'function'){
+    try { loadTreatmentForm(); } catch(_){}
+  }
+  // Capability cards mirror the same per-transtype state — refresh them too.
+  if(typeof renderCapabilityCards === 'function' && typeof currentInstrument === 'function'){
+    try { renderCapabilityCards(currentInstrument()); } catch(_){}
+  }
+  // Refresh the sync button highlight state
+  if(typeof refreshStage1SyncButton === 'function') refreshStage1SyncButton();
+};
+
 // Treatment changed — apply, recalculate everything downstream
 function onTreatmentChange(){
   applyTreatmentFromForm();
+  // Flag Stage 1 as needing a sync (don't auto-update — the user must click
+  // the Sync to Cashflow button in the Stage 2 toolbar). The flag drives the
+  // amber-pulse styling on btn-sync-cashflow via refreshStage1SyncButton().
+  if(stage1SyncRelevant(currentInstrument())){
+    M.stage1SyncNeeded = true;
+    if(typeof refreshStage1SyncButton === 'function') refreshStage1SyncButton();
+  }
   // If accounting hasn't been run yet, just refresh the capability cards
   if(M.acctJournals.length === 0 && !M.portfData){
     renderCapabilityCards(currentInstrument());
@@ -5307,11 +5557,410 @@ function runAccountingImpl(){
   $('btn-workday-push').disabled = false;
   $('btn-workday-csv').disabled = false;
   $('btn-diu-filled').disabled = false;
+  // Mark the status chip as Ready AND make it clickable — the user can drill
+  // into the generated JE rows by clicking the chip. See makeAcctStatusClickable().
   $('acct-status').className = 'chip green self-center';
-  $('acct-status').textContent = `Ready · ${M.acctJournals.length} JE rows`;
+  $('acct-status').innerHTML = `Ready · ${M.acctJournals.length} JE rows <span class="material-icons-outlined" style="font-size:13px; vertical-align:-2px; margin-left:2px;">visibility</span>`;
+  if(typeof makeAcctStatusClickable === 'function') makeAcctStatusClickable();
   $('workday-out-status').className = 'chip blue self-center';
   $('workday-out-status').textContent = 'Ready to push';
   toast('Accounting run complete — ' + M.acctJournals.length + ' journal rows generated');
+}
+
+// ============================================================
+// STAGE 2 — Clickable JE-detail chip → modal
+// ============================================================
+// After Run Accounting, the green "Ready · X JE rows" chip becomes a
+// clickable affordance. Clicking it opens je-detail-modal which renders every
+// row in M.acctJournals[], grouped by jeIndex with DR/CR totals + balance
+// check per JE and grand totals at the bottom.
+function makeAcctStatusClickable(){
+  const chip = document.getElementById('acct-status');
+  if(!chip) return;
+  chip.style.cursor = 'pointer';
+  chip.title = 'Click to view JE rows in detail';
+  chip.onclick = openJEDetailModal;
+}
+
+function openJEDetailModal(){
+  const rows = (typeof M !== 'undefined' && M.acctJournals) ? M.acctJournals : [];
+  const body = document.getElementById('je-detail-body');
+  const sub  = document.getElementById('je-detail-sub');
+  const tot  = document.getElementById('je-detail-totals');
+  if(!body || !sub) return;
+  if(!rows.length){
+    body.innerHTML = '<div class="text-[12px] text-gray-500 italic">No JE rows yet — run accounting first.</div>';
+    sub.textContent = '—';
+    tot.textContent = '—';
+  } else {
+    // Group rows by jeIndex
+    const groups = new Map();
+    for(const r of rows){
+      const k = r.jeIndex || 0;
+      if(!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    }
+    const inst = (typeof M !== 'undefined' && typeof INSTRUMENTS !== 'undefined')
+      ? INSTRUMENTS.find(x => x.id === M.instrumentId) : null;
+    const fmtAmt = a => (a==null||isNaN(a)) ? '—' :
+      Number(a).toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 });
+    let grandDr = 0, grandCr = 0;
+    const parts = [];
+    // Top legend
+    parts.push(
+      '<div class="flex flex-wrap items-center gap-2 mb-3 text-[11px] text-gray-600">' +
+        '<span class="chip blue">' + groups.size + ' Journal Entr' + (groups.size===1?'y':'ies') + '</span>' +
+        '<span class="chip gray">' + rows.length + ' Rows</span>' +
+        '<span>Each JE balances DR = CR. Click a header to collapse/expand.</span>' +
+      '</div>'
+    );
+    [...groups.entries()].sort((a,b)=>a[0]-b[0]).forEach(([jeIdx, jeRows]) => {
+      const dr = jeRows.filter(r=>r.isDebit).reduce((s,r)=>s+(+r.amountLE||0), 0);
+      const cr = jeRows.filter(r=>!r.isDebit).reduce((s,r)=>s+(+r.amountLE||0), 0);
+      grandDr += dr; grandCr += cr;
+      const balanced = Math.abs(dr - cr) < 0.005;
+      const balanceChip = balanced
+        ? '<span class="chip green" style="font-size:10px">balanced</span>'
+        : '<span class="chip red" style="font-size:10px">UNBALANCED Δ ' + fmtAmt(dr - cr) + '</span>';
+      // Get the date + transaction type label
+      const firstRow = jeRows[0];
+      const txTypes = [...new Set(jeRows.map(r => r.transactionType))].join(' / ');
+      parts.push(
+        '<details open style="border:1px solid #e5e7eb; border-radius:6px; margin-bottom:8px; overflow:hidden;">' +
+          '<summary style="background:#f9fafb; padding:8px 10px; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:12px;">' +
+            '<span style="font-weight:600;">JE #' + jeIdx + '</span>' +
+            '<span style="color:#6b7280;">' + (firstRow.effectiveDate || '—') + '</span>' +
+            '<span style="color:#374151;">' + txTypes + '</span>' +
+            '<span style="margin-left:auto; display:flex; gap:6px; align-items:center;">' +
+              '<span style="font-size:11px; color:#374151;">DR ' + fmtAmt(dr) + ' · CR ' + fmtAmt(cr) + '</span>' +
+              balanceChip +
+            '</span>' +
+          '</summary>' +
+          '<div style="overflow-x:auto;">' +
+          '<table class="data" style="width:100%; font-size:11.5px; border-collapse:collapse;">' +
+            '<thead><tr style="background:#f3f4f6;">' +
+              '<th class="left" style="padding:6px 8px;">Tx#</th>' +
+              '<th class="left" style="padding:6px 8px;">Effective</th>' +
+              '<th class="left" style="padding:6px 8px;">GL Date</th>' +
+              '<th class="left" style="padding:6px 8px;">Transaction Type</th>' +
+              '<th class="left" style="padding:6px 8px;">Account</th>' +
+              '<th class="left" style="padding:6px 8px;">DR/CR</th>' +
+              '<th style="padding:6px 8px; text-align:right;">Amount LE</th>' +
+              '<th class="left" style="padding:6px 8px;">Comments</th>' +
+            '</tr></thead><tbody>' +
+            jeRows.map(r =>
+              '<tr style="border-top:1px solid #f1f5f9;' + (r.isDebit?'':' background:#fdfdff;') + '">' +
+                '<td style="padding:5px 8px;">' + (r.txIndex || '—') + '</td>' +
+                '<td style="padding:5px 8px;">' + (r.effectiveDate || '—') + '</td>' +
+                '<td style="padding:5px 8px;">' + (r.glDate || '—') + '</td>' +
+                '<td style="padding:5px 8px;">' + (r.transactionType || '—') + (r.glGap ? ' <span class="chip amber" style="font-size:9px">GAP</span>' : '') + '</td>' +
+                '<td style="padding:5px 8px; font-family:ui-monospace,monospace;">' + (r.account || '—') + '</td>' +
+                '<td style="padding:5px 8px;">' + (r.isDebit ? '<span style="color:#1e40af; font-weight:600;">DR</span>' : '<span style="color:#9a3412; font-weight:600;">CR</span>') + '</td>' +
+                '<td style="padding:5px 8px; text-align:right; font-family:ui-monospace,monospace;">' + fmtAmt(r.amountLE) + '</td>' +
+                '<td style="padding:5px 8px; color:#4b5563;">' + (r.transactionComments || '—') + '</td>' +
+              '</tr>'
+            ).join('') +
+          '</tbody></table>' +
+          '</div>' +
+        '</details>'
+      );
+    });
+    body.innerHTML = parts.join('');
+    const dealLabel = inst ? (inst.deal || inst.id) : '—';
+    const fwLabel   = inst ? (inst.accountingFramework || 'IFRS') : '—';
+    sub.textContent = dealLabel + ' · ' + fwLabel + ' · ' + rows.length + ' rows in ' + groups.size + ' JEs';
+    const grandBal = Math.abs(grandDr - grandCr) < 0.005;
+    tot.innerHTML = 'Grand totals — DR ' + fmtAmt(grandDr) + ' · CR ' + fmtAmt(grandCr) +
+                    ' · ' + (grandBal ? '<span class="chip green" style="font-size:10px">balanced</span>'
+                                       : '<span class="chip red" style="font-size:10px">UNBALANCED</span>');
+  }
+  const m = document.getElementById('je-detail-modal');
+  if(m) m.style.display = 'flex';
+}
+
+function closeJEDetailModal(){
+  const m = document.getElementById('je-detail-modal');
+  if(m) m.style.display = 'none';
+}
+
+function copyJEDetailTSV(){
+  const rows = (typeof M !== 'undefined' && M.acctJournals) ? M.acctJournals : [];
+  if(!rows.length){ if(typeof toast==='function') toast('No JE rows to copy'); return; }
+  const headers = ['JE','Tx','EffectiveDate','GLDate','TransactionType','Account','DR/CR','AmountLE','Comments'];
+  const lines = [headers.join('\t')];
+  for(const r of rows){
+    lines.push([
+      r.jeIndex, r.txIndex, r.effectiveDate, r.glDate,
+      (r.transactionType||'').replace(/\t/g,' '),
+      r.account, r.isDebit ? 'DR' : 'CR',
+      (r.amountLE!=null && !isNaN(r.amountLE)) ? Number(r.amountLE).toFixed(2) : '',
+      (r.transactionComments||'').replace(/\t/g,' ').replace(/\n/g,' ')
+    ].join('\t'));
+  }
+  const tsv = lines.join('\n');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(tsv).then(
+      () => { if(typeof toast==='function') toast('Copied ' + rows.length + ' JE rows as TSV'); },
+      () => fallbackCopy(tsv)
+    );
+  } else { fallbackCopy(tsv); }
+  function fallbackCopy(text){
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); if(typeof toast==='function') toast('Copied JE rows'); }
+    catch(_){ if(typeof toast==='function') toast('Copy failed — clipboard blocked'); }
+    document.body.removeChild(ta);
+  }
+}
+
+// Expose for the chip + modal wiring
+window.makeAcctStatusClickable = makeAcctStatusClickable;
+window.openJEDetailModal      = openJEDetailModal;
+window.closeJEDetailModal     = closeJEDetailModal;
+window.copyJEDetailTSV        = copyJEDetailTSV;
+
+// Belt-and-braces — a document-level click delegate that ALWAYS catches
+// data-close-je clicks (even if init() hadn't run yet, or the per-modal
+// listener got clobbered). Idempotent — only attaches once per page load.
+if(!window._jeDetailDelegateAttached){
+  window._jeDetailDelegateAttached = true;
+  document.addEventListener('click', function(e){
+    const closer = e.target && e.target.closest ? e.target.closest('[data-close-je]') : null;
+    if(closer){
+      // Only act if the closer is inside the JE-detail modal (so we don't
+      // accidentally intercept clicks elsewhere).
+      if(closer.closest('#je-detail-modal')){
+        e.preventDefault();
+        closeJEDetailModal();
+      }
+      return;
+    }
+    const copy = e.target && e.target.closest ? e.target.closest('#btn-je-detail-copy') : null;
+    if(copy){
+      e.preventDefault();
+      copyJEDetailTSV();
+    }
+  }, true); // capture phase — fires before anything else can stopPropagation
+}
+
+// ============================================================
+// STAGE 0 — Active Deal picker modal (replaces inline dropdown)
+// ============================================================
+// Renders all PRESETS as cards filtered by V2_CTX.team. Each card shows the
+// framework chip, team, complexity stars, label, participation share, and a
+// Load button that delegates to the existing sel-instrument change handler so
+// the rest of the pipeline (auto-run accounting, stage chips) keeps working.
+function openActiveDealModal(){
+  const body  = document.getElementById('active-deal-body');
+  const count = document.getElementById('active-deal-count');
+  const search = document.getElementById('active-deal-search');
+  if(!body) return;
+  // Render the list (with optional filter)
+  function render(filter){
+    const list = (window.PRESETS || []);
+    const team = (window.V2_CTX && window.V2_CTX.team) || 'All';
+    const q = (filter || '').toLowerCase().trim();
+    const filtered = list.filter(p => {
+      const teamOk = team === 'All' || p.team === team;
+      if(!teamOk) return false;
+      if(!q) return true;
+      const hay = (p.label + ' ' + p.team + ' ' + (p.tag||'') + ' ' + p.key).toLowerCase();
+      return hay.indexOf(q) >= 0;
+    });
+    // Try to detect framework via the preset's built deal (cheap one-shot)
+    const fwOf = p => {
+      try { return (p.build().deal.framework || 'IFRS'); } catch(_){ return 'IFRS'; }
+    };
+    const currentVal = (document.getElementById('sel-instrument') || {}).value || '';
+    const fwBadge = fw => {
+      const fwColors = {
+        IFRS: { bg:'#dbeafe', fg:'#1e40af', label:'IFRS' },
+        USGAAP:{bg:'#fee2e2', fg:'#991b1b', label:'US GAAP' },
+        ASPE:  { bg:'#dcfce7', fg:'#166534', label:'ASPE' },
+        AASB:  { bg:'#fef3c7', fg:'#92400e', label:'AASB · AU' }
+      };
+      const c = fwColors[fw] || fwColors.IFRS;
+      return '<span style="background:' + c.bg + '; color:' + c.fg + '; padding:2px 8px; border-radius:8px; font-size:10px; font-weight:700; letter-spacing:0.3px; white-space:nowrap;">' + c.label + '</span>';
+    };
+    if(!filtered.length){
+      body.innerHTML = '<div class="text-[12px] text-gray-500 italic p-3">No deals match — try clearing the search or switching the Team filter.</div>';
+      count.textContent = '0 of ' + list.length + ' deals · team: ' + team;
+      return;
+    }
+    // Group by tag (Simple → Complex)
+    const groupOrder = ['Simple','Simple+','Medium','Complex'];
+    const groups = {};
+    filtered.forEach(p => { (groups[p.tag] = groups[p.tag] || []).push(p); });
+    let html = '';
+    for(const g of groupOrder){
+      if(!groups[g]) continue;
+      html += '<div style="margin-bottom:10px;">';
+      html += '<div style="font-size:11px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:1px; padding:6px 4px;">' + g + ' scenarios · ' + groups[g].length + '</div>';
+      html += '<div style="display:grid; grid-template-columns:1fr; gap:6px;">';
+      for(const p of groups[g]){
+        const fw = fwOf(p);
+        const stars = '★'.repeat(p.complexity || 1) + '☆'.repeat(Math.max(0, 5 - (p.complexity || 1)));
+        const shareTag = (p.participationPct && p.participationPct < 100)
+          ? '<span style="background:#f3e8ff; color:#6b21a8; padding:1px 6px; border-radius:6px; font-size:10px; margin-left:6px;">' + p.participationPct + '% share</span>'
+          : '';
+        const selectedVal = 'v2:' + p.key;
+        const isCurrent = currentVal === selectedVal;
+        html +=
+          '<div data-deal-key="' + p.key + '" style="background:white; border:1px solid ' + (isCurrent?'#16a34a':'#e5e7eb') + '; ' +
+            'border-radius:10px; padding:10px 12px; display:flex; align-items:center; gap:10px; cursor:pointer; ' +
+            'transition:all 0.15s; ' + (isCurrent?'box-shadow:0 0 0 2px rgba(22,163,74,0.15);':'') + '" ' +
+            'onmouseover="this.style.borderColor=\'#21295C\'; this.style.background=\'#f8fafc\';" ' +
+            'onmouseout="this.style.borderColor=\'' + (isCurrent?'#16a34a':'#e5e7eb') + '\'; this.style.background=\'white\';">' +
+            '<div style="flex:1; min-width:0;">' +
+              '<div style="font-size:13px; font-weight:600; color:#111827; display:flex; align-items:center; gap:8px;">' +
+                '<span style="color:#f59e0b; font-size:11px;">' + stars + '</span>' +
+                '<span>' + p.label + '</span>' + shareTag +
+                (isCurrent ? '<span class="chip green" style="font-size:9.5px;">current</span>' : '') +
+              '</div>' +
+              '<div style="font-size:11px; color:#6b7280; margin-top:3px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">' +
+                fwBadge(fw) +
+                '<span>· ' + p.team + '</span>' +
+                '<span>· ' + g + '</span>' +
+                '<span style="color:#9ca3af;">· key: ' + p.key + '</span>' +
+              '</div>' +
+            '</div>' +
+            '<button data-load-key="' + p.key + '" class="mat-btn ' + (isCurrent?'outline':'primary') + ' !py-1 !px-3 text-[11px]" style="flex-shrink:0;">' +
+              '<span class="material-icons-outlined text-[14px]">' + (isCurrent?'check_circle':'play_arrow') + '</span>' +
+              (isCurrent ? 'Reload' : 'Load') +
+            '</button>' +
+          '</div>';
+      }
+      html += '</div></div>';
+    }
+    body.innerHTML = html;
+    count.textContent = filtered.length + ' of ' + list.length + ' deals · team: ' + team;
+  }
+  render(search ? search.value : '');
+  if(search){ search.value=''; search.oninput = e => render(e.target.value); }
+  // Open the modal
+  const m = document.getElementById('active-deal-modal');
+  if(m) m.style.display = 'flex';
+  // Focus the search box
+  setTimeout(()=>{ if(search) search.focus(); }, 30);
+}
+
+function closeActiveDealModal(){
+  const m = document.getElementById('active-deal-modal');
+  if(m) m.style.display = 'none';
+}
+
+// Load a specific preset by key — sets the hidden sel-instrument value and
+// dispatches a change event so the existing change handler runs the full
+// load + auto-accounting + chip-refresh path.
+function loadActiveDealByKey(key){
+  const sel = document.getElementById('sel-instrument');
+  if(!sel){ if(typeof toast==='function') toast('Selector missing'); return; }
+  sel.value = 'v2:' + key;
+  sel.dispatchEvent(new Event('change', { bubbles:true }));
+  closeActiveDealModal();
+  refreshActiveDealChip();
+}
+
+// Update the "active-deal-chip" in the header to reflect the currently-loaded
+// deal. Call after any preset load, builder build, or session restore.
+function refreshActiveDealChip(){
+  const chip = document.getElementById('active-deal-chip');
+  if(!chip) return;
+  const sel = document.getElementById('sel-instrument');
+  const val = sel ? sel.value : '';
+  if(!val || !val.startsWith('v2:')){
+    chip.className = 'chip gray self-center';
+    chip.textContent = 'No deal loaded';
+    return;
+  }
+  const key = val.slice(3);
+  const preset = (window.PRESETS || []).find(p => p.key === key);
+  if(!preset){
+    chip.className = 'chip blue self-center';
+    chip.textContent = 'Custom deal';
+    return;
+  }
+  // Strip long parenthetical suffixes for the chip — show core label only
+  const short = preset.label.split(' — ')[0];
+  let fw = 'IFRS';
+  try { fw = preset.build().deal.framework || 'IFRS'; } catch(_){}
+  const fwIcon = fw === 'AASB' ? '🇦🇺 ' : '';
+  chip.className = 'chip green self-center';
+  chip.textContent = fwIcon + 'Loaded · ' + short;
+  chip.title = preset.label;
+}
+
+window.openActiveDealModal   = openActiveDealModal;
+window.closeActiveDealModal  = closeActiveDealModal;
+window.loadActiveDealByKey   = loadActiveDealByKey;
+window.refreshActiveDealChip = refreshActiveDealChip;
+
+// ── Three header button handlers exposed on window so the inline onclick
+// attributes wired in the HTML can call them safely. They tolerate being
+// called before openActiveDealModal / openISINModal are defined (early click
+// after page load) by re-queueing.
+window.handleHeaderManualClick = function(){
+  // Switch to Stage 0 builder tab
+  document.querySelector('.tab-btn[data-tab="builder"]')?.click();
+  // Scroll to the TOP of the page so the builder section sits right under the
+  // sticky header (scrolling to the section directly puts it BEHIND the
+  // sticky header — the user perceives this as "focus too low"). Then open
+  // the Deal Setup details so the section is fully expanded.
+  setTimeout(() => {
+    const firstSection = document.querySelector('details.builder-section');
+    if(firstSection) firstSection.setAttribute('open', '');
+    // Scroll the page to top — the sticky header stays pinned, content lines up below it
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if(typeof toast === 'function') toast('Build a loan manually — start with Deal Setup');
+  }, 80);
+};
+window.handleHeaderIsinClick = function(){
+  if(typeof window.openISINModal === 'function'){
+    window.openISINModal();
+  } else {
+    const m = document.getElementById('isin-modal');
+    if(m){ m.style.display = 'flex'; }
+    else if(typeof toast === 'function') toast('ISIN modal not available — refresh the page');
+  }
+};
+window.handleHeaderActiveDealClick = function(){
+  if(typeof window.openActiveDealModal === 'function'){
+    window.openActiveDealModal();
+  } else if(typeof openActiveDealModal === 'function'){
+    openActiveDealModal();
+  } else if(typeof toast === 'function'){
+    toast('Active Deal picker not available — refresh the page');
+  }
+};
+
+// Capture-phase document delegate — handles active-deal modal close + card
+// clicks (the modal's own inner clicks). Idempotent.
+if(!window._activeDealDelegateAttached){
+  window._activeDealDelegateAttached = true;
+  document.addEventListener('click', function(e){
+    if(!e.target || !e.target.closest) return;
+    // ── Active-deal modal: Close button / backdrop ──
+    const closer = e.target.closest('[data-close-active-deal]');
+    if(closer && closer.closest('#active-deal-modal')){
+      e.preventDefault();
+      closeActiveDealModal();
+      return;
+    }
+    // ── Active-deal modal: Load button OR card click ──
+    const loadBtn = e.target.closest('[data-load-key]');
+    if(loadBtn && loadBtn.closest('#active-deal-modal')){
+      e.preventDefault(); e.stopPropagation();
+      loadActiveDealByKey(loadBtn.getAttribute('data-load-key'));
+      return;
+    }
+    const card = e.target.closest('[data-deal-key]');
+    if(card && card.closest('#active-deal-modal')){
+      e.preventDefault();
+      loadActiveDealByKey(card.getAttribute('data-deal-key'));
+      return;
+    }
+  }, true);
 }
 
 // ============================================================
@@ -6198,7 +6847,7 @@ function renderModificationHistory(inst, summary){
         <tbody>${histRows || '<tr><td colspan="8" class="text-[11px] text-gray-500" style="text-align:center;padding:8px">No prior runs.</td></tr>'}</tbody>
       </table>
     </div>
-    <div class="text-[11px] text-gray-500 mt-2">Each Run Accounting click stamps a new row. Runs are immutable in production — versioned and tied to PortF deal version, treatment override flag and approver name.</div>
+    <div class="text-[11px] text-gray-500 mt-2">Each Run Accounting click stamps a new row. Runs are immutable in production — versioned and tied to Loan Builder deal version, treatment override flag and approver name.</div>
   `;
 }
 
@@ -6575,7 +7224,7 @@ function buildPortFFeedback(){
   const r = M.reconciliation;
   const breakLines = r.lines.filter(l => l.status === 'break');
   return {
-    api: 'PortF Integration Feedback v1',
+    api: 'Loan Builder Integration Feedback v1',
     endpoint: 'POST /api/integration/feedback',
     feedbackType: breakLines.length === 0 ? 'RECONCILED' : 'RECONCILIATION_BREAKS',
     generatedAt: new Date().toISOString(),
@@ -6611,13 +7260,13 @@ function buildPortFFeedback(){
       variancePct: Number((l.pct * 100).toFixed(4)),
       reason: l.reason,
       workdayJournalId: l.workdayJournalId,
-      action: 'INVESTIGATE — confirm cashflow with PortF deal team'
+      action: 'INVESTIGATE — confirm cashflow with Loan Builder deal team'
     })),
     actionRequired: breakLines.length > 0,
     requestedActions: breakLines.length > 0 ? [
       'Confirm contractual cashflow date / amount with deal team',
       'If cashflow is correct, raise Cash Movements GL ticket to investigate posting',
-      'If cashflow needs amendment, create amendment in PortF (versioning preserved)',
+      'If cashflow needs amendment, create amendment in Loan Builder (versioning preserved)',
       'Trigger Stage 1 → 5 re-run after amendment'
     ] : ['No action — period reconciled cleanly']
   };
@@ -6632,7 +7281,7 @@ function sendPortFFeedback(){
   a.download = `portf-feedback-${currentInstrument().id}-${new Date().toISOString().slice(0,10)}.json`;
   a.click(); URL.revokeObjectURL(a.href);
   toast(M.portfFeedback.feedbackType === 'RECONCILED'
-    ? 'Sent CLEAN reconciliation confirmation to PortF'
+    ? 'Sent CLEAN reconciliation confirmation to the Loan Builder'
     : `Sent ${M.portfFeedback.summary.breaks} BREAK(s) to PortF for investigation`);
 }
 
@@ -7401,8 +8050,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   // Stage 1
   $('btn-portf-load').onclick = ()=> openJsonModal({
-    title: 'Load PortF Cashflow Payload',
-    subtitle: 'Paste the cashflow JSON exported from PortF for the active deal',
+    title: 'Load Cashflow Payload',
+    subtitle: 'Paste the cashflow JSON exported from the Loan Builder for the active deal',
     callback: payload => {
       if(!payload.instrument || !Array.isArray(payload.accrualSchedule)){
         throw new Error('Missing required fields: instrument and accrualSchedule[]');
@@ -7418,7 +8067,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     a.href = 'portf-cashflow-sample.xlsx';
     a.download = 'portf-cashflow-sample.xlsx';
     a.click();
-    toast('Downloading sample PortF Excel format');
+    toast('Downloading sample Loan Builder Excel format');
   };
   // Stage 2
   $('btn-acct-run').onclick = runAccounting;
@@ -7449,6 +8098,43 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // JSON modal wiring
   document.querySelectorAll('#json-modal [data-close="1"]').forEach(el => el.onclick = closeJsonModal);
+
+  // JE-detail modal wiring — use event delegation on the modal itself so
+  // clicks on inner icon spans (e.g. material-icons inside the X button) still
+  // trigger close via bubble. .onclick assignments don't survive if anything
+  // else rebinds the buttons later, so we delegate from the modal root.
+  const jeModalEl = document.getElementById('je-detail-modal');
+  if(jeModalEl){
+    jeModalEl.addEventListener('click', e => {
+      // Close on any element with data-close-je (or descendant click that
+      // bubbles up to such an element).
+      const closer = e.target.closest('[data-close-je]');
+      if(closer){
+        e.preventDefault(); e.stopPropagation();
+        closeJEDetailModal();
+        return;
+      }
+      // Copy TSV button
+      const copy = e.target.closest('#btn-je-detail-copy');
+      if(copy){
+        e.preventDefault(); e.stopPropagation();
+        copyJEDetailTSV();
+        return;
+      }
+    });
+  }
+  // Escape key closes the modal when it's open
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape'){
+      const m = document.getElementById('je-detail-modal');
+      if(m && m.style.display !== 'none') closeJEDetailModal();
+    }
+  });
+  // If the page reloads with journals already generated (rare but possible
+  // via session-load), re-prime the chip click affordance.
+  if(typeof M !== 'undefined' && M.acctJournals && M.acctJournals.length){
+    if(typeof makeAcctStatusClickable === 'function') makeAcctStatusClickable();
+  }
   $('json-input').addEventListener('input', ()=>{
     const t = $('json-input').value.trim();
     const st = $('json-status');
@@ -7507,6 +8193,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(btn){ btn.classList.add('active'); btn.setAttribute('aria-selected', 'true'); }
     // Render dashboard live every time it's shown
     if(tabId === 'dashboard') renderDashboard();
+    // When Stage 2 is shown, re-paint its status chip + JE journal from M
+    // state so the user always sees their JEs (they were observed to "vanish"
+    // when navigating back from Stage 1 — the data was still in M.acctJournals
+    // but the chip/journal section had been hidden by an earlier render call).
+    if(tabId === 'stage-2' && typeof window.repaintStage2FromState === 'function'){
+      try { window.repaintStage2FromState(); } catch(_){}
+    }
     // Persist in URL hash so refresh keeps the tab + supports deep links
     if(window.history && window.history.replaceState){
       window.history.replaceState(null, '', '#' + tabId);
@@ -8080,7 +8773,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(!inst){
       body.innerHTML = '<div class="bg-amber-50 border border-amber-200 rounded p-4 text-[13px]">' +
         'No deal selected. Pick a deal from the <b>Active Deal</b> dropdown at the top of the page ' +
-        '(or load a PortF Excel in Stage 1), then re-open this trace.</div>';
+        '(or load a cashflow Excel in Stage 1), then re-open this trace.</div>';
       sub.textContent = 'No deal loaded';
       m.style.display = 'flex';
       return;
@@ -8495,7 +9188,7 @@ Deal EIR = (${aggExpr}) / ${(totalFace/1e6).toFixed(0)}m
 EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000  (+ esgAdjustment)
         </code>
       </div>
-      <div class="text-[12px] font-semibold mb-1">Margin schedule (loaded from PortF marginSchedule[])</div>
+      <div class="text-[12px] font-semibold mb-1">Margin schedule (loaded from marginSchedule[])</div>
       <table class="data" style="width:100%; font-size:11.5px">
         <thead><tr>
           <th class="left">#</th>
@@ -9124,6 +9817,56 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
       }
     });
 
+    // ─── Stage 2 transtype overlay — cash-bearing events feed back into Stage 1 ───
+    // Treatment-panel transtypes that represent REAL cash movement are pulled
+    // into Stage 1 so the user's mental model "I added a $25m mandatory prepay
+    // → it should show as a paydown" is honoured. Group A: mandatoryPrepayment
+    // (#16), loanSale (#13), recovery (#24). Group B (pure accounting events
+    // like #18/#19/#20/#21/#23/#25) are NOT pulled — they don't move cash.
+    // Group C (debtEquitySwap #15, participation #14) get surfaced as a
+    // separate non-cash banner above the Stage 1 table — see renderStage1Cashflows.
+    const inst = (typeof currentInstrument === 'function') ? currentInstrument() : null;
+    if(inst && Array.isArray(inst.principalSchedule)){
+      // Build dedup signatures from Stage 0 paydowns (date|amount) so a user
+      // who declared the same event in both places doesn't double-count.
+      const stage0Sigs = new Set();
+      B.tranches.forEach(t => (t.repayments || []).forEach(r => {
+        if(r.date) stage0Sigs.add(r.date + '|' + Math.round(r.amount || 0));
+      }));
+      const trancheLabel = B.tranches[0] ? B.tranches[0].name : 'Deal';
+      inst.principalSchedule.forEach(ev => {
+        const evDate = ev.date;
+        if(!evDate || evDate < p.start || evDate >= p.end) return;
+        let cashAmt = 0, kindLabel = '';
+        if(ev.type === 'prepayment'){
+          // Transtype #4 — voluntary prepayment
+          cashAmt = +ev.amount || 0;       kindLabel = 'Voluntary Prepayment';
+        } else if(ev.type === 'mandatoryPrepayment'){
+          // Transtype #16 — covenant/CoC/ECF-sweep mandatory prepay
+          cashAmt = +ev.amount || 0;       kindLabel = 'Mandatory Prepayment';
+        } else if(ev.type === 'loanSale'){
+          // Transtype #13 — full derecognition via sale
+          cashAmt = +ev.salePrice || 0;    kindLabel = 'Loan Sale Proceeds';
+        } else if(ev.type === 'recovery'){
+          // Transtype #24 — loss-recovery cash received post-write-off
+          cashAmt = +ev.amount || 0;       kindLabel = 'Loss Recovery';
+        }
+        if(cashAmt <= 0.005) return;
+        const sig = evDate + '|' + Math.round(cashAmt);
+        if(stage0Sigs.has(sig)){
+          console.warn('Stage 2 ' + ev.type + ' at ' + evDate + ' for $' + cashAmt +
+                       ' duplicates a Stage 0 paydown — skipping to avoid double-count');
+          return;
+        }
+        totalRepayments += cashAmt;
+        repaymentsBreakdown.push({
+          trancheName: trancheLabel, date: evDate, amount: cashAmt,
+          label: kindLabel + ' (Stage 2 transtype)',
+          source: 'stage2', transtype: ev.type, reason: ev.reason || ''
+        });
+      });
+    }
+
     // Net cashflow from the lender's perspective:
     //   + interest received, + fees received, + principal repayments
     //   – drawdowns disbursed
@@ -9341,12 +10084,19 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
       </tr>`).join('');
     const repRows = (r.repaymentsBreakdown || []).map(p => {
       const isMaturity = p.label === 'Maturity Payoff';
-      const badge = isMaturity
-        ? '<span style="background:#dcfce7; color:#15803d; padding:1px 7px; border-radius:8px; font-size:9px; font-weight:700; margin-left:4px;">MATURITY</span>'
-        : '<span style="background:#e0f2fe; color:#075985; padding:1px 7px; border-radius:8px; font-size:9px; font-weight:700; margin-left:4px;">SCHEDULED</span>';
+      const isStage2   = p.source === 'stage2';
+      let badge;
+      if(isStage2){
+        badge = '<span style="background:#fef3c7; color:#92400e; padding:1px 7px; border-radius:8px; font-size:9px; font-weight:700; margin-left:4px;" title="Originated from a Stage 2 Treatment-panel transtype">STAGE 2</span>';
+      } else if(isMaturity){
+        badge = '<span style="background:#dcfce7; color:#15803d; padding:1px 7px; border-radius:8px; font-size:9px; font-weight:700; margin-left:4px;">MATURITY</span>';
+      } else {
+        badge = '<span style="background:#e0f2fe; color:#075985; padding:1px 7px; border-radius:8px; font-size:9px; font-weight:700; margin-left:4px;">SCHEDULED</span>';
+      }
+      const subLabel = p.label ? '<div class="text-[9px] text-gray-500">' + escapeHtml(p.label) + '</div>' : '';
       return `
       <tr class="border-t border-gray-200">
-        <td class="px-2 py-1">${escapeHtml(p.trancheName)}${badge}</td>
+        <td class="px-2 py-1">${escapeHtml(p.trancheName)}${badge}${subLabel}</td>
         <td class="px-2 py-1 text-[10px] text-gray-600">${p.date}</td>
         <td class="px-2 py-1 text-right font-semibold text-emerald-700">${fmtCcy(p.amount)}</td>
       </tr>`;
@@ -9425,7 +10175,38 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
     if(!inst){ alert('Builder incomplete — define deal name, dates, and at least one tranche with a face value.'); return null; }
     if(typeof INSTRUMENTS === 'undefined'){ console.warn('INSTRUMENTS array missing'); return null; }
     const existing = INSTRUMENTS.findIndex(x => x.id === inst.id);
-    if(existing >= 0) INSTRUMENTS[existing] = inst; else INSTRUMENTS.push(inst);
+    // ─── Preserve Stage 2 user adjustments when re-registering the same deal ───
+    // builderToInstrument() rebuilds inst from the Builder state, which means
+    // its principalSchedule contains ONLY drawdowns. Any prepayments, loan
+    // sales, write-offs, modification events, treatment overrides etc. that
+    // the user added in the Stage 2 Treatment panel would be wiped on every
+    // navigation back through Stage 1. Merge those fields back from the old
+    // record before swapping it out so the UI behaves like state persists.
+    if(existing >= 0){
+      const oldInst = INSTRUMENTS[existing];
+      // 1. principalSchedule — keep ALL non-draw events from old; draws come
+      //    from the rebuild (they reflect current Builder state).
+      const oldNonDraws = (oldInst.principalSchedule || []).filter(e => e && e.type !== 'draw');
+      inst.principalSchedule = [...(inst.principalSchedule || []), ...oldNonDraws];
+      // 2. AASB-specific extras (Tier, ASIC, franking, related-party, GST, APRA)
+      if(oldInst.aasbExtras) inst.aasbExtras = { ...oldInst.aasbExtras };
+      // 3. IFRS treatment overrides (ecLStage, pdAnnual, lgd, qFactor, etc.)
+      //    Merge over the freshly-built defaults so user overrides win.
+      if(oldInst.ifrs) inst.ifrs = { ...inst.ifrs, ...oldInst.ifrs };
+      // 4. Modification events tracked separately
+      if(Array.isArray(oldInst.modificationEvents)) inst.modificationEvents = oldInst.modificationEvents;
+      // 5. Hedge designation if user edited it
+      if(oldInst.hedge && Object.keys(oldInst.hedge).length) inst.hedge = { ...oldInst.hedge };
+      // 6. PIK enable/rate override
+      if(oldInst.pik && Object.keys(oldInst.pik).length) inst.pik = { ...inst.pik, ...oldInst.pik };
+      // 7. OID treatment override
+      if(oldInst.oidTreatment && oldInst.oidTreatment !== 'none') inst.oidTreatment = oldInst.oidTreatment;
+      // 8. EIR method override
+      if(oldInst.effectiveInterest) inst.effectiveInterest = oldInst.effectiveInterest;
+      INSTRUMENTS[existing] = inst;
+    } else {
+      INSTRUMENTS.push(inst);
+    }
     // v2: skip populateInstrumentPicker() — that would rebuild the dropdown
     // with the v1 INSTRUMENTS list and wipe our 10 v2 presets. Instead, just
     // restore the v2 preset list and keep whatever was last selected.
@@ -9440,20 +10221,31 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
       });
       sel.value = presetMatch ? ('v2:' + presetMatch.key) : '';
     }
+    // Track whether this is a brand-new instrument or a re-registration of
+    // the same one. We must NOT wipe Stage 2 / 3 / 4 / 5 state just because
+    // the user navigated back to Stage 1 — that would feel like the pipeline
+    // forgot what they did. Only reset downstream state when the instrument
+    // identity actually changes.
+    const isSameInstrument = (typeof M !== 'undefined') && M.instrumentId === inst.id;
     if(typeof M !== 'undefined') M.instrumentId = inst.id;
-    // Synthesise the portfData stub the rest of the pipeline expects so
-    // runAccounting()'s guard passes.
     if(typeof M !== 'undefined'){
+      // Always (re)synthesise the portfData stub so runAccounting()'s guard
+      // passes — but preserve the loadedAt timestamp if it's the same deal.
+      const prevLoadedAt = (M.portfData && M.portfData.loadedAt) || new Date().toISOString();
       M.portfData = {
         source: 'Loan Builder (v2)',
         instrument: { id: inst.id, deal: inst.deal },
-        loadedAt: new Date().toISOString(),
-        accrualSchedule: []
+        loadedAt: isSameInstrument ? prevLoadedAt : new Date().toISOString(),
+        accrualSchedule: M.portfData && isSameInstrument ? (M.portfData.accrualSchedule || []) : []
       };
-      // Also clear any stale downstream state so it doesn't show old data
-      M.schedule = []; M.summary = null; M.acctJournals = [];
-      M.workdayBatch = null; M.workdayActuals = null;
-      M.actualsBatches = []; M.reconciliations = []; M.reconciliation = null;
+      // ONLY wipe downstream state on instrument switch. When the user is
+      // still on the same deal, keep the journals, batches, reconciliations.
+      if(!isSameInstrument){
+        M.schedule = []; M.summary = null; M.acctJournals = [];
+        M.workdayBatch = null; M.workdayActuals = null;
+        M.actualsBatches = []; M.reconciliations = []; M.reconciliation = null;
+        M.stage1SyncNeeded = false;
+      }
     }
     if(typeof snapshotTreatmentDefaults === 'function') snapshotTreatmentDefaults(inst);
     if(typeof loadTreatmentForm === 'function') loadTreatmentForm();
@@ -10248,6 +11040,9 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
   // Expose for the dropdown handler
   window.loadPresetByKey = loadPresetByKey;
   window.PRESETS = PRESETS;
+  // Expose recompute so Stage 2 transtype handlers (outside the IIFE) can
+  // refresh the Stage 1 cashflow view after a transtype is added/removed.
+  window.recomputeStage1 = recompute;
 
   // ═══════════════════════════════════════════════════════════════════
   //  MARKET DATA LAYER — ISIN static + pricing series
@@ -10933,11 +11728,18 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
         '<option value="syndication" ' + (V2_CTX.viewMode==='syndication'?'selected':'') + '>Total Syndication</option>' +
         '<option value="participation" ' + (V2_CTX.viewMode==='participation'?'selected':'') + '>Your Participation</option>' +
       '</select>';
-    // The label is now inside a wrapper div alongside the select; insert the
-    // Team/View controls BEFORE that wrapper so they sit to the left of the
-    // Active Deal label+dropdown as a single visual unit.
-    const selGroup = sel.closest('.flex-nowrap') || sel.parentNode;
-    if(selGroup && selGroup.parentNode) selGroup.parentNode.insertBefore(wrap, selGroup);
+    // Mount the Team / View controls into Row 1 of the header next to the
+    // active-deal-chip + Save/Load buttons. The chip's parent is the
+    // ".ml-auto flex" container in the header — insert before the chip so
+    // the order is: Team, View, chip, Save, Load.
+    const chip = document.getElementById('active-deal-chip');
+    if(chip && chip.parentNode){
+      chip.parentNode.insertBefore(wrap, chip);
+    } else {
+      // Fallback — append to header
+      const hdr = document.querySelector('header');
+      if(hdr) hdr.appendChild(wrap);
+    }
     document.getElementById('v2-team-select').addEventListener('change', e => {
       V2_CTX.team = e.target.value;
       populateV2Dropdown();
@@ -11104,7 +11906,55 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
         { label:'Net Cash to Lender', value: fmtCcy(netCash), color:'text-emerald-900' }
       ].map(k => `<div class="bg-white border border-emerald-200 rounded px-2 py-1"><div class="text-[9px] uppercase text-gray-500">${k.label}</div><div class="font-bold ${k.color || 'text-emerald-900'}">${k.value}</div></div>`).join('');
     }
-    const html = `<table class="w-full text-[11px]">
+    // ─── Non-cash Stage 2 transtype banner ───
+    // Group C events (debt-for-equity swap #15, participation #14) don't
+    // become rows in the cashflow table — they're surfaced here as an
+    // amber-coloured info banner so the user still sees them.
+    const inst = (typeof currentInstrument === 'function') ? currentInstrument() : null;
+    // Count Stage 2 cash transtypes (Group A) that synthesised rows in the
+    // breakdown so the user can confirm the Sync to Cashflow click took
+    // effect. Show the count + total amount in an amber chip above the table.
+    let stage2Cash = 0, stage2CashAmt = 0;
+    rows.forEach(r => (r.repaymentsBreakdown || []).forEach(p => {
+      if(p && p.source === 'stage2'){ stage2Cash += 1; stage2CashAmt += (+p.amount || 0); }
+    }));
+    const stage2CashBanner = stage2Cash > 0 ? (
+      '<div class="bg-blue-50 border border-blue-300 rounded p-2 mb-3 text-[11px] text-blue-900 flex items-center gap-2">' +
+        '<span class="material-icons-outlined" style="font-size:14px">sync_alt</span>' +
+        '<b>' + stage2Cash + ' Stage 2 transtype' + (stage2Cash===1?'':'s') + ' applied</b> · ' +
+        'total cash impact <b>' + fmtCcy(stage2CashAmt) + '</b> · click any row with the ' +
+        '<span style="background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:6px; font-size:9px; font-weight:700;">STAGE 2</span> badge to expand the breakdown.' +
+      '</div>'
+    ) : '';
+    const nonCash = (inst && Array.isArray(inst.principalSchedule))
+      ? inst.principalSchedule.filter(e => e.type === 'debtEquitySwap' || e.type === 'participation')
+      : [];
+    const bannerHtml = nonCash.length ? (
+      '<div class="bg-amber-50 border border-amber-300 rounded p-3 mb-3 text-[11px]">' +
+        '<div class="font-semibold text-amber-900 mb-1 flex items-center gap-2">' +
+          '<span class="material-icons-outlined" style="font-size:14px">info</span>' +
+          nonCash.length + ' non-cash Stage 2 event' + (nonCash.length===1?'':'s') +
+          ' affecting this deal (not shown as cashflow rows)' +
+        '</div>' +
+        '<ul class="text-amber-800 ml-5 mt-1 list-disc">' +
+          nonCash.map(e => {
+            if(e.type === 'debtEquitySwap'){
+              const fv = ((+e.equityFairValue) || 0) / 1e6;
+              return '<li>Debt-for-equity swap on <b>' + (e.date || '—') + '</b> — equity FV <b>$' + fv.toFixed(2) +
+                     'm</b> · loan extinguished, no cash changes hands (IFRIC 19)</li>';
+            }
+            if(e.type === 'participation'){
+              const pct = Math.round((+e.fraction || 0) * 100);
+              const sp  = ((+e.salePrice) || 0) / 1e6;
+              return '<li><b>' + pct + '%</b> participation sold on <b>' + (e.date || '—') +
+                     '</b> — proceeds <b>$' + sp.toFixed(2) + 'm</b> · partial derecog, ownership share reduced (IFRS 9 §3.2.6)</li>';
+            }
+            return '';
+          }).join('') +
+        '</ul>' +
+      '</div>'
+    ) : '';
+    const html = stage2CashBanner + bannerHtml + `<table class="w-full text-[11px]">
       <thead class="sticky top-0 bg-emerald-100">
         <tr>
           <th class="text-left px-2 py-1">Period Start</th>
@@ -11113,7 +11963,7 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
           <th class="text-right px-2 py-1" title="Cash disbursed to borrower">Drawdowns</th>
           <th class="text-right px-2 py-1">Interest</th>
           <th class="text-right px-2 py-1">Fees</th>
-          <th class="text-right px-2 py-1" title="Principal paid down">Paydowns</th>
+          <th class="text-right px-2 py-1" title="Principal paid down (incl. Stage 2 cash transtypes)">Paydowns</th>
           <th class="text-right px-2 py-1" title="Interest + Fees + Paydowns − Drawdowns">Net Cash</th>
         </tr>
       </thead>
@@ -11204,9 +12054,13 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
           if(currentTab !== document.querySelector('.stage-tab-content.tab-visible')?.id){
             document.querySelector('.tab-btn[data-tab="' + currentTab + '"]')?.click();
           }
+          // Refresh the header active-deal chip
+          if(typeof refreshActiveDealChip === 'function') refreshActiveDealChip();
         }
       });
     }
+    // Prime the active-deal chip on first paint
+    setTimeout(() => { if(typeof refreshActiveDealChip === 'function') refreshActiveDealChip(); }, 200);
   }
 
   if(document.readyState === 'loading'){
