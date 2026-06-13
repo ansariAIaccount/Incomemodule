@@ -799,8 +799,18 @@
         <span id="gl-date-mode" class="chip green text-[10px]" style="font-size:9.5px">AUTO</span>
       </div>
       <span id="acct-status" class="chip gray self-center">Awaiting Stage 1</span>
+      <!-- Participation scale badge — green when JEs are at participation
+           (i.e. accounting-correct for the lender's share), amber warning
+           when Builder is showing a different lens than what JEs post at. -->
+      <span id="acct-participation-badge" class="chip blue self-center" style="display:none; font-size:11px;"
+            title="The scale at which JEs are posted to the sub-ledger"></span>
     </div>
   </div>
+
+  <!-- Participation banner — appears when Builder shows Total Syndication
+       amounts but JEs are auto-scaled to participation, so the user can see
+       the relationship between what's displayed and what's booked. -->
+  <div id="participation-banner" class="hidden mb-3"></div>
 
   <!-- ─────────── Editable Accounting Treatment Panel ─────────── -->
   <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-4">
@@ -5240,6 +5250,56 @@ window.refreshStage1SyncButton = refreshStage1SyncButton;
 window.syncCashflowsFromStage2  = syncCashflowsFromStage2;
 window.stage1SyncRelevant       = stage1SyncRelevant;
 
+// ============================================================
+// Participation banner + scale badge — surfaces whether the JEs
+// currently in M.acctJournals are posted at the lender's actual
+// participation share, and warns if the Builder is showing a
+// different lens (Total Syndication) than what the GL receives.
+// ============================================================
+function renderParticipationBanner(){
+  const badge  = document.getElementById('acct-participation-badge');
+  const banner = document.getElementById('participation-banner');
+  if(!badge || !banner) return;
+  const pct    = M._acctParticipationPct ?? 100;
+  const lens   = M._acctBuilderViewMode  || 'participation';
+  // 1. Badge — always shows the JE scale
+  if(M.acctJournals && M.acctJournals.length){
+    badge.style.display = '';
+    if(pct === 100){
+      badge.className = 'chip green self-center';
+      badge.textContent = 'JEs @ 100%';
+      badge.title = 'JEs reflect the full loan amount (no participation scaling).';
+    } else {
+      badge.className = 'chip blue self-center';
+      badge.textContent = 'JEs @ ' + pct + '% share';
+      badge.title = 'JEs are posted at the lender\'s ' + pct + '% participation share.';
+    }
+  } else {
+    badge.style.display = 'none';
+  }
+  // 2. Banner — only shows when Builder lens differs from JE scale
+  if(M.acctJournals && M.acctJournals.length && pct < 100 && lens === 'syndication'){
+    banner.classList.remove('hidden');
+    banner.innerHTML =
+      '<div class="bg-amber-50 border border-amber-300 rounded p-3 text-[12px] flex items-start gap-3">' +
+        '<span class="material-icons-outlined" style="font-size:18px; color:#b45309;">info</span>' +
+        '<div style="flex:1;">' +
+          '<div class="font-semibold text-amber-900 mb-1">Display shows Total Syndication · JEs post at ' + pct + '% participation</div>' +
+          '<div class="text-amber-800">' +
+            'The Loan Builder is currently showing full-syndicate amounts (term-sheet view), ' +
+            'but the Accounting Engine has auto-scaled every JE row down to your <b>' + pct + '%</b> share of the deal. ' +
+            'This is what gets posted to your sub-ledger and pushed via DIU to the Cash Movements GL. ' +
+            'To see the Builder + Stage 1 at participation scale, switch the <b>View</b> dropdown in the header to <b>Your Participation</b>.' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  } else {
+    banner.classList.add('hidden');
+    banner.innerHTML = '';
+  }
+}
+window.renderParticipationBanner = renderParticipationBanner;
+
 // Re-paint Stage 2 (status chip, KPIs, journal section, sync button, all
 // Treatment panel event lists) from M / inst state. Called by switchTab
 // whenever the user navigates to stage-2 so JEs and Stage 2 adjustments
@@ -5278,6 +5338,8 @@ window.repaintStage2FromState = function(){
   }
   // Refresh the sync button highlight state
   if(typeof refreshStage1SyncButton === 'function') refreshStage1SyncButton();
+  // Refresh the participation banner + scale badge from M state
+  if(typeof renderParticipationBanner === 'function') renderParticipationBanner();
 };
 
 // Treatment changed — apply, recalculate everything downstream
@@ -5707,13 +5769,44 @@ function runAccountingImpl(){
   // effectiveDate). Filled value applies the same close date to every row.
   const glPostDate = $('opt-gl-date')?.value || null;
   M.acctJournals = generateDIU(inst, M.summary, { glDate: glPostDate });
+  // ─── Participation auto-scale ───
+  // Accounting JEs MUST reflect the lender's actual share of the syndicate.
+  // If the Builder is showing Total Syndication amounts (B._builderScale = 1.0)
+  // but the lender only holds 60% of the deal, scale every JE row down to 60%
+  // here so the sub-ledger / DIU export carries the correct numbers.
+  // No-op when Builder is already at participation (_builderScale === pct/100).
+  const targetShare   = (inst._participationPct || 100) / 100;
+  const builderScale  = inst._builderScale || 1.0;
+  const acctScale     = targetShare / builderScale;
+  if(Math.abs(acctScale - 1) > 0.0001){
+    M.acctJournals = M.acctJournals.map(j => ({
+      ...j,
+      amountLE:    +(((+j.amountLE)    || 0) * acctScale).toFixed(2),
+      amountLocal: +(((+j.amountLocal) || 0) * acctScale).toFixed(2),
+      originalAmount: (typeof j.originalAmount === 'number')
+        ? +((j.originalAmount) * acctScale).toFixed(2)
+        : j.originalAmount,
+      transactionComments: (j.transactionComments || '') +
+        ' · scaled to ' + Math.round(targetShare * 100) + '% participation'
+    }));
+    console.log('[Participation] auto-scaled ' + M.acctJournals.length +
+                ' JE rows · target=' + Math.round(targetShare*100) + '% · ' +
+                'builder=' + Math.round(builderScale*100) + '% · ' +
+                'factor=' + acctScale.toFixed(4));
+  }
+  M._acctParticipationPct = Math.round(targetShare * 100);
+  M._acctBuilderViewMode  = inst._viewMode || 'participation';
   // AASB extras overlay — applies GST 10% split on fees, APRA APS 220 ECL
-  // floor, and franking memo annotations to the engine output BEFORE the
-  // KPI / coverage / journal-table renders so the user sees them in the JE
-  // drill-through. No-op for non-AASB frameworks or default extras.
+  // floor, and franking memo annotations to the engine output. No-op for
+  // non-AASB frameworks or default extras.
   if(typeof applyAASBExtrasToJEs === 'function'){
     try { M.acctJournals = applyAASBExtrasToJEs(M.acctJournals, inst, M.summary); }
     catch(err){ console.error('AASB overlay failed:', err); }
+  }
+  // Surface the participation banner in Stage 2 so the user sees what scale
+  // their JEs are at. Updated on every run.
+  if(typeof renderParticipationBanner === 'function'){
+    try { renderParticipationBanner(); } catch(_){}
   }
   // KPI strip
   const ccy = inst.currency || 'GBP';
@@ -10436,15 +10529,15 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
     // with the v1 INSTRUMENTS list and wipe our 10 v2 presets. Instead, just
     // restore the v2 preset list and keep whatever was last selected.
     populateV2Dropdown();
-    // Find which preset key the just-built instrument came from so we can
-    // restore the dropdown's selection. Match by deal id (B.deal.dealId).
+    // Restore the dropdown's selection from the preset key we stamped on B at
+    // load time (B._presetKey). Falling back to dealId-match would miss when
+    // the dealId has been mutated (e.g. -PART suffix on participation-scaled
+    // loads), which would leave sel.value='' and break the View change handler.
     const sel = document.getElementById('sel-instrument');
     if(sel){
-      const presetMatch = PRESETS.find(p => {
-        const b = p.build();
-        return b.deal.dealId === B.deal.dealId;
-      });
-      sel.value = presetMatch ? ('v2:' + presetMatch.key) : '';
+      const presetKey = B._presetKey ||
+        (PRESETS.find(p => p.build().deal.dealId === B.deal.dealId) || {}).key;
+      sel.value = presetKey ? ('v2:' + presetKey) : '';
     }
     // Track whether this is a brand-new instrument or a re-registration of
     // the same one. We must NOT wipe Stage 2 / 3 / 4 / 5 state just because
@@ -10645,6 +10738,12 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
       // AASB (Australian). Read by loadTreatmentForm to populate the Stage 2
       // amber AASB Extras panel (tier, ASIC, franking, related-party, GST, APRA).
       aasbExtras: B.aasbExtras ? { ...B.aasbExtras } : undefined,
+      // Participation metadata so runAccountingImpl can auto-scale JEs to the
+      // lender's actual share regardless of which display lens (syndication
+      // vs participation) the Builder is currently showing.
+      _participationPct: B._participationPct ?? 100,
+      _builderScale:     B._builderScale     ?? 1.0,
+      _viewMode:         B._viewMode         ?? 'participation',
       _builderSource: B   // round-trip metadata
     };
     return inst;
@@ -11242,6 +11341,22 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
     B.facility = built.facility;
     B.tranches = built.tranches;
     B.fees     = built.fees;
+    // ─── Track participation metadata so Stage 2 can auto-scale JEs ───
+    // _participationPct = the lender's share of the syndicate (from preset)
+    // _builderScale     = the scale factor actually applied to B at load
+    //                     (1.0 when Builder shows full syndicate amounts,
+    //                      pct/100 when Builder shows participation amounts)
+    // runAccountingImpl uses these to compute the correct JE scale regardless
+    // of which display lens the user has on.
+    B._participationPct = pct;
+    B._builderScale     = (viewMode === 'participation' && pct < 100) ? (pct / 100) : 1.0;
+    B._viewMode         = viewMode;
+    // Remember which preset key built this state so registerBuilderInstrument
+    // can restore the dropdown selection regardless of dealId suffix changes
+    // (e.g. -PART appended when participation-scaled). This is what the View
+    // change handler reads to decide whether to reload — must persist!
+    B._presetKey        = p.key;
+    if(window.V2_CTX) window.V2_CTX.activePresetKey = p.key;
     // AASB extras — preset-defined Australian-specific accounting fields
     // (tier, ASIC reportable, franking, related-party, GST, APRA). Captured on
     // B so builderToInstrument can copy them onto the synthesised instrument
@@ -11907,7 +12022,11 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
   // ─── User context (mock) — selected team + view mode ───
   // In a real deployment these come from a logged-in user session. Here we
   // expose them as inline controls in the header so the demo can swap them.
-  window.V2_CTX = window.V2_CTX || { team:'All', viewMode:'syndication' };
+  // Default viewMode = 'participation' so accounting JEs reflect the lender's
+  // actual share by default (the accounting-correct lens). The toggle lets
+  // the user flip to 'syndication' for term-sheet review, but Stage 2 always
+  // auto-scales JEs down to participation regardless — see runAccountingImpl.
+  window.V2_CTX = window.V2_CTX || { team:'All', viewMode:'participation' };
 
   // Populate the Active Deal dropdown with the v2 presets, filtered by team.
   function populateV2Dropdown(){
@@ -11974,10 +12093,19 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
       V2_CTX.viewMode = e.target.value;
       // Reload the currently-selected preset so the participation scaling
       // applies (or unwinds) to face values, drawdowns, fees, JEs.
+      // Resolve the preset key from THREE possible sources, in order:
+      //   1. sel.value ('v2:<key>')
+      //   2. V2_CTX.activePresetKey (set by loadPresetByKey)
+      //   3. B._presetKey (stamped on Builder state)
+      // This makes the View flip robust even when the dealId has been mutated
+      // (-PART suffix) which would otherwise leave sel.value empty.
       const sel = document.getElementById('sel-instrument');
-      const currentVal = sel && sel.value;
-      if(currentVal && currentVal.startsWith('v2:')){
-        const key = currentVal.slice(3);
+      let key = null;
+      if(sel && sel.value && sel.value.startsWith('v2:')) key = sel.value.slice(3);
+      if(!key && window.V2_CTX && V2_CTX.activePresetKey) key = V2_CTX.activePresetKey;
+      if(!key && typeof B !== 'undefined' && B._presetKey) key = B._presetKey;
+      console.log('[View change] mode=' + V2_CTX.viewMode + ' resolved key=' + key);
+      if(key){
         const currentTab = document.querySelector('.stage-tab-content.tab-visible')?.id || 'builder';
         loadPresetByKey(key);
         if(typeof registerBuilderInstrument === 'function') registerBuilderInstrument();
@@ -11986,8 +12114,14 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
         if(currentTab !== document.querySelector('.stage-tab-content.tab-visible')?.id){
           document.querySelector('.tab-btn[data-tab="' + currentTab + '"]')?.click();
         }
+        if(typeof toast === 'function'){
+          toast('View flipped to ' + (V2_CTX.viewMode==='syndication' ? 'Total Syndication' : 'Your Participation') + ' · reloaded ' + key);
+        }
+      } else {
+        if(typeof toast === 'function'){
+          toast('View flipped to ' + (V2_CTX.viewMode==='syndication' ? 'Total Syndication' : 'Your Participation') + ' · no active deal to reload');
+        }
       }
-      if(typeof toast === 'function') toast('View: ' + (V2_CTX.viewMode==='syndication' ? 'Total Syndication' : 'Your Participation'));
     });
   }
 
