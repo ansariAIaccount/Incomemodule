@@ -1768,8 +1768,9 @@
       <div id="fv-sensitivities" class="mt-3"></div>
     </details>
 
-    <!-- E) IFRS 9 ECL Journal Templates -->
-    <details class="bg-white border border-gray-200 rounded-lg mb-2 p-3">
+    <!-- E) IFRS 9 ECL Journal Templates — IFRS / AASB only (3-stage staged ECL).
+         US GAAP uses ASC 326 CECL (different model); ASPE uses incurred loss. -->
+    <details class="bg-white border border-gray-200 rounded-lg mb-2 p-3" data-fw-applies="IFRS AASB">
       <summary class="font-semibold text-[12.5px] cursor-pointer flex items-center gap-2">
         <span class="material-icons-outlined text-[16px]" style="color:var(--brand-600)">health_and_safety</span>
         <span data-fw-ecl-tmpl-title>IFRS 9 Impairment — ECL Journal Templates</span>
@@ -1778,8 +1779,8 @@
       <div id="ecl-templates" class="mt-3"></div>
     </details>
 
-    <!-- E-bis) ECL Calculation Trace — explicit IFRS 9 §5.5.17 disclosure -->
-    <details class="bg-white border border-gray-200 rounded-lg mb-2 p-3">
+    <!-- E-bis) ECL Calculation Trace — IFRS 9 §5.5.17 / AASB 9 §5.5.17 only. -->
+    <details class="bg-white border border-gray-200 rounded-lg mb-2 p-3" data-fw-applies="IFRS AASB">
       <summary class="font-semibold text-[12.5px] cursor-pointer flex items-center gap-2">
         <span class="material-icons-outlined text-[16px]" style="color:var(--brand-600)">calculate</span>
         <span data-fw-ecl-trace-title>IFRS 9 ECL Calculation Trace</span>
@@ -4070,18 +4071,21 @@ function syncFrameworkChip(inst){
   const fvLabel = document.querySelector('[data-fw-fv-label]');
   if(fvLabel) fvLabel.textContent = 'Fair Value (' + fw.fv.citation + ')';
 
-  // Evidence Pack panel titles
+  // Evidence Pack panel titles — branch by framework so AASB shows its own
+  // citations (AASB 9 / AASB 13) rather than inheriting IFRS 9 / IFRS 13 text.
   const fvSensTitle = document.querySelector('[data-fw-fv-sens-title]');
   if(fvSensTitle) fvSensTitle.textContent = 'Fair Value Sensitivities (' + fw.fv.citation + ' disclosure)';
   const eclTmplTitle = document.querySelector('[data-fw-ecl-tmpl-title]');
   if(eclTmplTitle) eclTmplTitle.textContent =
     isUSGAAP ? 'ASC 326 CECL — Allowance Journal Templates'
   : isASPE   ? 'ASPE 3856 — Incurred-Loss Allowance Templates'
+  : isAASB   ? 'AASB 9 Impairment — ECL Journal Templates'
   :            'IFRS 9 Impairment — ECL Journal Templates';
   const eclTraceTitle = document.querySelector('[data-fw-ecl-trace-title]');
   if(eclTraceTitle) eclTraceTitle.textContent =
     isUSGAAP ? 'ASC 326-20 CECL Calculation Trace'
   : isASPE   ? 'ASPE 3856 Incurred-Loss Trace'
+  : isAASB   ? 'AASB 9 ECL Calculation Trace'
   :            'IFRS 9 ECL Calculation Trace';
 
   // POCI flag — IFRS-only concept. Hide the row for US GAAP and ASPE.
@@ -4127,6 +4131,16 @@ function syncFrameworkChip(inst){
       oidChip.textContent = 'No OID/premium · PP = Face';
     }
   }
+
+  // ─── Evidence Pack panel visibility — driven by inst.accountingFramework ───
+  // Each panel in #evidence-pack carries a data-fw-applies attribute (a
+  // space-separated list of framework codes it applies to). Hide panels that
+  // don't apply to the current framework. Panels without the attribute always
+  // show (they're framework-neutral — e.g. Month-End Close, Carrying Value).
+  document.querySelectorAll('#evidence-pack [data-fw-applies]').forEach(panel => {
+    const applies = (panel.getAttribute('data-fw-applies') || '').split(/\s+/);
+    panel.style.display = applies.includes(fw.code) ? '' : 'none';
+  });
 }
 
 // Populate the treatment form from the instrument's current state
@@ -6396,7 +6410,12 @@ function renderECLTrace(inst, summary){
       ['Actual posted (engine)',        fmtMoney(summary.closingECLAllowance || 0, ccy), 'summary.closingECLAllowance']
     ];
   } else {
-    // IFRS 9 §5.5 — 3-stage model (existing logic preserved)
+    // Staged ECL model — applies to BOTH IFRS 9 §5.5 and AASB 9 §5.5
+    // (AASB 9 mirrors IFRS 9 verbatim). Pick the right standard label so the
+    // disclosures cite the locally-applicable accounting standard.
+    const isAASB    = fw.code === 'AASB';
+    const stdCode   = isAASB ? 'AASB 9' : 'IFRS 9';
+    const fvStdCode = isAASB ? 'AASB 13' : 'IFRS 13';
     const stageMultiplier = stage === 1 ? 1.0 : Math.min(lifeYears, 12);
     const stageLabel = stage === 1 ? '12-month'
                     : stage === 2 ? `Lifetime (${stageMultiplier.toFixed(1)} y)`
@@ -6404,19 +6423,19 @@ function renderECLTrace(inst, summary){
                     : 'POCI — initial expected loss baseline';
     expectedLoss = pd * lgd * ead * stageMultiplier * macro;
     formulaCode = 'ECL = PD × LGD × EAD × stage_curve × macro_overlay';
-    modelExplain = 'IFRS 9 §5.5 — Stage 1 (performing) uses a 12-month ECL. Stages 2/3 (significant increase in credit risk / credit-impaired) use lifetime ECL. POCI uses a credit-adjusted EIR baseline.';
+    modelExplain = stdCode + ' §5.5 — Stage 1 (performing) uses a 12-month ECL. Stages 2/3 (significant increase in credit risk / credit-impaired) use lifetime ECL. POCI uses a credit-adjusted EIR baseline.';
     const discountFactor = 1 / Math.pow(1 + (eir || 0), Math.max(lifeYears * 0.5, 0.5));
     const discountedPV = expectedLoss * discountFactor;
     const actualPosted = summary.closingECLAllowance || 0;
     const variance = actualPosted - discountedPV;
     rows = [
-      ['PD (annual)',                  (pd * 100).toFixed(4) + '%',         'Treatment panel · IFRS 9 §B5.5.41'],
-      ['LGD',                          (lgd * 100).toFixed(2) + '%',        'Treatment panel · IFRS 9 §B5.5.55'],
+      ['PD (annual)',                  (pd * 100).toFixed(4) + '%',         'Treatment panel · ' + stdCode + ' §B5.5.41'],
+      ['LGD',                          (lgd * 100).toFixed(2) + '%',        'Treatment panel · ' + stdCode + ' §B5.5.55'],
       ['Drawn balance (closing)',      fmtMoney(drawn, ccy),                'Engine schedule · summary.closingBalance'],
       ['Undrawn commitment',           fmtMoney(undrawn, ccy),              'Engine · commitment − drawn'],
-      ['EAD CCF (credit conv. factor)', (ccf * 100).toFixed(0) + '%',       'Treatment panel · IFRS 9 §B5.5.31'],
+      ['EAD CCF (credit conv. factor)', (ccf * 100).toFixed(0) + '%',       'Treatment panel · ' + stdCode + ' §B5.5.31'],
       ['Effective EAD',                fmtMoney(ead, ccy),                  '= drawn + undrawn × CCF'],
-      ['Stage',                        'Stage ' + stage + ' (' + stageLabel + ')', 'Treatment panel · IFRS 9 §5.5.3'],
+      ['Stage',                        'Stage ' + stage + ' (' + stageLabel + ')', 'Treatment panel · ' + stdCode + ' §5.5.3'],
       ['Macro overlay weight',         (macro * 100).toFixed(0) + '%',      'Treatment panel · forward-looking adjustment'],
       ['Expected Loss (EL)',           fmtMoney(expectedLoss, ccy),         '= PD × LGD × EAD × stage × overlay'],
       ['Effective Interest Rate',      (eir * 100).toFixed(4) + '%',        'computeEIR() · drives discounting'],
@@ -6427,7 +6446,7 @@ function renderECLTrace(inst, summary){
           Math.abs(variance) < 100
               ? 'Within rounding tolerance'
               : (actualPosted >= expectedLoss * 0.99 && actualPosted <= expectedLoss * 1.01
-                 ? 'Engine posts gross EL · discount step is shown for IFRS 13 disclosure only'
+                 ? 'Engine posts gross EL · discount step is shown for ' + fvStdCode + ' disclosure only'
                  : 'Engine uses daily compounding · trace is a single-period approximation')]
     ];
   }
@@ -6436,6 +6455,7 @@ function renderECLTrace(inst, summary){
   // Framework-specific JE labels for the resulting pair
   const expenseLabel = fw.ecl.model === 'cecl'   ? 'Credit Loss Expense — ASC 326 CECL'
                     : fw.ecl.model === 'incurred' ? 'Loan Loss Provision — ASPE 3856 incurred'
+                    : fw.code === 'AASB'          ? 'Impairment Expense — AASB 9 ECL'
                                                    : 'Impairment Expense — IFRS 9 ECL';
   const allowLabel   = fw.ecl.model === 'cecl'   ? 'Allowance for Credit Losses (Contra-Asset)'
                     : fw.ecl.model === 'incurred' ? 'Loan Loss Allowance (Contra-Asset)'
@@ -7041,6 +7061,11 @@ function renderECLTemplates(inst, summary){
   const stage = inst.ifrs?.ecLStage || 1;
   const eclClose = summary.closingECLAllowance || 0;
   const eclChange = summary.totalECLChange || 0;
+  // Pick the locally-applicable standard label — AASB 9 mirrors IFRS 9
+  // verbatim, so the body of the templates is identical but the disclosure
+  // citations reference the user's actual reporting standard.
+  const fw = frameworkOf(inst);
+  const std = fw.code === 'AASB' ? 'AASB 9' : 'IFRS 9';
   // Account map (kept consistent with engine's INVESTRAN_GL).
   const ECL_BS = '145000';   // ECL allowance contra-asset
   const ECL_PL = '470000';   // Impairment expense (P&L)
@@ -7060,21 +7085,21 @@ function renderECLTemplates(inst, summary){
     <div class="text-[12px] mb-2">Live deal — currently <strong>Stage ${stage}</strong> · closing ECL allowance ${fmtMoney(eclClose, ccy)} · period change ${fmtMoney(Math.abs(eclChange), ccy)} ${eclChange>=0?'(build)':'(release)'}</div>
     ${entry(
       'Initial recognition — Stage 1 (12-month ECL)',
-      'IFRS 9 §5.5.5 — recognise 12-month expected credit losses on day 1.',
+      std + ' §5.5.5 — recognise 12-month expected credit losses on day 1.',
       [
         { acct: ECL_PL, desc: 'Impairment expense — Stage 1', dr: 100 },
         { acct: ECL_BS, desc: 'ECL allowance (contra-asset)', cr: 100 }
       ])}
     ${entry(
       'Stage 1 → Stage 2 transition (significant increase in credit risk)',
-      'IFRS 9 §5.5.3 — move to lifetime ECL; book the incremental allowance.',
+      std + ' §5.5.3 — move to lifetime ECL; book the incremental allowance.',
       [
         { acct: ECL_PL, desc: 'Impairment expense — SICR build', dr: 400 },
         { acct: ECL_BS, desc: 'ECL allowance — Stage 2',         cr: 400 }
       ])}
     ${entry(
       'Stage 2 → Stage 3 transition (credit-impaired)',
-      'IFRS 9 §5.5.13 — recognise lifetime ECL on net carrying. Interest now accrues on net of allowance.',
+      std + ' §5.5.13 — recognise lifetime ECL on net carrying. Interest now accrues on net of allowance.',
       [
         { acct: ECL_PL, desc: 'Impairment expense — Stage 3',   dr: 600 },
         { acct: ECL_BS, desc: 'ECL allowance — Stage 3',        cr: 600 }
@@ -7088,14 +7113,14 @@ function renderECLTemplates(inst, summary){
       ])}
     ${entry(
       'Default / write-off',
-      'IFRS 9 §5.4.4 — derecognise gross carrying against allowance once recovery expectations are exhausted.',
+      std + ' §5.4.4 — derecognise gross carrying against allowance once recovery expectations are exhausted.',
       [
         { acct: ECL_BS, desc: 'ECL allowance — utilised',        dr: 1000 },
         { acct: WO,     desc: 'Loan written-off',                cr: 1000 }
       ])}
     ${entry(
       'Post-write-off recovery',
-      'IFRS 9 §5.4.4 — recognise cash recovery as a credit to impairment.',
+      std + ' §5.4.4 — recognise cash recovery as a credit to impairment.',
       [
         { acct: '111000', desc: 'Cash receipt',                  dr: 250 },
         { acct: REC,      desc: 'Recovery — previously written-off', cr: 250 }
@@ -8819,19 +8844,56 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // X-axis labels: every Nth quarter (max ~6 labels)
     const labelStep = Math.max(1, Math.ceil(quarterly.length / 6));
 
-    // Event markers
+    // Event markers — find the exact quarter that contains each event date
+    // (the previous string-prefix >= comparison was matching the wrong quarter,
+    // and mandatoryPrepayment / paydown weren't even in the color map so they
+    // rendered in the same dark-blue as the balance line — invisibly).
     const events = (inst.principalSchedule || []).concat(inst.defaultEvents || []);
     const markerPts = events.map(e => {
-      const idx = quarterly.findIndex(q => (e.date || '').slice(0, 7) >= q.key.slice(0, 4) + '-' + String((q.quarter-1)*3+1).padStart(2,'0'));
-      if(idx < 0) return null;
-      let color = '#21295C';
-      if(e.type === 'prepayment') color = '#F4A261';
-      else if(e.type === 'writeOff') color = '#C44536';
-      else if(e.type === 'recovery') color = '#0F8A4D';
-      else if(e.type === 'cure') color = '#4ECDC4';
-      else if(e.type === 'loanSale') color = '#8E44AD';
-      else if(e.type === 'defaultRateBps' || e.defaultRateBps) color = '#E76F51';
-      return { x: padL + idx * xStep, y: yScale(quarterly[idx].endBalance), color, label: e.type || 'event' };
+      if(!e.date) return null;
+      const ed = new Date(e.date + 'T12:00:00');
+      if(isNaN(ed.getTime())) return null;
+      const evtYr = ed.getFullYear();
+      const evtQ  = Math.floor(ed.getMonth() / 3) + 1;
+      let idx = quarterly.findIndex(q => q.year === evtYr && q.quarter === evtQ);
+      // If the exact quarter isn't in the aggregated buckets (e.g. event lands
+      // before the first row), snap to the closest in-range quarter.
+      if(idx < 0){
+        idx = quarterly.findIndex(q => q.year > evtYr || (q.year === evtYr && q.quarter > evtQ));
+        if(idx < 0) idx = quarterly.length - 1;
+      }
+      let color = '#21295C', label = e.type || 'event';
+      if(e.type === 'prepayment'){
+        color = '#F4A261'; label = 'Voluntary Prepayment';
+      } else if(e.type === 'mandatoryPrepayment'){
+        color = '#D97706'; label = 'Mandatory Prepayment' + (e.trigger ? ' · ' + e.trigger : '');
+      } else if(e.type === 'paydown'){
+        color = '#0F8A4D'; label = 'Scheduled Paydown';
+      } else if(e.type === 'draw'){
+        color = '#4338CA'; label = 'Drawdown';
+      } else if(e.type === 'writeOff'){
+        color = '#C44536'; label = 'Write-Off';
+      } else if(e.type === 'recovery'){
+        color = '#0F8A4D'; label = 'Recovery';
+      } else if(e.type === 'cure'){
+        color = '#4ECDC4'; label = 'Cure / Stage Reversal';
+      } else if(e.type === 'loanSale'){
+        color = '#8E44AD'; label = 'Loan Sale';
+      } else if(e.type === 'debtEquitySwap'){
+        color = '#7C3AED'; label = 'Debt-for-Equity Swap';
+      } else if(e.type === 'participation'){
+        color = '#9333EA'; label = 'Participation';
+      } else if(e.type === 'defaultRateBps' || e.defaultRateBps){
+        color = '#E76F51'; label = 'Default';
+      }
+      // Tooltip shows the formatted amount when present so the user can hover
+      // over the dot and see "Mandatory Prepayment · assetSale · $8.0m · 2025-09-15".
+      const amt = (typeof e.amount === 'number') ? ' · $' + (e.amount/1e6).toFixed(2) + 'm' : '';
+      return {
+        x: padL + idx * xStep,
+        y: yScale(quarterly[idx].endBalance),
+        color, label: label + amt + ' · ' + e.date
+      };
     }).filter(Boolean);
 
     return `<div class="chart-card" style="grid-column:span 2">
@@ -8860,9 +8922,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
       <div class="chart-legend">
         <span><span class="chart-legend-sw" style="background:#21295C"></span>Drawn balance</span>
         <span><span class="chart-legend-sw" style="background:#1C7293;background:linear-gradient(90deg,#1C7293 50%,transparent 50%,transparent 100%);background-size:6px 100%"></span>Carrying value (gross of ECL)</span>
-        <span><span class="chart-legend-sw" style="background:#F4A261"></span>Prepayment</span>
+        <span><span class="chart-legend-sw" style="background:#4338CA"></span>Drawdown</span>
+        <span><span class="chart-legend-sw" style="background:#0F8A4D"></span>Scheduled Paydown / Recovery</span>
+        <span><span class="chart-legend-sw" style="background:#F4A261"></span>Voluntary Prepayment</span>
+        <span><span class="chart-legend-sw" style="background:#D97706"></span>Mandatory Prepayment</span>
         <span><span class="chart-legend-sw" style="background:#C44536"></span>Write-off</span>
-        <span><span class="chart-legend-sw" style="background:#0F8A4D"></span>Recovery</span>
+        <span><span class="chart-legend-sw" style="background:#8E44AD"></span>Loan Sale</span>
       </div>
     </div>`;
   }
@@ -9966,17 +10031,45 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
           <button data-f-action="remove" data-fidx="${idx}" class="ml-auto text-red-600 underline">remove</button>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-1">
-          <div><label class="text-[10px] uppercase text-gray-600 block">%</label><input data-f-field="pct" data-fidx="${idx}" type="number" step="0.0001" value="${f.pct || 0}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white"/></div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Bps</label><input data-f-field="bps" data-fidx="${idx}" type="number" step="0.5" value="${f.bps || 0}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white"/></div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Fix Amount</label><input data-f-field="flatAmount" data-fidx="${idx}" type="number" step="100" value="${f.flatAmount || 0}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white"/></div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Base</label>
-            <select data-f-field="base" data-fidx="${idx}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white">
-              <option ${f.base==='commitment'?'selected':''} value="commitment">Commitment</option>
-              <option ${f.base==='funded'?'selected':''} value="funded">Funded</option>
-              <option ${f.base==='unfunded'?'selected':''} value="unfunded">Unfunded</option>
-              <option ${f.base==='tranche-face'?'selected':''} value="tranche-face">Tranche face</option>
-            </select>
-          </div>
+          ${ /* ─── Mode-driven field visibility ───
+              fixPct                  → %         (+ Base)
+              fixAmount               → Fix Amt   (one-off)
+              floatBps                → Bps       (+ Base)
+              overFunded              → %         (base implicit = funded)
+              overUnfunded            → %         (base implicit = unfunded)
+              overInterestComponent   → %         (+ Linked Component)
+              Frequency / Payment Date / IFRS apply to every mode.        */
+            (f.mode==='fixPct' || f.mode==='overFunded' || f.mode==='overUnfunded' || f.mode==='overInterestComponent')
+              ? `<div><label class="text-[10px] uppercase text-gray-600 block">%</label><input data-f-field="pct" data-fidx="${idx}" type="number" step="0.0001" value="${f.pct || 0}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white" title="Percentage rate applied to the base"/></div>`
+              : ''
+          }
+          ${ f.mode==='floatBps'
+              ? `<div><label class="text-[10px] uppercase text-gray-600 block">Bps</label><input data-f-field="bps" data-fidx="${idx}" type="number" step="0.5" value="${f.bps || 0}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white" title="Basis points applied to the base"/></div>`
+              : ''
+          }
+          ${ f.mode==='fixAmount'
+              ? `<div><label class="text-[10px] uppercase text-gray-600 block">Fix Amount</label><input data-f-field="flatAmount" data-fidx="${idx}" type="number" step="100" value="${f.flatAmount || 0}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white" title="Flat dollar amount (no rate / base applied)"/></div>`
+              : ''
+          }
+          ${ /* Base picker shown only when the mode multiplies % or bps by a balance the user can choose.
+              fixAmount has no base. overFunded/overUnfunded/overInterestComponent have implicit bases. */
+            (f.mode==='fixPct' || f.mode==='floatBps')
+              ? `<div><label class="text-[10px] uppercase text-gray-600 block">Base</label>
+                  <select data-f-field="base" data-fidx="${idx}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white" title="Which balance the rate is applied to">
+                    <option ${f.base==='commitment'?'selected':''} value="commitment">Commitment</option>
+                    <option ${f.base==='funded'?'selected':''} value="funded">Funded</option>
+                    <option ${f.base==='unfunded'?'selected':''} value="unfunded">Unfunded</option>
+                    <option ${f.base==='tranche-face'?'selected':''} value="tranche-face">Tranche face</option>
+                  </select>
+                </div>`
+              : ''
+          }
+          ${ f.mode==='overInterestComponent'
+              ? `<div class="col-span-2"><label class="text-[10px] uppercase text-gray-600 block">Linked Interest Component</label>
+                  <select data-f-field="linkedComponentId" data-fidx="${idx}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white">${linkOpts}</select>
+                </div>`
+              : ''
+          }
           <div><label class="text-[10px] uppercase text-gray-600 block">Frequency</label>
             <select data-f-field="frequency" data-fidx="${idx}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white">
               <option ${f.frequency==='oneOff'?'selected':''} value="oneOff">One-off</option>
@@ -9986,18 +10079,59 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
               <option ${f.frequency==='annual'?'selected':''} value="annual">Annual</option>
             </select>
           </div>
-          <div><label class="text-[10px] uppercase text-gray-600 block">Payment Date</label><input data-f-field="paymentDate" data-fidx="${idx}" type="date" value="${f.paymentDate || ''}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white"/></div>
-          ${f.mode==='overInterestComponent' ? `
-          <div class="col-span-2 md:col-span-2"><label class="text-[10px] uppercase text-gray-600 block">Linked Interest Component</label>
-            <select data-f-field="linkedComponentId" data-fidx="${idx}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white">${linkOpts}</select>
-          </div>` : ''}
-          <div><label class="text-[10px] uppercase text-gray-600 block">IFRS</label>
-            <select data-f-field="ifrs" data-fidx="${idx}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white">
-              <option ${f.ifrs==='IFRS9-EIR'?'selected':''} value="IFRS9-EIR">IFRS 9 — EIR-included</option>
-              <option ${f.ifrs==='IFRS15-overTime'?'selected':''} value="IFRS15-overTime">IFRS 15 — over time</option>
-              <option ${f.ifrs==='IFRS15-pointInTime'?'selected':''} value="IFRS15-pointInTime">IFRS 15 — point in time</option>
-            </select>
-          </div>
+          ${ /* Payment Date only matters for one-off fees (drives the JE post date).
+              Accrual-style fees recognise across periods so the per-period dates are computed. */
+            f.frequency==='oneOff'
+              ? `<div><label class="text-[10px] uppercase text-gray-600 block">Payment Date</label><input data-f-field="paymentDate" data-fidx="${idx}" type="date" value="${f.paymentDate || ''}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white"/></div>`
+              : ''
+          }
+          ${ /* ─── Framework-aware fee-treatment dropdown ───
+              Pulls the three options (EIR / over-time / point-in-time) from the
+              FRAMEWORKS registry for the current B.deal.framework. So an AASB
+              deal sees AASB 9 / AASB 15 labels, US GAAP sees ASC 310-20 / 606,
+              ASPE sees ASPE 3856 / 3400. The value stored on f.ifrs uses the
+              framework-specific scheme. A "bucket" mapper lets the dropdown
+              find the right "selected" option even if the fee was stored under
+              a different framework's scheme (e.g. preset has IFRS9-EIR but the
+              user changed framework to AASB → still highlights the EIR option).
+            */ '' }
+          ${ (() => {
+              const fw = (typeof FRAMEWORKS !== 'undefined' && FRAMEWORKS[B.deal.framework]) || FRAMEWORKS.IFRS;
+              const fwFees = fw.fees || FRAMEWORKS.IFRS.fees;
+              // Map any framework's stored value to one of three buckets
+              const bucketOf = v => {
+                if(!v) return null;
+                if(/-EIR$/i.test(v))         return 'eir';
+                if(/overTime$/i.test(v))     return 'overTime';
+                if(/pointInTime$/i.test(v))  return 'pointInTime';
+                return null;
+              };
+              const currentBucket = bucketOf(f.ifrs);
+              const colLabel = fw.code === 'IFRS'   ? 'IFRS'
+                            : fw.code === 'USGAAP' ? 'US GAAP'
+                            : fw.code === 'ASPE'   ? 'ASPE'
+                            : fw.code === 'AASB'   ? 'AASB'
+                            :                        'Standard';
+              return `<div><label class="text-[10px] uppercase text-gray-600 block">${colLabel}</label>
+                <select data-f-field="ifrs" data-fidx="${idx}" class="w-full border rounded px-1 py-0.5 text-[11px] bg-white">
+                  <option ${currentBucket==='eir'        ?'selected':''} value="${fwFees.eir.value}">${fwFees.eir.label}</option>
+                  <option ${currentBucket==='overTime'   ?'selected':''} value="${fwFees.overTime.value}">${fwFees.overTime.label}</option>
+                  <option ${currentBucket==='pointInTime'?'selected':''} value="${fwFees.pointInTime.value}">${fwFees.pointInTime.label}</option>
+                </select>
+              </div>`;
+            })()
+          }
+        </div>
+        <div class="text-[10px] text-amber-700 mt-1 italic" title="What gets calculated for this fee mode">
+          ${ /* Compact help text explaining what each mode computes — appears under each fee card. */
+            f.mode==='fixPct'                 ? 'Fee = % × base balance × day-count factor.'
+          : f.mode==='fixAmount'              ? 'Fee = flat dollar amount on the payment date (one-off).'
+          : f.mode==='floatBps'               ? 'Fee = bps × base balance × day-count factor.'
+          : f.mode==='overFunded'             ? 'Fee = % × drawn balance × day-count factor (base implicit).'
+          : f.mode==='overUnfunded'           ? 'Fee = % × undrawn balance × day-count factor (base implicit).'
+          : f.mode==='overInterestComponent'  ? 'Fee = % × interest-component all-in rate × drawn balance × DCF.'
+          : ''
+          }
         </div>
       </div>`;
   }
@@ -10008,7 +10142,10 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
         const fld = el.dataset.fField;
         const val = (el.type === 'number') ? (parseFloat(el.value)||0) : el.value;
         f[fld] = val;
-        if(fld === 'mode') renderFees();   // re-render to surface linkedComponent dropdown
+        // Re-render whenever a field that drives visibility of OTHER fields
+        // changes — mode toggles which input is visible (Bps / % / FlatAmount /
+        // Linked Component), frequency toggles whether Payment Date appears.
+        if(fld === 'mode' || fld === 'frequency') renderFees();
         recompute();
       };
     });
@@ -10236,8 +10373,24 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
       amount = baseValue * (+f.pct || 0) * (f.frequency === 'oneOff' ? 1 : dcf);
       formula = `${baseValue.toLocaleString()} × ${(f.pct*100).toFixed(4)}% × dcf(${dcf.toFixed(4)}) = ${amount.toFixed(2)}`;
     } else if(f.mode === 'fixAmount'){
-      amount = (f.frequency === 'oneOff' && p.start === B.deal.settle) ? (+f.flatAmount || 0) : 0;
-      formula = `fixed ${(+f.flatAmount).toLocaleString()} on ${B.deal.settle}`;
+      const flat = +f.flatAmount || 0;
+      if(f.frequency === 'oneOff'){
+        // One-off: fire on the period containing the payment date (default = settle)
+        const payOn = f.paymentDate || B.deal.settle;
+        amount = (payOn && payOn >= p.start && payOn < p.end) ? flat : 0;
+        formula = `fixed ${flat.toLocaleString()} on ${payOn}`;
+      } else {
+        // Recurring fix amounts: prorate using day-count factor × payments-per-year.
+        // monthly $10k → $120k/yr × dcf(0.25) = $30k per quarterly bucket.
+        // quarterly $10k → $40k/yr × dcf(0.25) = $10k per quarterly bucket.
+        const perYear = f.frequency === 'monthly'   ? 12
+                      : f.frequency === 'quarterly' ? 4
+                      : f.frequency === 'semi'      ? 2
+                      : f.frequency === 'annual'    ? 1
+                      : 1;
+        amount = flat * perYear * dcf;
+        formula = `${flat.toLocaleString()} × ${perYear}/yr × dcf(${dcf.toFixed(4)}) = ${amount.toFixed(2)}`;
+      }
     } else if(f.mode === 'floatBps'){
       baseValue = (f.base === 'commitment') ? (B.facility.commitment || 0)
                 : (f.base === 'funded') ? drawnBalance
@@ -10273,8 +10426,17 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
 
   // ─── Render forward cashflow table ──────────────────────────────────
   let lastCashflows = [];
+  // Track the last-rendered framework so we only re-render fees when it
+  // actually changes (avoids destroying focus on every input keystroke).
+  let lastRenderedFwForFees = null;
   function recompute(){
     syncDealForm();
+    // If the deal framework changed, re-render fees so the IFRS/AASB/ASC/ASPE
+    // dropdown labels update to match the active standard.
+    if(B.deal.framework !== lastRenderedFwForFees){
+      lastRenderedFwForFees = B.deal.framework;
+      if(typeof renderFees === 'function' && B.fees && B.fees.length) renderFees();
+    }
     lastCashflows = computeCashflows();
     renderCashflowTable(lastCashflows);
     updateBuilderStatus();
@@ -10718,11 +10880,31 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
       type: 'simpleDaily',
       principalRepayment: B.facility.repayment,
       principalSchedule: [
+        // Initial draw at settlement — full face from all tranches combined
         { date: B.deal.settle, type:'draw', amount: totalFace, drawdownId: id+'_D1', status:'actual' }
       ].concat(
-        B.tranches.flatMap(t => t.drawdowns.map((d, di) => ({
-          date: d.date, type:'draw', amount: d.amount, drawdownId: t.id+'_D'+(di+2), status:'actual'
+        // Subsequent drawdowns per tranche
+        B.tranches.flatMap(t => (t.drawdowns || []).map((d, di) => ({
+          date: d.date, type:'draw', amount: d.amount, drawdownId: t.id+'_D'+(di+2), status:'actual',
+          reason: d.reason || ''
         })))
+      ).concat(
+        // Paydowns (scheduled, voluntary, mandatory). Tag with kind so the
+        // Dashboard timeline can decorate them appropriately.
+        B.tranches.flatMap(t => (t.repayments || []).map((r, ri) => {
+          const kind = (r.kind || 'scheduled');
+          const type = kind === 'voluntary'       ? 'prepayment'
+                     : kind === 'mandatory'       ? 'mandatoryPrepayment'
+                     : kind === 'changeOfControl' ? 'mandatoryPrepayment'
+                     : kind === 'assetSale'       ? 'mandatoryPrepayment'
+                     :                              'paydown';
+          return {
+            date: r.date, type, amount: r.amount,
+            drawdownId: t.id+'_R'+(ri+1), status:'actual',
+            kind, trigger: r.trigger || (type === 'mandatoryPrepayment' ? kind : ''),
+            reason: r.reason || ''
+          };
+        }))
       ),
       oidTreatment: 'none',
       fees: B.fees.map(f => ({
@@ -11305,6 +11487,209 @@ EIR<sub>t</sub> = rfr.baseRate<sub>t</sub> + marginSchedule[t].marginBps / 10000
           relatedParty: 'aasb124-disclose',  // Group entity — AASB 124 disclosure required
           gstTreatment: 'financialSupply',   // Interest is GST-free financial supply
           apraStandard: 'aps220'             // APRA APS 220 — Credit Risk Management
+        }
+      })
+    },
+    // ════════════════════════════════════════════════════════════════
+    //  Historical AASB deals — for Dashboard balance + timeline demo.
+    //  All have past settle dates so balance curves show decline,
+    //  interest earned over years, and rich lifecycle events.
+    //  Today's date assumed: 2026-06-13.
+    // ════════════════════════════════════════════════════════════════
+    {
+      key:'northbridge-property-au', team:'Real Estate', participationPct:100, tag:'Medium', complexity:3,
+      label:'Northbridge Property Trust — RE Senior Bullet (Mid-life · 1 Voluntary Prepayment)',
+      build: () => ({
+        deal: { name:'Northbridge Property Trust', dealId:'NBP-2022-AU01',
+                counterparty:'Northbridge Property Trust ABN 78 145 612 901',
+                le:'Corporate Bank — Sydney Branch', currency:'AUD', framework:'AASB',
+                settle:'2022-03-15', maturity:'2029-03-15' },
+        facility: { commitment: 50_000_000, availEnd:'2022-03-15', dayBasis:'ACT/365',
+                    holiday:'auFederal', repayment:'AtMaturity', type:'termLoan' },
+        tranches: [{
+          id: uid('TRN'), name:'Senior Secured Term Loan', currency:'AUD',
+          face: 50_000_000, drawnInitially: 50_000_000, drawdowns:[],
+          repayments:[
+            { date:'2024-09-15', amount: 10_000_000, kind:'voluntary',
+              reason:'Partial refinancing from cash sweep — 20% face paydown' }
+          ],
+          interestComponents:[{
+            id: uid('IC'), name:'Margin over 3M BBSW', baseIndex:'BBSW', baseValue: 0.0420,
+            terms:[{ tenor:'3M', lookbackDays:0, observationShift:0, lockoutDays:0, dailyCompounding:false, weighted:false }],
+            spreads:[
+              { from:'2022-03-15', to:'2025-03-15', bps: 280, note:'Years 1-3 — opening margin' },
+              { from:'2025-03-15', to:'2029-03-15', bps: 250, note:'Years 4-7 — step-down on debt reduction' }
+            ],
+            ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0
+          }]
+        }],
+        fees: [
+          { id: uid('FEE'), label:'Establishment Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0100, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2022-03-22', ifrs:'AASB9-EIR' },
+          { id: uid('FEE'), label:'Annual Agency Fee', kind:'agency', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 40_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2023-03-15', ifrs:'AASB15-overTime' }
+        ],
+        aasbExtras: {
+          tier:'tier1', asicReportable:true, frankingTreatment:'none',
+          relatedParty:'none', gstTreatment:'financialSupply', apraStandard:'aps220'
+        }
+      })
+    },
+    {
+      key:'murraydarling-mining-au', team:'Corporate', participationPct:100, tag:'Complex', complexity:4,
+      label:'Murray-Darling Mining RCF — Multi-Draw (Live · 3 Drawdowns · 2 Paydowns)',
+      build: () => ({
+        deal: { name:'Murray-Darling Mining Pty Ltd', dealId:'MDM-2023-AU02',
+                counterparty:'Murray-Darling Mining Pty Ltd ABN 22 658 209 345',
+                le:'Corporate Bank — Melbourne Branch', currency:'AUD', framework:'AASB',
+                settle:'2023-06-01', maturity:'2028-06-01' },
+        facility: { commitment: 40_000_000, availEnd:'2027-06-01', dayBasis:'ACT/365',
+                    holiday:'auFederal', repayment:'AtMaturity', type:'revolver' },
+        tranches: [{
+          id: uid('TRN'), name:'Revolving Credit Facility', currency:'AUD',
+          face: 40_000_000, drawnInitially: 15_000_000,
+          drawdowns:[
+            { date:'2023-12-15', amount: 10_000_000, reason:'Equipment finance — heavy machinery acquisition' },
+            { date:'2024-10-20', amount:  8_000_000, reason:'Working capital — seasonal inventory build' }
+          ],
+          repayments:[
+            { date:'2024-06-30', amount: 5_000_000, kind:'scheduled', reason:'Operating cashflow surplus' },
+            { date:'2025-03-15', amount: 7_000_000, kind:'scheduled', reason:'Commodity price upside · early paydown' }
+          ],
+          interestComponents:[{
+            id: uid('IC'), name:'Margin over 3M BBSW', baseIndex:'BBSW', baseValue: 0.0445,
+            terms:[{ tenor:'3M', lookbackDays:0, observationShift:0, lockoutDays:0, dailyCompounding:false, weighted:false }],
+            spreads:[
+              { from:'2023-06-01', to:'2025-06-01', bps: 240, note:'Years 1-2 — opening margin' },
+              { from:'2025-06-01', to:'2028-06-01', bps: 220, note:'Years 3-5 — step-down on covenant compliance' }
+            ],
+            ratchet:{ kpi:'leverageRatio', tiers:[
+              { from:0,   to:2.0, marginBps:   0 },
+              { from:2.0, to:3.0, marginBps:  25 },
+              { from:3.0, to:null,marginBps:  75 }
+            ]}, esgAdjustmentBps: 0
+          }]
+        }],
+        fees: [
+          { id: uid('FEE'), label:'Upfront Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0090, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2023-06-08', ifrs:'AASB9-EIR' },
+          { id: uid('FEE'), label:'Line Fee (Undrawn)', kind:'commitment', mode:'fixPct',
+            pct: 0.0040, bps:0, flatAmount:0, base:'unfunded',
+            linkedComponentId:'', frequency:'quarterly', paymentDate:'2023-09-01', ifrs:'AASB15-overTime' },
+          { id: uid('FEE'), label:'Agency Fee', kind:'agency', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 35_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2024-06-01', ifrs:'AASB15-overTime' }
+        ],
+        aasbExtras: {
+          tier:'tier1', asicReportable:true, frankingTreatment:'none',
+          relatedParty:'none', gstTreatment:'financialSupply', apraStandard:'aps220'
+        }
+      })
+    },
+    {
+      key:'riverina-agribusiness-au', team:'Corporate', participationPct:100, tag:'Medium', complexity:3,
+      label:'Riverina Agribusiness Co-op — 10Y Amortising (Deeply Mature · 13 Semi-Annual Paydowns)',
+      build: () => ({
+        deal: { name:'Riverina Agribusiness Co-op Ltd', dealId:'RAC-2020-AU03',
+                counterparty:'Riverina Agribusiness Co-op Ltd ABN 91 333 421 887',
+                le:'Corporate Bank — Brisbane Branch', currency:'AUD', framework:'AASB',
+                settle:'2020-01-15', maturity:'2030-01-15' },
+        facility: { commitment: 30_000_000, availEnd:'2020-01-15', dayBasis:'ACT/365',
+                    holiday:'auFederal', repayment:'Periodic', type:'termLoan' },
+        tranches: [{
+          id: uid('TRN'), name:'10-Year Amortising Term Loan', currency:'AUD',
+          face: 30_000_000, drawnInitially: 30_000_000, drawdowns:[],
+          repayments:[
+            // Semi-annual paydowns of A$1.5M each = A$3M/year, A$30M over 10 years
+            { date:'2020-07-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #1' },
+            { date:'2021-01-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #2' },
+            { date:'2021-07-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #3' },
+            { date:'2022-01-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #4' },
+            { date:'2022-07-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #5' },
+            { date:'2023-01-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #6' },
+            { date:'2023-07-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #7' },
+            { date:'2024-01-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #8' },
+            { date:'2024-07-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #9' },
+            { date:'2025-01-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #10' },
+            { date:'2025-07-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #11' },
+            { date:'2026-01-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #12' },
+            { date:'2026-07-15', amount: 1_500_000, kind:'scheduled', reason:'Semi-annual amortisation #13 — upcoming' }
+          ],
+          interestComponents:[{
+            id: uid('IC'), name:'Fixed Coupon', baseIndex:'FIXED', baseValue: 0.0425,
+            terms:[{ tenor:'6M', lookbackDays:0, observationShift:0, lockoutDays:0, dailyCompounding:false, weighted:false }],
+            spreads:[{ from:'2020-01-15', to:'2030-01-15', bps: 0, note:'Flat fixed rate · long-tenor agri financing' }],
+            ratchet:{ kpi:'none', tiers:[] }, esgAdjustmentBps: 0
+          }]
+        }],
+        fees: [
+          { id: uid('FEE'), label:'Establishment Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0075, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2020-01-22', ifrs:'AASB9-EIR' },
+          { id: uid('FEE'), label:'Annual Agency Fee', kind:'agency', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 25_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2021-01-15', ifrs:'AASB15-overTime' }
+        ],
+        aasbExtras: {
+          tier:'tier2', asicReportable:false, frankingTreatment:'none',
+          relatedParty:'none', gstTreatment:'financialSupply', apraStandard:'notApplicable'
+        }
+      })
+    },
+    {
+      key:'tasman-renewables-sll-au', team:'Sustainable Finance', participationPct:100, tag:'Complex', complexity:4,
+      label:'Tasman Renewables Green SLL — Mid-life · 3 Drawdowns · 1 Mandatory Prepayment',
+      build: () => ({
+        deal: { name:'Tasman Renewables Pty Ltd', dealId:'TRN-2023-AU04',
+                counterparty:'Tasman Renewables Pty Ltd ABN 17 502 198 663',
+                le:'Sustainable Finance — Sydney Branch', currency:'AUD', framework:'AASB',
+                settle:'2023-12-01', maturity:'2029-12-01' },
+        facility: { commitment: 60_000_000, availEnd:'2026-12-01', dayBasis:'ACT/365',
+                    holiday:'auFederal', repayment:'AtMaturity', type:'delayedDraw' },
+        tranches: [{
+          id: uid('TRN'), name:'Green Sustainability-Linked Loan', currency:'AUD',
+          face: 60_000_000, drawnInitially: 20_000_000,
+          drawdowns:[
+            { date:'2024-05-15', amount: 25_000_000, reason:'Stage 2 construction — solar farm Phase A' },
+            { date:'2025-01-30', amount: 15_000_000, reason:'Stage 3 construction — battery storage + grid connect' }
+          ],
+          repayments:[
+            { date:'2025-09-15', amount:  8_000_000, kind:'mandatory', trigger:'assetSale',
+              reason:'Mandatory prepayment from non-core asset sale (legacy wind farm)' }
+          ],
+          interestComponents:[{
+            id: uid('IC'), name:'Margin over 3M BBSW (with ESG ratchet)', baseIndex:'BBSW', baseValue: 0.0420,
+            terms:[{ tenor:'3M', lookbackDays:0, observationShift:0, lockoutDays:0, dailyCompounding:false, weighted:false }],
+            spreads:[
+              { from:'2023-12-01', to:'2026-12-01', bps: 250, note:'Years 1-3 — opening margin' },
+              { from:'2026-12-01', to:'2029-12-01', bps: 220, note:'Years 4-6 — step-down on debt service ratio' }
+            ],
+            // KPI-linked ESG ratchet — discount when scope-1/2 emissions targets met
+            ratchet:{ kpi:'esgScore', tiers:[
+              { from:80, to:100, marginBps: -10 },  // best
+              { from:60, to:80,  marginBps:   0 },  // neutral
+              { from:0,  to:60,  marginBps:  15 }   // penalty
+            ]},
+            esgAdjustmentBps: -7.5
+          }]
+        }],
+        fees: [
+          { id: uid('FEE'), label:'Green Loan Establishment Fee', kind:'arrangement', mode:'fixPct',
+            pct: 0.0110, bps:0, flatAmount:0, base:'commitment',
+            linkedComponentId:'', frequency:'oneOff', paymentDate:'2023-12-08', ifrs:'AASB9-EIR' },
+          { id: uid('FEE'), label:'ESG Reporting Fee', kind:'other', mode:'fixAmount',
+            pct:0, bps:0, flatAmount: 30_000, base:'commitment',
+            linkedComponentId:'', frequency:'annual', paymentDate:'2024-12-01', ifrs:'AASB15-overTime' },
+          { id: uid('FEE'), label:'Line Fee (Undrawn)', kind:'commitment', mode:'fixPct',
+            pct: 0.0040, bps:0, flatAmount:0, base:'unfunded',
+            linkedComponentId:'', frequency:'quarterly', paymentDate:'2024-03-01', ifrs:'AASB15-overTime' }
+        ],
+        aasbExtras: {
+          tier:'tier1', asicReportable:true, frankingTreatment:'none',
+          relatedParty:'none', gstTreatment:'financialSupply', apraStandard:'aps220'
         }
       })
     }
