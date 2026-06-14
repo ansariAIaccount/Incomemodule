@@ -19,12 +19,12 @@
   .stage-arrow { display:none; }   /* arrows hidden — tab nav replaces vertical flow */
 
   /* ─── Tab navigation (sticky top) ────────────────────────────────────── */
+  /* Stage tab strip — lives inside the sticky <header>, so no own position:sticky.
+     Parent header already handles pinning + shadow + backdrop. */
   .tab-nav {
-    position: sticky; top: 0; z-index: 40;
     background: linear-gradient(to bottom, #FFFFFF 0%, #FAFBFD 100%);
-    border-bottom: 1px solid #E1E5EE;
-    box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 4px 16px rgba(33,41,92,0.04);
-    padding: 10px 12px;
+    border-top: 1px solid #E1E5EE;
+    padding: 8px 0 6px;
     display: flex; gap: 6px; overflow-x: auto;
     scrollbar-width: thin;
   }
@@ -380,59 +380,65 @@
   <div class="max-w-[1400px] mx-auto px-6 pb-3 text-[11px] text-gray-500 leading-snug">
     Integration architecture: the Loan Builder is the self-contained system of record for deal capture; Cashflow Generation computes transparent forward cashflows; the Accounting Engine is the IFRS-aligned accounting sub-ledger; the Cash Movements system is the downstream General Ledger. This module orchestrates the data flow between them with full reconciliation.
   </div>
+
+  <!-- ─── Stage tab navigation — pinned inside the sticky header frame so it stays
+       visible across stages (was previously inside <main> and scrolled away) ─── -->
+  <div class="max-w-[1400px] mx-auto px-6">
+    <nav class="tab-nav" id="stage-tab-nav" role="tablist" aria-label="Pipeline stages">
+      <!-- v2 — New Stage 0 Loan Builder (replaces PortF as the loan setup source) -->
+      <button class="tab-btn active" data-tab="builder" role="tab" aria-selected="true">
+        <span class="tab-num">0</span>
+        <span class="tab-label">Loan Builder</span>
+        <span class="tab-sub" id="tabsub-builder">No deal built</span>
+      </button>
+      <button class="tab-btn" data-tab="stage-1" role="tab" aria-selected="false">
+        <span class="tab-num">1</span>
+        <span class="tab-label">Cashflow Generation</span>
+        <span class="tab-sub" id="tabsub-stage-1">Awaiting builder</span>
+      </button>
+      <button class="tab-btn" data-tab="stage-2" role="tab" aria-selected="false">
+        <span class="tab-num">2</span>
+        <span class="tab-label">Accounting Engine</span>
+        <span class="tab-sub" id="tabsub-stage-2">Awaiting Stage 1</span>
+      </button>
+      <button class="tab-btn" data-tab="stage-3" role="tab" aria-selected="false">
+        <span class="tab-num">3</span>
+        <span class="tab-label">Cash Movements Out</span>
+        <span class="tab-sub" id="tabsub-stage-3">Awaiting JEs</span>
+      </button>
+      <button class="tab-btn" data-tab="stage-4" role="tab" aria-selected="false">
+        <span class="tab-num">4</span>
+        <span class="tab-label">Cash Movement Actuals</span>
+        <span class="tab-sub" id="tabsub-stage-4">Awaiting actuals</span>
+      </button>
+      <button class="tab-btn" data-tab="stage-5" role="tab" aria-selected="false">
+        <span class="tab-num">5</span>
+        <span class="tab-label">Reconciliation + Feedback</span>
+        <span class="tab-sub" id="tabsub-stage-5">Awaiting Stage 4</span>
+      </button>
+      <button class="tab-btn" data-tab="dashboard" role="tab" aria-selected="false" style="margin-left:auto">
+        <span class="tab-num">📊</span>
+        <span class="tab-label">Dashboard</span>
+        <span class="tab-sub" id="tabsub-dashboard">Loan overview</span>
+      </button>
+    </nav>
+
+    <!-- Pipeline progress bar — segment per stage; current step pulses -->
+    <div class="pipeline-progress" id="pipeline-progress" aria-hidden="true">
+      <div class="pipeline-progress-seg active" data-seg="builder"></div>
+      <div class="pipeline-progress-seg" data-seg="stage-1"></div>
+      <div class="pipeline-progress-seg" data-seg="stage-2"></div>
+      <div class="pipeline-progress-seg" data-seg="stage-3"></div>
+      <div class="pipeline-progress-seg" data-seg="stage-4"></div>
+      <div class="pipeline-progress-seg" data-seg="stage-5"></div>
+    </div>
+  </div>
 </header>
 
 <main class="max-w-[1400px] mx-auto px-6 py-5 space-y-3">
 
-<!-- ─── Tab navigation — sticky, replaces vertical scroll between stages ─── -->
-<nav class="tab-nav" id="stage-tab-nav" role="tablist" aria-label="Pipeline stages">
-  <!-- v2 — New Stage 0 Loan Builder (replaces PortF as the loan setup source) -->
-  <button class="tab-btn active" data-tab="builder" role="tab" aria-selected="true">
-    <span class="tab-num">0</span>
-    <span class="tab-label">Loan Builder</span>
-    <span class="tab-sub" id="tabsub-builder">No deal built</span>
-  </button>
-  <button class="tab-btn" data-tab="stage-1" role="tab" aria-selected="false">
-    <span class="tab-num">1</span>
-    <span class="tab-label">Cashflow Generation</span>
-    <span class="tab-sub" id="tabsub-stage-1">Awaiting builder</span>
-  </button>
-  <button class="tab-btn" data-tab="stage-2" role="tab" aria-selected="false">
-    <span class="tab-num">2</span>
-    <span class="tab-label">Accounting Engine</span>
-    <span class="tab-sub" id="tabsub-stage-2">Awaiting Stage 1</span>
-  </button>
-  <button class="tab-btn" data-tab="stage-3" role="tab" aria-selected="false">
-    <span class="tab-num">3</span>
-    <span class="tab-label">Cash Movements Out</span>
-    <span class="tab-sub" id="tabsub-stage-3">Awaiting JEs</span>
-  </button>
-  <button class="tab-btn" data-tab="stage-4" role="tab" aria-selected="false">
-    <span class="tab-num">4</span>
-    <span class="tab-label">Cash Movement Actuals</span>
-    <span class="tab-sub" id="tabsub-stage-4">Awaiting actuals</span>
-  </button>
-  <button class="tab-btn" data-tab="stage-5" role="tab" aria-selected="false">
-    <span class="tab-num">5</span>
-    <span class="tab-label">Reconciliation + Feedback</span>
-    <span class="tab-sub" id="tabsub-stage-5">Awaiting Stage 4</span>
-  </button>
-  <button class="tab-btn" data-tab="dashboard" role="tab" aria-selected="false" style="margin-left:auto">
-    <span class="tab-num">📊</span>
-    <span class="tab-label">Dashboard</span>
-    <span class="tab-sub" id="tabsub-dashboard">Loan overview</span>
-  </button>
-</nav>
-
-<!-- Pipeline progress bar — segment per stage; current step pulses ──────── -->
-<div class="pipeline-progress" id="pipeline-progress" aria-hidden="true">
-  <div class="pipeline-progress-seg active" data-seg="builder"></div>
-  <div class="pipeline-progress-seg" data-seg="stage-1"></div>
-  <div class="pipeline-progress-seg" data-seg="stage-2"></div>
-  <div class="pipeline-progress-seg" data-seg="stage-3"></div>
-  <div class="pipeline-progress-seg" data-seg="stage-4"></div>
-  <div class="pipeline-progress-seg" data-seg="stage-5"></div>
-</div>
+<!-- Stage tab-nav + pipeline-progress moved into <header> above so the
+     stage indicator stays pinned in the sticky upper frame at all times. -->
 
 <!-- ============================================================
      STAGE 0: LOAN BUILDER (v2 — self-contained, replaces PortF)
