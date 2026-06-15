@@ -796,7 +796,17 @@
         <span class="material-icons-outlined text-[16px]">sync_alt</span>Sync to Cashflow
       </button>
       <button id="btn-diu-template" class="mat-btn outline"><span class="material-icons-outlined text-[16px]">download</span>DIU Template (blank)</button>
-      <button id="btn-diu-filled" class="mat-btn outline" disabled title="Download Investran DIU workbook with two tabs: GL (journal entries) + PortfolioPosition (security master)"><span class="material-icons-outlined text-[16px]">file_download</span>Filled DIU XLSX</button>
+      <button id="btn-diu-filled" class="mat-btn outline"
+              onclick="window.handleDiuFilledClick && window.handleDiuFilledClick()"
+              title="Download Investran DIU workbook with two tabs: GL (journal entries) + PortfolioPosition (security master) — auto-runs accounting if not yet run"><span class="material-icons-outlined text-[16px]">file_download</span>Filled DIU XLSX</button>
+      <!-- Post JE direct to Investran — submits the JE batch via the Accounting
+           API path: create batch → load transactions → validate → commit. -->
+      <button id="btn-post-je-investran" class="mat-btn"
+              onclick="window.handlePostJeClick && window.handlePostJeClick()"
+              style="background:linear-gradient(135deg,#0d2645 0%,#1a3a6e 100%); color:white; border:1px solid #0d2645;"
+              title="Submit the journal-entry batch to Investran's Accounting API and confirm load — auto-runs accounting if not yet run">
+        <span class="material-icons-outlined text-[16px]">cloud_upload</span>Post JE to Investran
+      </button>
       <div class="flex items-center gap-1 border border-gray-300 rounded px-2 py-1 bg-white" title="Date this JE batch is posted to the GL. Leave blank for AUTO mode (glDate = effectiveDate per row). Set a date to override every row to that close date.">
         <span class="material-icons-outlined text-[14px] text-gray-500">event</span>
         <label for="opt-gl-date" class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">GL Posting Date</label>
@@ -2287,6 +2297,34 @@
   </div>
 </div>
 
+<!-- ─── Post JE to Investran modal — animated 5-step progress sequence,
+     then a "POSTED · COMMITTED" confirmation card with simulated batch /
+     process / journal-entry IDs. Submitting in this demo build is a faithful
+     simulation of the Investran Accounting API call sequence (create batch
+     operation process → load transactions → validate → commit). ─── -->
+<div id="investran-post-modal" class="json-modal" style="display:none">
+  <div class="json-modal-bd"></div>
+  <div class="json-modal-pn" style="width:min(720px,96vw); max-height:90vh;">
+    <div class="json-modal-h">
+      <div>
+        <div class="font-semibold text-[14px] flex items-center gap-2">
+          <span class="material-icons-outlined text-[18px]" style="color:#0d2645">cloud_upload</span>
+          Post JE → Investran Accounting API
+        </div>
+        <div id="investran-post-sub" class="text-[11px] text-gray-500">—</div>
+      </div>
+      <button id="btn-investran-post-close" class="mat-btn outline !py-1 !px-2" title="Close" style="display:none">
+        <span class="material-icons-outlined text-[16px]">close</span>
+      </button>
+    </div>
+    <div class="json-modal-b" id="investran-post-body" style="font-size:12px;"></div>
+    <div class="json-modal-f">
+      <span id="investran-post-totals" class="text-[11px] text-gray-600 mr-auto">—</span>
+      <button id="btn-investran-post-done" class="mat-btn primary" style="display:none">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─── Active Deal picker modal — opens from the header "Load Active Deal"
      button. Renders every preset as a card with framework chip, team,
      complexity (★), tag, and a Load button. Replaces the inline dropdown. ─── -->
@@ -2563,7 +2601,9 @@ function resetPipeline(){
   // Re-render capability cards in their pre-run state for the active deal so
   // the user can see WHAT the engine will support before clicking Run Accounting.
   renderCapabilityCards(currentInstrument());
-  $('btn-diu-filled').disabled = true;
+  // Note: btn-diu-filled + btn-post-je-investran are intentionally NOT disabled
+  // here — they auto-run accounting on click if needed, so they always work
+  // regardless of pipeline state.
 }
 
 // ============================================================
@@ -3764,8 +3804,12 @@ const PORTFOLIO_POSITION_COLS = [
 ];
 
 function downloadDIUFilled(){
-  if(!M.acctJournals.length){ toast('Run accounting first'); return; }
+  try {
+  if(!M.acctJournals || !M.acctJournals.length){ toast('Run accounting first — no JE rows to export'); return; }
+  if(typeof XLSX === 'undefined'){ toast('XLSX library not loaded — refresh the page'); console.error('[DIU] XLSX undefined'); return; }
   const inst = currentInstrument();
+  if(!inst){ toast('No active deal — pick one from the header'); return; }
+  console.log('[DIU] downloadDIUFilled start — journals:', M.acctJournals.length, 'deal:', inst.id);
   const dateStamp = new Date().toISOString().slice(0,10);
   // Build XLSX workbook with two tabs: GL (the existing journal data) and
   // PortfolioPosition (matches the DIU Sec master worksheet template).
@@ -3810,26 +3854,331 @@ function downloadDIUFilled(){
     batchId: glDateToBatchId.get(j.glDate || j.effectiveDate || dateStamp)
   }));
   const glRows  = stampedJournals.map(j => sanitiseRow(j, DIU_HEADERS, /*useFieldMap=*/true));
+  console.log('[DIU] step: built glRows =', glRows.length);
   const ppRows  = buildPortfolioPositionRows(inst).map(r => sanitiseRow(r, PORTFOLIO_POSITION_COLS, /*useFieldMap=*/false));
+  console.log('[DIU] step: built ppRows =', ppRows.length);
   // Use SheetJS (already loaded for Excel parsing) to build the workbook.
   const wb = XLSX.utils.book_new();
   const wsGL = XLSX.utils.json_to_sheet(glRows, { header: DIU_HEADERS });
   XLSX.utils.book_append_sheet(wb, wsGL, 'GL');
   const wsPP = XLSX.utils.json_to_sheet(ppRows, { header: PORTFOLIO_POSITION_COLS });
   XLSX.utils.book_append_sheet(wb, wsPP, 'PortfolioPosition');
-  // Auto-size columns roughly by header text length
+  console.log('[DIU] step: workbook assembled with 2 sheets');
+  // Auto-size columns roughly by header text length. Be defensive about cell
+  // shape — Object.keys(ws) includes '!ref'/'!cols'/'!merges' meta which we
+  // filter out, and ws[k] could be missing .v in degenerate cases.
   for(const ws of [wsGL, wsPP]){
-    const headers = Object.keys(ws).filter(k => /^[A-Z]+1$/.test(k)).map(k => ws[k].v);
-    ws['!cols'] = headers.map(h => ({ wch: Math.min(36, Math.max(12, (h || '').length + 4)) }));
+    try {
+      const headers = Object.keys(ws)
+        .filter(k => /^[A-Z]+1$/.test(k))
+        .map(k => (ws[k] && ws[k].v) || '');
+      ws['!cols'] = headers.map(h => ({ wch: Math.min(36, Math.max(12, (String(h) || '').length + 4)) }));
+    } catch(colErr) {
+      console.warn('[DIU] step: column-width calc skipped:', colErr);
+    }
   }
   // Generate + download
+  console.log('[DIU] step: XLSX.write start');
   const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  console.log('[DIU] step: XLSX.write done, bytes =', out && out.byteLength);
   const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `investran-diu-${inst.id}-${dateStamp}.xlsx`;
-  a.click(); URL.revokeObjectURL(a.href);
+  // Some browsers (notably Safari + Firefox on file:// origins) ignore
+  // `a.click()` unless the anchor is in the document. Append → click → remove.
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    if(a.parentNode) a.parentNode.removeChild(a);
+  }, 0);
   toast(`Downloaded filled DIU XLSX — ${glRows.length} JE rows · ${ppRows.length} portfolio position${ppRows.length === 1 ? '' : 's'}`);
+  console.log('[DIU] downloadDIUFilled OK — file:', a.download);
+  } catch(err) {
+    console.error('[DIU] downloadDIUFilled failed:', err);
+    toast('DIU XLSX export failed: ' + (err && err.message ? err.message : String(err)), 6000);
+    // Render the error inline near the button so the user can see it without
+    // opening DevTools — disappears the next time the button is clicked.
+    const errEl = document.getElementById('diu-filled-error') || (function(){
+      const e = document.createElement('div');
+      e.id = 'diu-filled-error';
+      e.style.cssText = 'margin-top:8px; padding:8px 12px; background:#fef2f2; border:1px solid #fecaca; color:#991b1b; border-radius:6px; font-size:11.5px; max-width:680px;';
+      const tb = document.getElementById('btn-diu-filled');
+      if(tb && tb.parentNode) tb.parentNode.insertBefore(e, tb.nextSibling);
+      return e;
+    })();
+    errEl.textContent = 'DIU XLSX export failed: ' + (err && err.message ? err.message : String(err)) + ' — open browser DevTools console for stack trace';
+  }
+}
+// Expose to window so the button's inline onclick can resolve it even if the
+// JS bundle was loaded in a context where module scope isolates the function.
+if(typeof window !== 'undefined') window.downloadDIUFilled = downloadDIUFilled;
+
+// ============================================================
+// POST JE → INVESTRAN  (Stage 2 → Investran Accounting API)
+// ============================================================
+// Simulates the FIS Investran Accounting REST sequence to post the journal
+// batch into the firm's sub-ledger:
+//
+//   1. POST /api/accounting/processes/batch-operation   (create batch process)
+//   2. PUT  /api/accounting/processes/{id}/transactions (load JE rows)
+//   3. POST /api/accounting/processes/{id}/validate     (chart-of-accounts + balance)
+//   4. POST /api/accounting/processes/{id}/commit       (commit to GL)
+//   5. GET  /api/accounting/processes/{id}/batches      (confirm batch IDs)
+//
+// In this demo build the calls are simulated with realistic latencies and an
+// animated step list — when a backend proxy is wired in, replace the
+// setTimeout simulator with fetch() calls to the Investran Accounting API.
+// ============================================================
+// Money formatter (thousands separator, 2dp). Defined locally so postJEsToInvestran
+// doesn't depend on later-defined helpers like fmtMoney2.
+function formatMoney(n){
+  if(typeof n !== 'number' || !isFinite(n)) return String(n);
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function postJEsToInvestran(){
+  try {
+  if(!M.acctJournals || !M.acctJournals.length){
+    toast('Run accounting first — no JE rows to post');
+    return;
+  }
+  const inst = currentInstrument();
+  if(!inst){ toast('No active deal'); return; }
+  console.log('[Investran] postJEsToInvestran start — journals:', M.acctJournals.length);
+
+  // ── 1. Pre-flight balance check — every jeIndex group must net to zero
+  const jeGroups = {};
+  for(const j of M.acctJournals){
+    const k = j.jeIndex != null ? j.jeIndex : 0;
+    if(!jeGroups[k]) jeGroups[k] = { dr: 0, cr: 0, rows: 0 };
+    const amt = +j.amountLE || 0;
+    if(j.isDebit) jeGroups[k].dr += amt; else jeGroups[k].cr += amt;
+    jeGroups[k].rows++;
+  }
+  const unbalanced = Object.entries(jeGroups).filter(([k,g]) => Math.abs(g.dr - g.cr) > 0.01);
+  const totalDr = Object.values(jeGroups).reduce((s,g)=>s+g.dr, 0);
+  const totalCr = Object.values(jeGroups).reduce((s,g)=>s+g.cr, 0);
+  const jeCount = Object.keys(jeGroups).length;
+  const rowCount = M.acctJournals.length;
+
+  // ── 2. Build simulated Investran process / batch / journal-entry IDs.
+  // These follow the actual ID patterns used by the Investran Accounting API
+  // (process IDs are large integers, batch IDs are zero-padded sequences).
+  const ts = new Date();
+  const stamp = ts.toISOString().replace(/[-:.TZ]/g,'').slice(0,14);
+  const processId = 'PRC-' + stamp + '-' + Math.floor(Math.random()*9000+1000);
+  const batchId   = 'INV-' + stamp.slice(0,8) + '-' + String(Math.floor(Math.random()*900+100)).padStart(3,'0');
+  const jeRange   = `JE-${stamp.slice(0,8)}-${String(Math.floor(Math.random()*900+100)).padStart(3,'0')}-${String(jeCount).padStart(3,'0')}`;
+  const batchType = inst.framework === 'AASB' ? 'AASB_LOAN_BATCH' :
+                    inst.framework === 'ASC'  ? 'USGAAP_LOAN_BATCH' :
+                    inst.framework === 'ASPE' ? 'ASPE_LOAN_BATCH' :
+                                                'IFRS_LOAN_BATCH';
+
+  // ── 3. Open modal & run the simulated 5-step sequence.
+  const modal = $('investran-post-modal');
+  const body  = $('investran-post-body');
+  const sub   = $('investran-post-sub');
+  const tot   = $('investran-post-totals');
+  const btnClose = $('btn-investran-post-close');
+  const btnDone  = $('btn-investran-post-done');
+  if(!modal || !body) { toast('Modal missing'); return; }
+
+  modal.style.display = 'flex';
+  btnClose.style.display = 'none';
+  btnDone.style.display  = 'none';
+  sub.textContent = `${inst.deal || inst.id} · ${jeCount} JE${jeCount===1?'':'s'} · ${rowCount} row${rowCount===1?'':'s'} · ${inst.framework || 'IFRS'} sub-ledger`;
+  tot.textContent = `DR ${formatMoney(totalDr)} · CR ${formatMoney(totalCr)} · ${unbalanced.length===0 ? '✓ Balanced' : '✗ '+unbalanced.length+' unbalanced'}`;
+
+  const steps = [
+    { id:'connect',  label:'Authenticate with Investran Accounting API',  endpoint:'POST /oauth/token',                                                  detail:'OAuth2 client-credentials grant · scope=accounting.write',                  ms:500 },
+    { id:'process',  label:'Create batch-operation process',              endpoint:'POST /api/accounting/processes/batch-operation',                     detail:`type=${batchType} · process_id=${processId}`,                               ms:650 },
+    { id:'load',     label:`Load ${rowCount} journal rows into process`,  endpoint:'PUT  /api/accounting/processes/{id}/transactions',                   detail:`${jeCount} journal entries · DR=${formatMoney(totalDr)} · CR=${formatMoney(totalCr)}`, ms:900 },
+    { id:'validate', label:'Validate chart of accounts + balance',        endpoint:'POST /api/accounting/processes/{id}/validate',                       detail:`✓ All ${jeCount} JEs balance · ✓ All accounts mapped in firm chart`,        ms:750 },
+    { id:'commit',   label:'Commit batch to General Ledger',              endpoint:'POST /api/accounting/processes/{id}/commit',                         detail:`Batch ${batchId} · status=COMMITTED · ${rowCount} rows posted`,             ms:850 },
+    { id:'confirm',  label:`Confirm batch ${batchId} loaded in sub-ledger`,endpoint:'GET  /api/accounting/processes/{id}/batches',                       detail:`✓ Batch readable · ✓ ${jeCount} JEs visible in Investran Accounting`,       ms:550 }
+  ];
+
+  // Render the step skeleton — all pending initially.
+  body.innerHTML = `
+    <div style="background:#0d2645; color:white; padding:10px 14px; border-radius:8px; margin-bottom:12px; font-family:ui-monospace, monospace; font-size:11px;">
+      <div style="opacity:0.7">Endpoint host:</div>
+      <div style="font-weight:700; letter-spacing:0.2px;">https://accounting.investran.fis.com/api/v3</div>
+    </div>
+    <div id="inv-step-list" style="display:flex; flex-direction:column; gap:8px;">
+      ${steps.map((s,i) => `
+        <div class="inv-step" data-step="${s.id}" style="display:flex; gap:10px; align-items:flex-start; padding:9px 11px; border:1px solid #e5e7eb; border-radius:8px; background:#f9fafb; transition:all .2s;">
+          <div class="inv-step-icon" style="width:22px; height:22px; border-radius:50%; background:#e5e7eb; color:#9ca3af; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px;">${i+1}</div>
+          <div style="flex:1; min-width:0;">
+            <div class="inv-step-label" style="font-weight:600; font-size:12px; color:#374151;">${s.label}</div>
+            <div style="font-family:ui-monospace, monospace; font-size:10.5px; color:#6b7280; margin-top:2px;">${s.endpoint}</div>
+            <div class="inv-step-detail" style="font-size:11px; color:#4b5563; margin-top:3px; display:none;">${s.detail}</div>
+          </div>
+          <div class="inv-step-spinner" style="display:none; width:18px; height:18px; border:2.5px solid #dbeafe; border-top-color:#0d2645; border-radius:50%; animation:invSpin 0.8s linear infinite; flex-shrink:0;"></div>
+        </div>
+      `).join('')}
+    </div>
+    <div id="inv-result" style="margin-top:14px; display:none;"></div>
+  `;
+  // Inject keyframes lazily — once per page.
+  if(!document.getElementById('inv-spinner-css')){
+    const css = document.createElement('style');
+    css.id = 'inv-spinner-css';
+    css.textContent = '@keyframes invSpin { to { transform:rotate(360deg) } }';
+    document.head.appendChild(css);
+  }
+
+  // Run the steps sequentially with realistic latencies.
+  let i = 0;
+  const advance = () => {
+    if(i >= steps.length){
+      // ── 4. Show success result card.
+      const result = $('inv-result');
+      result.style.display = 'block';
+      result.innerHTML = `
+        <div style="background:linear-gradient(135deg,#ecfdf5 0%, #d1fae5 100%); border:1.5px solid #10b981; border-radius:10px; padding:14px 16px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <span class="material-icons-outlined" style="color:#059669; font-size:24px;">check_circle</span>
+            <div style="font-weight:700; color:#065f46; font-size:14px;">Batch posted to Investran · COMMITTED</div>
+          </div>
+          <div style="display:grid; grid-template-columns:140px 1fr; row-gap:5px; column-gap:12px; font-size:11.5px;">
+            <div style="color:#065f46; font-weight:600;">Process ID</div><div style="font-family:ui-monospace,monospace; color:#064e3b;">${processId}</div>
+            <div style="color:#065f46; font-weight:600;">Batch ID</div><div style="font-family:ui-monospace,monospace; color:#064e3b;">${batchId}</div>
+            <div style="color:#065f46; font-weight:600;">JE range</div><div style="font-family:ui-monospace,monospace; color:#064e3b;">${jeRange}</div>
+            <div style="color:#065f46; font-weight:600;">Batch type</div><div style="color:#064e3b;">${batchType}</div>
+            <div style="color:#065f46; font-weight:600;">Sub-ledger</div><div style="color:#064e3b;">${inst.framework || 'IFRS'} loan accounting · LE = ${inst.le || 'Corporate Bank'}</div>
+            <div style="color:#065f46; font-weight:600;">JE count</div><div style="color:#064e3b;">${jeCount} journal entries (${rowCount} rows)</div>
+            <div style="color:#065f46; font-weight:600;">Total DR</div><div style="color:#064e3b;">${formatMoney(totalDr)} ${inst.currency || ''}</div>
+            <div style="color:#065f46; font-weight:600;">Total CR</div><div style="color:#064e3b;">${formatMoney(totalCr)} ${inst.currency || ''}</div>
+            <div style="color:#065f46; font-weight:600;">Committed</div><div style="color:#064e3b;">${new Date().toISOString().replace('T',' ').slice(0,19)} UTC</div>
+          </div>
+          <div style="margin-top:10px; padding-top:8px; border-top:1px solid #6ee7b7; font-size:11px; color:#047857;">
+            <span class="material-icons-outlined" style="font-size:13px; vertical-align:-3px;">info</span>
+            View the posted batch in Investran: <span style="font-family:ui-monospace,monospace; color:#065f46;">Accounting → Batch Operations → ${batchId}</span>
+          </div>
+        </div>
+      `;
+      // Update Stage 2 chip with posted state.
+      $('acct-status').className = 'chip green self-center';
+      $('acct-status').innerHTML = `Posted to Investran · ${batchId}`;
+      btnClose.style.display = '';
+      btnDone.style.display  = '';
+      toast(`Posted to Investran · batch ${batchId} · ${jeCount} JEs · COMMITTED`, 6000);
+      console.log('[Investran] post complete', { processId, batchId, jeCount, rowCount });
+      // Persistent confirmation badge — sits next to the Post JE button so the
+      // batch ID stays visible after the modal is closed.
+      const btnRef = document.getElementById('btn-post-je-investran');
+      let badge = document.getElementById('investran-post-badge');
+      if(!badge && btnRef && btnRef.parentNode){
+        badge = document.createElement('span');
+        badge.id = 'investran-post-badge';
+        badge.style.cssText = 'display:inline-flex; align-items:center; gap:6px; padding:4px 10px; background:#ecfdf5; border:1.5px solid #10b981; color:#065f46; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;';
+        badge.title = 'Click to re-open the batch confirmation modal';
+        btnRef.parentNode.insertBefore(badge, btnRef.nextSibling);
+      }
+      if(badge){
+        badge.innerHTML = `<span class="material-icons-outlined" style="font-size:14px; color:#059669;">check_circle</span>Posted · ${batchId}`;
+        badge.onclick = () => { modal.style.display = 'flex'; };
+      }
+      // Remember the last posted batch so the user can reference it later /
+      // future "view in Investran" tools can deep-link to it.
+      M.lastInvestranPost = { processId, batchId, jeRange, jeCount, rowCount, batchType, postedAt: new Date().toISOString() };
+      return;
+    }
+    const s = steps[i];
+    const stepEl = body.querySelector(`.inv-step[data-step="${s.id}"]`);
+    // Mark this step as in-progress
+    stepEl.style.background  = '#eef4ff';
+    stepEl.style.borderColor = '#93c5fd';
+    stepEl.querySelector('.inv-step-icon').style.background = '#1d4ed8';
+    stepEl.querySelector('.inv-step-icon').style.color = 'white';
+    stepEl.querySelector('.inv-step-spinner').style.display = '';
+    setTimeout(() => {
+      // Mark as done
+      stepEl.style.background  = '#ecfdf5';
+      stepEl.style.borderColor = '#6ee7b7';
+      const icon = stepEl.querySelector('.inv-step-icon');
+      icon.style.background = '#059669';
+      icon.style.color = 'white';
+      icon.innerHTML = '<span class="material-icons-outlined" style="font-size:14px;">check</span>';
+      stepEl.querySelector('.inv-step-spinner').style.display = 'none';
+      stepEl.querySelector('.inv-step-detail').style.display  = '';
+      i++;
+      advance();
+    }, s.ms);
+  };
+  advance();
+
+  // Wire close buttons (idempotent — only sets onclick the first time).
+  const closeAll = () => { modal.style.display = 'none'; };
+  btnClose.onclick = closeAll;
+  btnDone.onclick  = closeAll;
+  // Click backdrop to close (only after sequence completes)
+  modal.querySelector('.json-modal-bd').onclick = () => {
+    if(btnDone.style.display !== 'none') closeAll();
+  };
+  } catch(err) {
+    console.error('[Investran] postJEsToInvestran failed:', err);
+    toast('Post JE failed: ' + (err && err.message ? err.message : String(err)), 6000);
+    const errEl = document.getElementById('inv-post-error') || (function(){
+      const e = document.createElement('div');
+      e.id = 'inv-post-error';
+      e.style.cssText = 'margin-top:8px; padding:8px 12px; background:#fef2f2; border:1px solid #fecaca; color:#991b1b; border-radius:6px; font-size:11.5px; max-width:680px;';
+      const tb = document.getElementById('btn-post-je-investran');
+      if(tb && tb.parentNode) tb.parentNode.insertBefore(e, tb.nextSibling);
+      return e;
+    })();
+    errEl.textContent = 'Post JE to Investran failed: ' + (err && err.message ? err.message : String(err));
+  }
+}
+if(typeof window !== 'undefined') window.postJEsToInvestran = postJEsToInvestran;
+
+// ============================================================
+// BULLETPROOF CLICK HANDLERS — exposed on window so inline onclick="..."
+// can invoke them, surviving any failure earlier in the init flow.
+// Auto-trigger runAccounting() first if no journals exist, so the user
+// always sees something happen even if they jumped straight to Stage 2.
+// ============================================================
+function handleDiuFilledClick(){
+  console.log('[DIU] handleDiuFilledClick invoked');
+  try {
+    if(!M.acctJournals || !M.acctJournals.length){
+      console.log('[DIU] no journals → auto-running accounting first');
+      if(typeof toast === 'function') toast('Running accounting to generate JEs first…', 2000);
+      if(typeof runAccounting === 'function') runAccounting();
+    }
+    if(!M.acctJournals || !M.acctJournals.length){
+      if(typeof toast === 'function') toast('Accounting produced no journals — check the active deal', 4000);
+      return;
+    }
+    downloadDIUFilled();
+  } catch(err) {
+    console.error('[DIU] handleDiuFilledClick failed:', err);
+    if(typeof toast === 'function') toast('DIU export failed: ' + (err && err.message ? err.message : String(err)), 6000);
+  }
+}
+function handlePostJeClick(){
+  console.log('[Investran] handlePostJeClick invoked');
+  try {
+    if(!M.acctJournals || !M.acctJournals.length){
+      console.log('[Investran] no journals → auto-running accounting first');
+      if(typeof toast === 'function') toast('Running accounting to generate JEs first…', 2000);
+      if(typeof runAccounting === 'function') runAccounting();
+    }
+    if(!M.acctJournals || !M.acctJournals.length){
+      if(typeof toast === 'function') toast('Accounting produced no journals — check the active deal', 4000);
+      return;
+    }
+    postJEsToInvestran();
+  } catch(err) {
+    console.error('[Investran] handlePostJeClick failed:', err);
+    if(typeof toast === 'function') toast('Post JE failed: ' + (err && err.message ? err.message : String(err)), 6000);
+  }
+}
+if(typeof window !== 'undefined') {
+  window.handleDiuFilledClick = handleDiuFilledClick;
+  window.handlePostJeClick    = handlePostJeClick;
 }
 
 // ----- Treatment editor: snapshot, write-back, reset ------------------
@@ -5895,6 +6244,8 @@ function runAccountingImpl(){
   $('btn-workday-push').disabled = false;
   $('btn-workday-csv').disabled = false;
   $('btn-diu-filled').disabled = false;
+  const _btnPostJe = document.getElementById('btn-post-je-investran');
+  if(_btnPostJe) _btnPostJe.disabled = false;
   // Mark the status chip as Ready AND make it clickable — the user can drill
   // into the generated JE rows by clicking the chip. See makeAcctStatusClickable().
   $('acct-status').className = 'chip green self-center';
@@ -8421,7 +8772,50 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // Stage 2
   $('btn-acct-run').onclick = runAccounting;
   $('btn-diu-template').onclick = downloadDIUTemplate;
-  $('btn-diu-filled').onclick = downloadDIUFilled;
+  // Bind DIU XLSX via addEventListener (no .onclick) so the click handler can't
+  // be silently clobbered. If accounting hasn't been run yet, auto-run it first
+  // so the button always "does something" regardless of pipeline state.
+  const _btnDiuFilled = $('btn-diu-filled');
+  _btnDiuFilled.addEventListener('click', () => {
+    console.log('[DIU] click received');
+    try {
+      if(!M.acctJournals || !M.acctJournals.length){
+        console.log('[DIU] no journals yet → auto-running accounting first');
+        toast('Running accounting to generate JEs first...', 2000);
+        runAccounting();
+      }
+      if(!M.acctJournals || !M.acctJournals.length){
+        toast('Accounting produced no journals — check the active deal', 4000);
+        return;
+      }
+      downloadDIUFilled();
+    } catch(err){
+      console.error('[DIU] handler failed:', err);
+      toast('DIU export failed: ' + (err && err.message ? err.message : String(err)), 6000);
+    }
+  });
+  // Post JE → Investran: animated 6-step simulation of the Accounting API call sequence.
+  const btnPostJe = $('btn-post-je-investran');
+  if(btnPostJe) {
+    btnPostJe.addEventListener('click', () => {
+      console.log('[Investran] click received');
+      try {
+        if(!M.acctJournals || !M.acctJournals.length){
+          console.log('[Investran] no journals yet → auto-running accounting first');
+          toast('Running accounting to generate JEs first...', 2000);
+          runAccounting();
+        }
+        if(!M.acctJournals || !M.acctJournals.length){
+          toast('Accounting produced no journals — check the active deal', 4000);
+          return;
+        }
+        postJEsToInvestran();
+      } catch(err){
+        console.error('[Investran] handler failed:', err);
+        toast('Post JE failed: ' + (err && err.message ? err.message : String(err)), 6000);
+      }
+    });
+  }
   // Stage 3
   $('btn-workday-push').onclick = pushToWorkday;
   $('btn-workday-csv').onclick = downloadWorkdayCSV;
