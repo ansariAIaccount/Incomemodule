@@ -248,6 +248,44 @@
     display:flex; align-items:center; gap:10px; margin-top:12px;
   }
 
+  /* ─── Portfolio Covenant Report ───────────────────────────────────── */
+  .portcov-kpi {
+    background:white; border:1px solid #E1E5EE; border-radius:8px;
+    padding:6px 10px; min-width:110px;
+  }
+  .portcov-kpi-label { font-size:9.5px; text-transform:uppercase; letter-spacing:0.5px; color:#6A7591; font-weight:600; }
+  .portcov-kpi-val   { font-size:18px; font-weight:700; color:#21295C; line-height:1.1; margin-top:1px; }
+  .portcov-kpi.tone-green .portcov-kpi-val { color:#0F8A4D; }
+  .portcov-kpi.tone-amber .portcov-kpi-val { color:#D97706; }
+  .portcov-kpi.tone-red   .portcov-kpi-val { color:#DC2626; }
+  .portcov-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .portcov-table th {
+    position:sticky; top:0; background:#F8FAFD; z-index:2;
+    text-align:left; padding:8px 10px; font-size:10.5px; text-transform:uppercase;
+    letter-spacing:0.5px; color:#4B5563; font-weight:700;
+    border-bottom:2px solid #E1E5EE; white-space:nowrap;
+  }
+  .portcov-table td {
+    padding:9px 10px; border-bottom:1px solid #F1F3F8; vertical-align:middle;
+  }
+  .portcov-table tr:hover td { background:#F8FAFD; cursor:pointer; }
+  .portcov-table tr.row-status-red    td:first-child { border-left:3px solid #DC2626; }
+  .portcov-table tr.row-status-amber  td:first-child { border-left:3px solid #D97706; }
+  .portcov-table tr.row-status-green  td:first-child { border-left:3px solid #0F8A4D; }
+  .portcov-headroom-mini {
+    display:inline-block; width:60px; height:6px; background:#EAEEF5; border-radius:3px;
+    overflow:hidden; vertical-align:middle; margin-right:6px;
+  }
+  .portcov-headroom-mini > span { display:block; height:100%; border-radius:3px; }
+  .portcov-deal-group {
+    background:linear-gradient(to right, #F1F3FB 0%, #FAFBFD 100%);
+    font-weight:700; color:#21295C; padding:9px 12px; border-bottom:1px solid #DDE3F2;
+    display:flex; gap:10px; align-items:center; font-size:12.5px;
+  }
+  .portcov-empty {
+    text-align:center; padding:50px 20px; color:#6A7591; font-style:italic; font-size:13px;
+  }
+
   /* ─── Past vs Expected timeline split ─────────────────────────────── */
   .timeline-split { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px; }
   @media (max-width: 900px) { .timeline-split { grid-template-columns:1fr; } }
@@ -2371,6 +2409,79 @@
     <div class="json-modal-f">
       <span id="investran-post-totals" class="text-[11px] text-gray-600 mr-auto">—</span>
       <button id="btn-investran-post-done" class="mat-btn primary" style="display:none">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Portfolio Covenant Report modal — opens from the Dashboard's
+     Covenants section. Shows every covenant from every loan in the user's
+     portfolio (respecting team scope), with filter strip, summary KPIs, and
+     a row-click to load that deal as active. ─── -->
+<div id="portfolio-cov-modal" class="json-modal" style="display:none">
+  <div class="json-modal-bd" data-close-portcov="1"></div>
+  <div class="json-modal-pn" style="width:min(1400px,98vw); max-height:94vh;">
+    <div class="json-modal-h">
+      <div>
+        <div class="font-semibold text-[14px] flex items-center gap-2">
+          <span class="material-icons-outlined text-[20px]" style="color:#21295C">monitoring</span>
+          Portfolio Covenant Report
+        </div>
+        <div id="portcov-sub" class="text-[11px] text-gray-500">—</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-portcov-csv" class="mat-btn outline !py-1 !px-2 text-[11px]" title="Download covenant rows as CSV">
+          <span class="material-icons-outlined text-[14px]">download</span>CSV
+        </button>
+        <button class="mat-btn outline !py-1 !px-2" data-close-portcov="1" title="Close">
+          <span class="material-icons-outlined text-[16px]">close</span>
+        </button>
+      </div>
+    </div>
+    <!-- Aggregate summary strip -->
+    <div id="portcov-summary" style="padding:10px 18px; background:linear-gradient(to bottom, #F8FAFD 0%, #FFFFFF 100%); border-bottom:1px solid #EAEEF5; display:flex; gap:10px; flex-wrap:wrap; align-items:center;"></div>
+    <!-- Filter strip -->
+    <div style="padding:10px 18px; background:#FAFBFD; border-bottom:1px solid #EAEEF5; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <div class="flex items-center gap-1.5">
+        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">Status</label>
+        <select id="portcov-filter-status" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white">
+          <option value="">All</option>
+          <option value="red">Breached</option>
+          <option value="amber">Watch (within 10%)</option>
+          <option value="green">Compliant</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">Team</label>
+        <select id="portcov-filter-team" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white">
+          <option value="">All teams</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">Framework</label>
+        <select id="portcov-filter-fw" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white">
+          <option value="">All</option>
+          <option value="IFRS">IFRS 9</option>
+          <option value="AASB">AASB 9</option>
+          <option value="ASC">US GAAP</option>
+          <option value="ASPE">Canadian ASPE</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">Search</label>
+        <input id="portcov-filter-search" type="text" placeholder="Deal, covenant, KPI..." class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white" style="min-width:200px"/>
+      </div>
+      <div class="flex items-center gap-1.5 ml-auto">
+        <label class="text-[10px] font-semibold uppercase tracking-wider text-gray-600">View</label>
+        <select id="portcov-view" class="border border-gray-300 rounded px-2 py-1 text-[12px] bg-white">
+          <option value="flat">All covenants (flat)</option>
+          <option value="byDeal">Rolled up by deal</option>
+        </select>
+      </div>
+    </div>
+    <div class="json-modal-b" id="portcov-body" style="padding:0; overflow:auto; flex:1;"></div>
+    <div class="json-modal-f">
+      <span id="portcov-totals" class="text-[11px] text-gray-600 mr-auto">—</span>
+      <button class="mat-btn outline" data-close-portcov="1">Close</button>
     </div>
   </div>
 </div>
@@ -9377,7 +9488,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // ── Covenants panel (Financial Maintenance Covenants) ──────────────
     const covenants = (typeof deriveCovenants === 'function') ? deriveCovenants(inst) : [];
     const breachFlag = inst.ifrs && inst.ifrs.covenantBreach === true;
-    let covHTML = '<div class="dash-section-header"><span class="material-icons-outlined text-[18px]">verified_user</span>Covenants &amp; Maintenance Tests</div>';
+    let covHTML = '<div class="dash-section-header" style="display:flex; align-items:center; gap:8px;">';
+    covHTML += '<span class="material-icons-outlined text-[18px]">verified_user</span>Covenants &amp; Maintenance Tests';
+    covHTML += '<button id="btn-open-portcov" onclick="window.openPortfolioCovenantReport && window.openPortfolioCovenantReport()" class="mat-btn outline !py-1 !px-2.5 text-[11px]" style="margin-left:auto;" title="Cross-loan covenant report across every deal in your portfolio">';
+    covHTML += '<span class="material-icons-outlined text-[14px]">monitoring</span>Portfolio Covenant Report</button>';
+    covHTML += '</div>';
     if(covenants.length){
       // Aggregate health
       const evals = covenants.map(c => evaluateCovenant(c));
@@ -9518,6 +9633,274 @@ document.addEventListener('DOMContentLoaded', ()=>{
       toast(checked ? 'Covenant breach flagged — Stage 2 SICR will trigger on next accounting run' : 'Covenant breach flag cleared', 4000);
     }
     if(typeof renderDashboard === 'function') renderDashboard();
+  };
+
+  // ============================================================
+  // PORTFOLIO COVENANT REPORT — cross-loan view
+  // ============================================================
+  // Iterates the user's accessible loans (INSTRUMENTS, respecting team scope
+  // when V2_CTX.team is set), runs deriveCovenants() per deal, evaluates each,
+  // and renders a sortable / filterable table inside #portfolio-cov-modal.
+  // Clicking a row jumps to that deal's dashboard.
+  // ============================================================
+  function portfolioCovenantRows(){
+    if(typeof INSTRUMENTS === 'undefined' || !Array.isArray(INSTRUMENTS)) return [];
+    const rows = [];
+    for(const inst of INSTRUMENTS){
+      const covs = (typeof deriveCovenants === 'function') ? deriveCovenants(inst) : [];
+      for(const c of covs){
+        const ev = evaluateCovenant(c);
+        rows.push({
+          dealId:      inst.id,
+          dealName:    inst.deal || inst.id,
+          dealLE:      inst.legalEntity || inst.le || '',
+          team:        inst.team || '—',
+          framework:   inst.framework || 'IFRS',
+          currency:    inst.currency || '',
+          faceValue:   inst.faceValue || (inst.facility && inst.facility.commitment) || 0,
+          covName:     c.name,
+          covKpi:      c.kpi || '',
+          direction:   c.direction,
+          threshold:   c.threshold,
+          current:     c.current,
+          unit:        c.unit || '',
+          frequency:   c.frequency || '',
+          nextTest:    c.nextTestDate || '',
+          source:      c.source || '',
+          note:        c.note || '',
+          status:      ev.status,
+          headroomPct: ev.headroom,
+          headroomLbl: ev.label,
+          breachFlag:  !!(inst.ifrs && inst.ifrs.covenantBreach === true)
+        });
+      }
+    }
+    return rows;
+  }
+
+  function applyPortcovFilters(rows){
+    const fStat = (document.getElementById('portcov-filter-status') || {}).value || '';
+    const fTeam = (document.getElementById('portcov-filter-team')   || {}).value || '';
+    const fFw   = (document.getElementById('portcov-filter-fw')     || {}).value || '';
+    const fSrch = ((document.getElementById('portcov-filter-search')|| {}).value || '').toLowerCase().trim();
+    return rows.filter(r => {
+      if(fStat && r.status !== fStat) return false;
+      if(fTeam && r.team !== fTeam) return false;
+      if(fFw   && r.framework !== fFw) return false;
+      if(fSrch){
+        const hay = (r.dealName + ' ' + r.covName + ' ' + r.covKpi + ' ' + r.dealLE).toLowerCase();
+        if(!hay.includes(fSrch)) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderPortcovTable(filtered){
+    const view = (document.getElementById('portcov-view') || {}).value || 'flat';
+    if(!filtered.length){
+      return '<div class="portcov-empty"><span class="material-icons-outlined" style="font-size:32px; opacity:0.4;">filter_alt_off</span><br/>No covenants match the current filters.</div>';
+    }
+    const fmtNum = (v, unit) => v == null ? '—' : (+v).toLocaleString(undefined, {maximumFractionDigits: 2}) + (unit || '');
+    const fmtMoney = (v, ccy) => v == null ? '—' : (ccy ? ccy + ' ' : '') + (+v).toLocaleString(undefined, {maximumFractionDigits: 0});
+    const rowHtml = (r) => {
+      const dirArrow = r.direction === 'max' ? '≤' : '≥';
+      const fillPct = r.headroomPct == null ? 0 : Math.max(0, Math.min(100, r.headroomPct));
+      const fillBg = r.status === 'green' ? 'linear-gradient(to right, #0F8A4D, #34D399)' :
+                     r.status === 'amber' ? 'linear-gradient(to right, #D97706, #FBBF24)' :
+                                            'linear-gradient(to right, #DC2626, #F87171)';
+      const statusChip = r.status === 'green' ? '<span class="cov-status-chip status-green">OK</span>' :
+                         r.status === 'amber' ? '<span class="cov-status-chip status-amber">WATCH</span>' :
+                                                '<span class="cov-status-chip status-red">BREACH</span>';
+      const fwChip = `<span class="chip ${r.framework==='AASB'?'green':r.framework==='ASC'?'blue':r.framework==='ASPE'?'amber':'blue'}" style="font-size:10px;">${r.framework}</span>`;
+      return `<tr class="row-status-${r.status}" data-deal-id="${r.dealId}" onclick="window.loadDealFromPortcovRow && window.loadDealFromPortcovRow('${r.dealId}')">
+        <td>
+          <div style="font-weight:600; color:#21295C;">${r.dealName}${r.breachFlag ? ' <span class="material-icons-outlined" style="font-size:13px; color:#DC2626; vertical-align:-2px;" title="Covenant breach forced — SICR triggered">flag</span>' : ''}</div>
+          <div style="font-size:10.5px; color:#6A7591;">${r.dealLE || ''}</div>
+        </td>
+        <td>${fwChip}</td>
+        <td><span style="color:#4B5563; font-size:11.5px;">${r.team}</span></td>
+        <td>
+          <div style="font-weight:600;">${r.covName}</div>
+          <div style="font-size:10.5px; color:#6A7591;">${r.covKpi}</div>
+        </td>
+        <td style="white-space:nowrap;">${dirArrow} ${fmtNum(r.threshold, r.unit)}</td>
+        <td style="white-space:nowrap; color:${r.status==='green'?'#0F8A4D':r.status==='amber'?'#D97706':'#DC2626'}; font-weight:700;">${fmtNum(r.current, r.unit)}</td>
+        <td style="white-space:nowrap;">
+          <span class="portcov-headroom-mini"><span style="width:${fillPct}%; background:${fillBg};"></span></span>
+          <span style="font-size:11px; color:${r.status==='green'?'#0F8A4D':r.status==='amber'?'#D97706':'#DC2626'}; font-weight:600;">${r.headroomLbl}</span>
+        </td>
+        <td>${statusChip}</td>
+        <td style="white-space:nowrap; font-size:11px;">${r.frequency || '—'}</td>
+        <td style="white-space:nowrap; font-size:11px; font-weight:600;">${r.nextTest || '—'}</td>
+      </tr>`;
+    };
+    const head = `<thead><tr>
+      <th>Deal / LE</th>
+      <th>Framework</th>
+      <th>Team</th>
+      <th>Covenant / KPI</th>
+      <th>Threshold</th>
+      <th>Current</th>
+      <th>Headroom</th>
+      <th>Status</th>
+      <th>Frequency</th>
+      <th>Next Test</th>
+    </tr></thead>`;
+    if(view === 'flat'){
+      // Sort by status (red first), then by headroom (lowest first), then by deal name
+      const order = { red:0, amber:1, green:2 };
+      filtered.sort((a,b) => (order[a.status]||9) - (order[b.status]||9)
+                          || (a.headroomPct||0) - (b.headroomPct||0)
+                          || (a.dealName||'').localeCompare(b.dealName||''));
+      return '<table class="portcov-table">' + head + '<tbody>' + filtered.map(rowHtml).join('') + '</tbody></table>';
+    } else {
+      // Group by deal
+      const groups = new Map();
+      for(const r of filtered){
+        if(!groups.has(r.dealId)) groups.set(r.dealId, { meta:r, rows:[] });
+        groups.get(r.dealId).rows.push(r);
+      }
+      let html = '<table class="portcov-table">' + head + '<tbody>';
+      for(const [, g] of groups){
+        const worst = g.rows.reduce((acc,r) => {
+          const order = { red:2, amber:1, green:0 };
+          return (order[r.status]||0) > (order[acc]||0) ? r.status : acc;
+        }, 'green');
+        const reds = g.rows.filter(r => r.status === 'red').length;
+        const ambers = g.rows.filter(r => r.status === 'amber').length;
+        html += `<tr class="portcov-deal-group-row"><td colspan="10">
+          <div class="portcov-deal-group">
+            <span class="material-icons-outlined text-[16px]" style="color:#21295C;">apartment</span>
+            ${g.meta.dealName}
+            <span class="chip ${g.meta.framework==='AASB'?'green':'blue'}" style="font-size:10px;">${g.meta.framework}</span>
+            <span style="font-size:10.5px; color:#6A7591;">· ${g.meta.team} · ${fmtMoney(g.meta.faceValue, g.meta.currency)}</span>
+            <span style="margin-left:auto;">${reds ? '<span class="cov-status-chip status-red">' + reds + ' BREACH</span> ' : ''}${ambers ? '<span class="cov-status-chip status-amber">' + ambers + ' WATCH</span> ' : ''}<span class="cov-status-chip status-${worst}">${g.rows.length} covenant${g.rows.length===1?'':'s'}</span></span>
+          </div>
+        </td></tr>`;
+        for(const r of g.rows){ html += rowHtml(r); }
+      }
+      html += '</tbody></table>';
+      return html;
+    }
+  }
+
+  function renderPortcovSummary(allRows, filtered){
+    const dealCount = new Set(allRows.map(r => r.dealId)).size;
+    const breached = allRows.filter(r => r.status === 'red').length;
+    const watch    = allRows.filter(r => r.status === 'amber').length;
+    const compliant = allRows.filter(r => r.status === 'green').length;
+    const flaggedDeals = new Set(allRows.filter(r => r.breachFlag).map(r => r.dealId)).size;
+    const totalFace = Array.from(new Set(allRows.map(r => r.dealId))).reduce((s, id) => {
+      const row = allRows.find(r => r.dealId === id); return s + (row ? +row.faceValue || 0 : 0);
+    }, 0);
+    const fmtM = (n) => {
+      if(!n) return '—';
+      if(n >= 1e9) return (n/1e9).toFixed(2) + 'B';
+      if(n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+      return n.toLocaleString();
+    };
+    const cards = [
+      { tone:'',      label:'Loans in scope',         val:dealCount },
+      { tone:'',      label:'Total face value',       val:fmtM(totalFace) },
+      { tone:'',      label:'Total covenants',        val:allRows.length },
+      { tone:'green', label:'Compliant',              val:compliant },
+      { tone:'amber', label:'Watch (within 10%)',     val:watch },
+      { tone:'red',   label:'Breached',               val:breached },
+      { tone:'red',   label:'SICR-flagged loans',     val:flaggedDeals }
+    ];
+    return cards.map(c => `<div class="portcov-kpi tone-${c.tone}">
+      <div class="portcov-kpi-label">${c.label}</div>
+      <div class="portcov-kpi-val">${c.val}</div>
+    </div>`).join('') +
+    `<div style="margin-left:auto; font-size:11px; color:#6A7591;">Showing <b style="color:#21295C">${filtered.length}</b> / ${allRows.length} covenant rows</div>`;
+  }
+
+  function openPortfolioCovenantReport(){
+    const modal = document.getElementById('portfolio-cov-modal');
+    if(!modal) return;
+    // Populate team filter dynamically from data
+    const teamSel = document.getElementById('portcov-filter-team');
+    if(teamSel && teamSel.options.length <= 1){
+      const teams = Array.from(new Set((INSTRUMENTS || []).map(i => i.team).filter(Boolean))).sort();
+      for(const t of teams){
+        const opt = document.createElement('option');
+        opt.value = t; opt.textContent = t;
+        teamSel.appendChild(opt);
+      }
+    }
+    const allRows = portfolioCovenantRows();
+    const sub = document.getElementById('portcov-sub');
+    if(sub) sub.textContent = (INSTRUMENTS || []).length + ' loans · ' + allRows.length + ' covenants · scope = your active portfolio';
+    const refresh = () => {
+      const filtered = applyPortcovFilters(allRows);
+      const body = document.getElementById('portcov-body');
+      const sum  = document.getElementById('portcov-summary');
+      const tot  = document.getElementById('portcov-totals');
+      if(body) body.innerHTML = renderPortcovTable(filtered);
+      if(sum)  sum.innerHTML  = renderPortcovSummary(allRows, filtered);
+      if(tot){
+        const reds = filtered.filter(r => r.status === 'red').length;
+        const ambers = filtered.filter(r => r.status === 'amber').length;
+        tot.innerHTML = `${filtered.length} covenant row${filtered.length===1?'':'s'} ${reds ? '· <span style="color:#DC2626; font-weight:600;">'+reds+' breached</span>' : ''} ${ambers ? '· <span style="color:#D97706; font-weight:600;">'+ambers+' on watch</span>' : ''}`;
+      }
+    };
+    ['portcov-filter-status','portcov-filter-team','portcov-filter-fw','portcov-view'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el && !el.dataset.portcovWired){ el.addEventListener('change', refresh); el.dataset.portcovWired = '1'; }
+    });
+    const srch = document.getElementById('portcov-filter-search');
+    if(srch && !srch.dataset.portcovWired){ srch.addEventListener('input', refresh); srch.dataset.portcovWired = '1'; }
+    // CSV download
+    const btnCsv = document.getElementById('btn-portcov-csv');
+    if(btnCsv && !btnCsv.dataset.portcovWired){
+      btnCsv.addEventListener('click', () => {
+        const rows = applyPortcovFilters(allRows);
+        const cols = ['dealName','dealLE','team','framework','currency','faceValue','covName','covKpi','direction','threshold','current','unit','headroomLbl','status','frequency','nextTest','source','note'];
+        const header = cols.join(',');
+        const csv = [header].concat(rows.map(r => cols.map(c => {
+          const v = r[c]; if(v == null) return '';
+          const s = String(v).replace(/"/g,'""');
+          return /[,"\n]/.test(s) ? '"'+s+'"' : s;
+        }).join(','))).join('\n');
+        const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'portfolio-covenants-' + new Date().toISOString().slice(0,10) + '.csv';
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+        if(typeof toast === 'function') toast('Covenant CSV downloaded — ' + rows.length + ' rows', 3000);
+      });
+      btnCsv.dataset.portcovWired = '1';
+    }
+    // Close buttons
+    modal.querySelectorAll('[data-close-portcov]').forEach(el => {
+      el.onclick = () => { modal.style.display = 'none'; };
+    });
+    refresh();
+    modal.style.display = 'flex';
+  }
+  window.openPortfolioCovenantReport = openPortfolioCovenantReport;
+
+  // Click-through from a covenant row → load that deal as active + jump to Dashboard.
+  window.loadDealFromPortcovRow = function(dealId){
+    if(!dealId) return;
+    const sel = document.getElementById('sel-instrument');
+    if(sel){
+      sel.value = dealId;
+      try { sel.dispatchEvent(new Event('change', { bubbles:true })); } catch(_) {}
+    } else if(typeof M !== 'undefined'){
+      M.instrumentId = dealId;
+    }
+    const modal = document.getElementById('portfolio-cov-modal');
+    if(modal) modal.style.display = 'none';
+    // Make sure the Dashboard tab is active
+    const dashBtn = document.querySelector('.tab-btn[data-tab="dashboard"]');
+    if(dashBtn) dashBtn.click();
+    if(typeof renderDashboard === 'function') renderDashboard();
+    if(typeof toast === 'function') {
+      const nm = (INSTRUMENTS || []).find(i => i.id === dealId);
+      toast('Switched to ' + (nm ? (nm.deal || dealId) : dealId), 3000);
+    }
   };
 
   /* ─── SVG chart helpers ─────────────────────────────────────────────── */
