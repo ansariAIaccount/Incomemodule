@@ -208,6 +208,56 @@
   .dash-timeline-title { font-size: 13px; font-weight: 600; color: #21295C; margin-top: 1px; }
   .dash-timeline-detail { font-size: 11.5px; color: #4B5563; margin-top: 2px; }
 
+  /* ─── Covenants panel ─────────────────────────────────────────────── */
+  .cov-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px; margin-top:12px; }
+  .cov-card {
+    background:white; border-radius:12px; padding:14px 16px;
+    border-left:4px solid #C2CCE0; border-top:1px solid #E1E5EE; border-right:1px solid #E1E5EE; border-bottom:1px solid #E1E5EE;
+    transition:all .18s ease;
+  }
+  .cov-card:hover { box-shadow:0 6px 18px rgba(33,41,92,0.07); }
+  .cov-card.status-green  { border-left-color:#0F8A4D; background:linear-gradient(to right, #F1FBF5 0%, #FFFFFF 60%); }
+  .cov-card.status-amber  { border-left-color:#D97706; background:linear-gradient(to right, #FFFBEB 0%, #FFFFFF 60%); }
+  .cov-card.status-red    { border-left-color:#DC2626; background:linear-gradient(to right, #FEF2F2 0%, #FFFFFF 60%); }
+  .cov-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .cov-card-name { font-size:12.5px; font-weight:700; color:#21295C; line-height:1.25; }
+  .cov-card-kpi  { font-size:10.5px; color:#6A7591; margin-top:2px; }
+  .cov-status-chip {
+    font-size:10px; font-weight:700; padding:2px 8px; border-radius:8px; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;
+  }
+  .cov-status-chip.status-green { background:#DFF5E8; color:#065F46; }
+  .cov-status-chip.status-amber { background:#FEF3C7; color:#92400E; }
+  .cov-status-chip.status-red   { background:#FEE2E2; color:#991B1B; }
+  .cov-card-vals { display:flex; gap:14px; margin-top:8px; align-items:baseline; }
+  .cov-val-block { flex:1; }
+  .cov-val-label { font-size:9.5px; text-transform:uppercase; letter-spacing:0.6px; color:#6A7591; font-weight:600; }
+  .cov-val-num   { font-size:18px; font-weight:700; color:#21295C; line-height:1.1; }
+  .cov-val-num.is-current { color:#0F8A4D; }
+  .cov-val-num.is-current.amber { color:#D97706; }
+  .cov-val-num.is-current.red   { color:#DC2626; }
+  .cov-headroom-bar { margin-top:10px; height:6px; background:#EAEEF5; border-radius:3px; overflow:hidden; position:relative; }
+  .cov-headroom-fill { height:100%; transition:width .35s ease; border-radius:3px; }
+  .cov-headroom-fill.green { background:linear-gradient(to right, #0F8A4D, #34D399); }
+  .cov-headroom-fill.amber { background:linear-gradient(to right, #D97706, #FBBF24); }
+  .cov-headroom-fill.red   { background:linear-gradient(to right, #DC2626, #F87171); }
+  .cov-footer { display:flex; justify-content:space-between; margin-top:9px; font-size:10.5px; color:#6A7591; }
+  .cov-test-date { font-weight:600; color:#21295C; }
+  .cov-breach-banner {
+    background:linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%);
+    border:1.5px solid #DC2626; border-radius:10px; padding:10px 14px;
+    display:flex; align-items:center; gap:10px; margin-top:12px;
+  }
+
+  /* ─── Past vs Expected timeline split ─────────────────────────────── */
+  .timeline-split { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px; }
+  @media (max-width: 900px) { .timeline-split { grid-template-columns:1fr; } }
+  .timeline-col { background:white; border:1px solid #E1E5EE; border-radius:12px; padding:14px 16px; }
+  .timeline-col-head { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#21295C; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #EAEEF5; }
+  .timeline-col-head .chip { font-size:10px; margin-left:auto; }
+  .dash-timeline-item.is-past { opacity:0.78; }
+  .dash-timeline-item.is-soon { background:linear-gradient(to right, #FFFAE0 0%, transparent 70%); margin:0 -8px; padding-left:12px; padding-right:8px; border-radius:6px; border-bottom:1px solid #EAEEF5; }
+  .dash-timeline-item.is-today { background:linear-gradient(to right, #DDE3F2 0%, transparent 70%); border-left:3px solid #21295C; padding-left:12px; }
+
   /* ─── Chart styles ────────────────────────────────────────────────── */
   .dash-charts {
     display: grid;
@@ -9050,6 +9100,161 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return (n * 100).toFixed(dp == null ? 4 : dp) + '%';
   }
 
+  // ============================================================
+  // deriveCovenants(inst) — produce the financial-maintenance covenant
+  // set displayed on the Dashboard. Pulls from inst.covenants[] if the
+  // deal author defined them explicitly, otherwise derives a realistic
+  // default set from the deal's tag / framework / ratchet KPIs.
+  //
+  // Returned shape per covenant:
+  //   { name, kpi, direction:'max'|'min', threshold, current,
+  //     unit, frequency, nextTestDate, source, note }
+  // ============================================================
+  function deriveCovenants(inst){
+    if(Array.isArray(inst.covenants) && inst.covenants.length) return inst.covenants.slice();
+    // Frequency → next test date. We anchor to settlement and step forward
+    // until we land on a date >= today, so the "next test" is plausible.
+    const today = new Date(); today.setHours(0,0,0,0);
+    const stepMonths = (freq) => freq === 'monthly' ? 1 : freq === 'quarterly' ? 3 : freq === 'semi-annual' ? 6 : 12;
+    function nextTest(freq){
+      const settle = inst.settlementDate ? new Date(inst.settlementDate + 'T12:00:00') : new Date();
+      let d = new Date(settle);
+      const step = stepMonths(freq);
+      while(d < today) d.setMonth(d.getMonth() + step);
+      return d.toISOString().slice(0,10);
+    }
+    // Pull ratchet KPIs from interest components → use the tightest threshold
+    // as a maintenance covenant (e.g. leverage > 4.5x triggers margin step-up
+    // means leverage covenant ≤ 4.5x, slightly looser at maintenance level).
+    const ratchetCovs = [];
+    const seen = new Set();
+    for(const t of (inst.tranches || [])){
+      for(const ic of (t.interestComponents || [])){
+        const kpi = ic.ratchet && ic.ratchet.kpi;
+        if(!kpi || kpi === 'none' || seen.has(kpi)) continue;
+        seen.add(kpi);
+        const tiers = (ic.ratchet.tiers || []).filter(x => x.marginBps != null);
+        if(!tiers.length) continue;
+        // For leverage / DSCR / interest coverage — the threshold breach is
+        // the boundary between in-range and out-of-range tiers.
+        const breachTier = tiers.find(x => Math.abs(x.marginBps) > 0) || tiers[tiers.length - 1];
+        if(kpi === 'leverageRatio'){
+          const thr = breachTier.from || 4.5;
+          ratchetCovs.push({
+            name: 'Total Leverage Ratio', kpi: 'Net Debt / EBITDA', direction: 'max',
+            threshold: thr, current: +(thr * 0.82).toFixed(2), unit: 'x',
+            frequency: 'quarterly', nextTestDate: nextTest('quarterly'),
+            source: 'Margin ratchet (Stage 0 → ' + t.name + ')',
+            note: 'Maintenance covenant — tested quarterly on management accounts'
+          });
+        } else if(kpi === 'dscr'){
+          const thr = breachTier.from || 1.30;
+          ratchetCovs.push({
+            name: 'Debt Service Coverage Ratio', kpi: 'CFADS / Debt Service', direction: 'min',
+            threshold: thr, current: +(thr * 1.18).toFixed(2), unit: 'x',
+            frequency: 'semi-annual', nextTestDate: nextTest('semi-annual'),
+            source: 'Margin ratchet (Stage 0 → ' + t.name + ')',
+            note: 'Backward-looking 12-month CFADS / scheduled debt service'
+          });
+        } else if(kpi === 'interestCoverage'){
+          const thr = breachTier.from || 3.0;
+          ratchetCovs.push({
+            name: 'Interest Coverage', kpi: 'EBITDA / Interest Expense', direction: 'min',
+            threshold: thr, current: +(thr * 1.25).toFixed(2), unit: 'x',
+            frequency: 'quarterly', nextTestDate: nextTest('quarterly'),
+            source: 'Margin ratchet (Stage 0 → ' + t.name + ')',
+            note: 'Rolling 12-month EBITDA over reported interest expense'
+          });
+        } else if(kpi === 'esgScore'){
+          const thr = breachTier.from || 60;
+          ratchetCovs.push({
+            name: 'ESG Score (SPT)', kpi: 'Sustainability Performance Target', direction: 'min',
+            threshold: thr, current: +(thr * 1.18).toFixed(0), unit: '',
+            frequency: 'annual', nextTestDate: nextTest('annual'),
+            source: 'ESG ratchet (Stage 0 → ' + t.name + ')',
+            note: 'Annual external assessment · Sustainalytics methodology'
+          });
+        }
+      }
+    }
+    // Default covenant set by deal tag / type — adds covenants the ratchets
+    // don't surface. Each tag has 1-3 typical covenants.
+    const tag = (inst.tag || '').toLowerCase();
+    const team = (inst.team || '').toLowerCase();
+    const dealNm = (inst.deal || '').toLowerCase();
+    const extras = [];
+    const has = (name) => ratchetCovs.some(c => c.name.toLowerCase() === name.toLowerCase()) || extras.some(c => c.name.toLowerCase() === name.toLowerCase());
+
+    const isLeveraged = tag.includes('leveraged') || dealNm.includes('orion') || dealNm.includes('tlb');
+    const isProjFin   = tag.includes('project') || dealNm.includes('kestrel');
+    const isSLL       = tag.includes('sll') || tag.includes('green') || tag.includes('esg') || dealNm.includes('tasman') || dealNm.includes('pinnacle');
+    const isRealEstate= team.includes('realestate') || dealNm.includes('northbridge');
+    const isMining    = dealNm.includes('pilbara') || dealNm.includes('murray');
+    const isAgri      = dealNm.includes('riverina');
+    const isRevolver  = (inst.facility && inst.facility.type === 'revolver') || dealNm.includes('cedar') || dealNm.includes('rcf');
+
+    if(isLeveraged){
+      if(!has('Total Leverage Ratio')) extras.push({ name:'Total Leverage Ratio', kpi:'Net Debt / EBITDA', direction:'max', threshold:5.50, current:4.85, unit:'x', frequency:'quarterly', nextTestDate:nextTest('quarterly'), source:'Credit agreement §6.10', note:'Net senior secured debt over LTM Adj. EBITDA' });
+      if(!has('Interest Coverage')) extras.push({ name:'Interest Coverage', kpi:'EBITDA / Cash Interest', direction:'min', threshold:2.50, current:3.10, unit:'x', frequency:'quarterly', nextTestDate:nextTest('quarterly'), source:'Credit agreement §6.11', note:'LTM EBITDA over LTM cash interest' });
+      extras.push({ name:'Excess Cash Flow Sweep', kpi:'% of ECF if leverage > step', direction:'max', threshold:50, current:25, unit:'%', frequency:'annual', nextTestDate:nextTest('annual'), source:'Credit agreement §2.05', note:'Mandatory prepay 50% of ECF if leverage > 4.0x, 25% if 3.5-4.0x, 0% below' });
+    }
+    if(isProjFin){
+      if(!has('Debt Service Coverage Ratio')) extras.push({ name:'Debt Service Coverage Ratio', kpi:'CFADS / Debt Service', direction:'min', threshold:1.30, current:1.42, unit:'x', frequency:'semi-annual', nextTestDate:nextTest('semi-annual'), source:'Common Terms Agreement §8', note:'Historical DSCR — 6-month look-back' });
+      extras.push({ name:'Loan Life Coverage Ratio', kpi:'NPV(CFADS) / Loan Balance', direction:'min', threshold:1.40, current:1.62, unit:'x', frequency:'semi-annual', nextTestDate:nextTest('semi-annual'), source:'Common Terms Agreement §8', note:'PV of remaining CFADS to maturity discounted at financing cost' });
+      extras.push({ name:'Project Life Coverage Ratio', kpi:'NPV(life CFADS) / Loan Balance', direction:'min', threshold:1.55, current:1.78, unit:'x', frequency:'annual', nextTestDate:nextTest('annual'), source:'Common Terms Agreement §8', note:'Includes post-maturity tail to reserve life' });
+    }
+    if(isSLL){
+      if(!has('ESG Score (SPT)')) extras.push({ name:'ESG Score (SPT)', kpi:'Sustainability Performance Target', direction:'min', threshold:65, current:72, unit:'', frequency:'annual', nextTestDate:nextTest('annual'), source:'SLL Framework §4', note:'Sustainability-linked margin step-down on improvement' });
+      extras.push({ name:'Scope 1+2 Emissions', kpi:'tCO2e / GWh generated', direction:'max', threshold:50, current:38, unit:'tCO2e', frequency:'annual', nextTestDate:nextTest('annual'), source:'SLL Framework §4', note:'Independent verifier — annual sustainability report' });
+    }
+    if(isRealEstate){
+      extras.push({ name:'Loan-to-Value', kpi:'Loan / Property MV', direction:'max', threshold:65, current:58, unit:'%', frequency:'annual', nextTestDate:nextTest('annual'), source:'Facility Agreement §11.1', note:'Annual external valuation by panel valuer' });
+      extras.push({ name:'Debt Yield', kpi:'NOI / Loan Balance', direction:'min', threshold:8.0, current:9.4, unit:'%', frequency:'quarterly', nextTestDate:nextTest('quarterly'), source:'Facility Agreement §11.2', note:'Trailing 12-month NOI from rent roll' });
+      if(!has('Debt Service Coverage Ratio')) extras.push({ name:'Debt Service Coverage Ratio', kpi:'NOI / Debt Service', direction:'min', threshold:1.40, current:1.65, unit:'x', frequency:'quarterly', nextTestDate:nextTest('quarterly'), source:'Facility Agreement §11.3', note:'NOI over scheduled P&I' });
+    }
+    if(isMining){
+      if(!has('Total Leverage Ratio')) extras.push({ name:'Total Leverage Ratio', kpi:'Net Debt / EBITDA', direction:'max', threshold:3.50, current:2.85, unit:'x', frequency:'quarterly', nextTestDate:nextTest('quarterly'), source:'Common Terms Deed §9', note:'Tested against commodity-cycle-adjusted EBITDA' });
+      extras.push({ name:'Reserve Tail Ratio', kpi:'Remaining reserves / Loan tenor', direction:'min', threshold:1.50, current:2.10, unit:'x', frequency:'annual', nextTestDate:nextTest('annual'), source:'Common Terms Deed §10', note:'JORC-compliant reserves over remaining loan tenor in years' });
+      if(!has('Interest Coverage')) extras.push({ name:'Interest Coverage', kpi:'EBITDA / Interest Expense', direction:'min', threshold:4.00, current:5.20, unit:'x', frequency:'quarterly', nextTestDate:nextTest('quarterly'), source:'Common Terms Deed §9', note:'Resilient to A$ commodity price stress test' });
+    }
+    if(isAgri){
+      if(!has('Total Leverage Ratio')) extras.push({ name:'Total Debt / EBITDA', kpi:'Total debt / 3yr avg EBITDA', direction:'max', threshold:3.00, current:2.45, unit:'x', frequency:'annual', nextTestDate:nextTest('annual'), source:'Facility Agreement §12', note:'3-year rolling EBITDA average (seasonal smoothing)' });
+      extras.push({ name:'Current Ratio', kpi:'Current Assets / Current Liabilities', direction:'min', threshold:1.20, current:1.42, unit:'x', frequency:'semi-annual', nextTestDate:nextTest('semi-annual'), source:'Facility Agreement §12', note:'Working capital adequacy test' });
+    }
+    if(isRevolver){
+      extras.push({ name:'Borrowing Base', kpi:'Eligible receivables + inventory', direction:'min', threshold:100, current:127, unit:'%', frequency:'monthly', nextTestDate:nextTest('monthly'), source:'Credit agreement §3.04', note:'Drawn balance must remain ≤ borrowing base (advance rate applied)' });
+    }
+    // Universal covenant — always present unless already covered
+    if(!has('Total Leverage Ratio') && !has('Total Debt / EBITDA')){
+      extras.push({ name:'Total Leverage Ratio', kpi:'Net Debt / EBITDA', direction:'max', threshold:3.50, current:2.80, unit:'x', frequency:'quarterly', nextTestDate:nextTest('quarterly'), source:'Credit agreement §6.10', note:'Standard maintenance covenant' });
+    }
+    if(!has('Interest Coverage')){
+      extras.push({ name:'Interest Coverage', kpi:'EBITDA / Interest Expense', direction:'min', threshold:3.00, current:4.10, unit:'x', frequency:'quarterly', nextTestDate:nextTest('quarterly'), source:'Credit agreement §6.11', note:'Standard maintenance covenant' });
+    }
+    return ratchetCovs.concat(extras);
+  }
+  window.deriveCovenants = deriveCovenants;
+
+  // Compute headroom % + status given (current, threshold, direction).
+  //   direction 'max' → breach when current > threshold; headroom = (threshold - current) / threshold
+  //   direction 'min' → breach when current < threshold; headroom = (current - threshold) / threshold
+  // Status: red if breached, amber if < 10% headroom, green otherwise.
+  function evaluateCovenant(c){
+    const cur = +c.current, thr = +c.threshold;
+    if(isNaN(cur) || isNaN(thr)) return { status:'amber', headroom:null, label:'No data' };
+    let headroom;
+    if(c.direction === 'max'){
+      headroom = thr === 0 ? 0 : (thr - cur) / thr;
+    } else {
+      headroom = thr === 0 ? 0 : (cur - thr) / thr;
+    }
+    const pct = headroom * 100;
+    let status = 'green';
+    if(headroom < 0) status = 'red';
+    else if(headroom < 0.10) status = 'amber';
+    return { status, headroom: pct, label: pct >= 0 ? pct.toFixed(0) + '% headroom' : Math.abs(pct).toFixed(0) + '% breach' };
+  }
+
   function renderDashboard(){
     const out = document.getElementById('dashboard-content');
     if(!out) return;
@@ -9125,15 +9330,126 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(inst.maturityDate) events.push({ date: inst.maturityDate, type: 'maturity', title: 'Maturity', detail: 'Final repayment due' });
     events.sort((a,b) => (a.date || '').localeCompare(b.date || ''));
 
-    let timelineHTML = '<div class="dash-section-header"><span class="material-icons-outlined text-[18px]">timeline</span>Lifecycle Timeline</div><div class="dash-timeline">';
-    for(const e of events){
-      timelineHTML += `<div class="dash-timeline-item event-${e.type}">
-        <div class="dash-timeline-date">${e.date || '—'}</div>
-        <div class="dash-timeline-title">${e.title}</div>
-        ${e.detail ? `<div class="dash-timeline-detail">${e.detail}</div>` : ''}
-      </div>`;
+    // ── Split Lifecycle Timeline into Past Events vs Expected Events ──
+    // Past = date ≤ today; Expected = date > today.
+    // First-90-days events get a soft amber highlight band.
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayISO = today.toISOString().slice(0,10);
+    const soonCutoff = new Date(today); soonCutoff.setDate(soonCutoff.getDate() + 90);
+    const soonISO = soonCutoff.toISOString().slice(0,10);
+    const pastEvents = events.filter(e => (e.date || '') <= todayISO);
+    const futureEvents = events.filter(e => (e.date || '') >  todayISO);
+    const renderEventItem = (e, extraCls) => `<div class="dash-timeline-item event-${e.type} ${extraCls||''}">
+      <div class="dash-timeline-date">${e.date || '—'}</div>
+      <div class="dash-timeline-title">${e.title}</div>
+      ${e.detail ? `<div class="dash-timeline-detail">${e.detail}</div>` : ''}
+    </div>`;
+    let timelineHTML = '<div class="dash-section-header"><span class="material-icons-outlined text-[18px]">timeline</span>Lifecycle Timeline</div>';
+    timelineHTML += '<div class="timeline-split">';
+    // Past column
+    timelineHTML += '<div class="timeline-col">';
+    timelineHTML += '<div class="timeline-col-head"><span class="material-icons-outlined text-[16px]" style="color:#6A7591">history</span>Past Events<span class="chip gray">' + pastEvents.length + '</span></div>';
+    timelineHTML += '<div class="dash-timeline">';
+    if(pastEvents.length){
+      for(const e of pastEvents){ timelineHTML += renderEventItem(e, 'is-past'); }
+    } else {
+      timelineHTML += '<div class="text-[12px] text-gray-500 italic">No past events — this is a forward-looking deal.</div>';
+    }
+    timelineHTML += '</div></div>';
+    // Expected column
+    timelineHTML += '<div class="timeline-col">';
+    timelineHTML += '<div class="timeline-col-head"><span class="material-icons-outlined text-[16px]" style="color:#21295C">upcoming</span>Expected Events<span class="chip blue">' + futureEvents.length + '</span></div>';
+    timelineHTML += '<div class="dash-timeline">';
+    if(futureEvents.length){
+      for(const e of futureEvents){
+        const isSoon = (e.date || '') <= soonISO;
+        timelineHTML += renderEventItem(e, isSoon ? 'is-soon' : '');
+      }
+    } else {
+      timelineHTML += '<div class="text-[12px] text-gray-500 italic">No expected events — deal has fully matured.</div>';
     }
     timelineHTML += '</div>';
+    if(futureEvents.length){
+      timelineHTML += '<div style="font-size:10px; color:#6A7591; margin-top:8px; padding-top:6px; border-top:1px solid #EAEEF5;"><span style="display:inline-block; width:10px; height:10px; background:linear-gradient(to right, #FFFAE0, transparent); border-radius:2px; vertical-align:-1px;"></span> &nbsp;Highlight = next 90 days</div>';
+    }
+    timelineHTML += '</div></div>';
+
+    // ── Covenants panel (Financial Maintenance Covenants) ──────────────
+    const covenants = (typeof deriveCovenants === 'function') ? deriveCovenants(inst) : [];
+    const breachFlag = inst.ifrs && inst.ifrs.covenantBreach === true;
+    let covHTML = '<div class="dash-section-header"><span class="material-icons-outlined text-[18px]">verified_user</span>Covenants &amp; Maintenance Tests</div>';
+    if(covenants.length){
+      // Aggregate health
+      const evals = covenants.map(c => evaluateCovenant(c));
+      const reds = evals.filter(x => x.status === 'red').length;
+      const ambers = evals.filter(x => x.status === 'amber').length;
+      const greens = evals.filter(x => x.status === 'green').length;
+      // Inline breach toggle — wired to inst.ifrs.covenantBreach + the
+      // Stage 2 select so the SICR trigger stays in sync wherever flipped.
+      covHTML += '<div style="display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;">';
+      covHTML += '<span class="chip green" style="font-size:11px;">' + greens + ' compliant</span>';
+      if(ambers) covHTML += '<span class="chip amber" style="font-size:11px;">' + ambers + ' within 10%</span>';
+      if(reds) covHTML += '<span class="chip" style="background:#FEE2E2;color:#991B1B;font-size:11px;">' + reds + ' breached</span>';
+      covHTML += '<span style="flex:1"></span>';
+      covHTML += '<label style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#4B5563; cursor:pointer;" title="Flip covenant-breach flag — pushes through to Stage 2 ECL SICR trigger (IFRS 9 §B5.5.17)">';
+      covHTML += '<input type="checkbox" id="dash-covenant-breach" ' + (breachFlag ? 'checked' : '') + ' onchange="window.toggleCovenantBreachFromDashboard && window.toggleCovenantBreachFromDashboard(this.checked)" />';
+      covHTML += '<span style="font-weight:600;">Force covenant breach (IFRS 9 SICR → Stage 2)</span>';
+      covHTML += '</label></div>';
+      // Breach banner when forced
+      if(breachFlag){
+        covHTML += '<div class="cov-breach-banner">';
+        covHTML += '<span class="material-icons-outlined" style="color:#DC2626; font-size:22px;">warning</span>';
+        covHTML += '<div style="flex:1;"><div style="font-weight:700; color:#991B1B; font-size:13px;">Covenant breach flagged — IFRS 9 SICR triggered</div>';
+        covHTML += '<div style="font-size:11.5px; color:#7F1D1D; margin-top:2px;">ECL stage will force-migrate Stage 1 → Stage 2 (lifetime ECL) on the next accounting run. §B5.5.17 qualitative trigger.</div></div></div>';
+      }
+      // Covenant cards
+      covHTML += '<div class="cov-grid">';
+      covenants.forEach((c, i) => {
+        const ev = evals[i];
+        const dirArrow = c.direction === 'max' ? '≤' : '≥';
+        const fmtNum = (v) => {
+          if(v == null) return '—';
+          const s = (+v).toLocaleString(undefined, {maximumFractionDigits: 2});
+          return s + (c.unit || '');
+        };
+        // Headroom bar width — clamp 0-100%
+        const fillPct = ev.headroom == null ? 0 : Math.max(0, Math.min(100, ev.headroom));
+        covHTML += `<div class="cov-card status-${ev.status}">
+          <div class="cov-card-head">
+            <div>
+              <div class="cov-card-name">${c.name}</div>
+              <div class="cov-card-kpi">${c.kpi || ''}</div>
+            </div>
+            <span class="cov-status-chip status-${ev.status}">${ev.status === 'green' ? 'OK' : ev.status === 'amber' ? 'WATCH' : 'BREACH'}</span>
+          </div>
+          <div class="cov-card-vals">
+            <div class="cov-val-block">
+              <div class="cov-val-label">Threshold</div>
+              <div class="cov-val-num">${dirArrow} ${fmtNum(c.threshold)}</div>
+            </div>
+            <div class="cov-val-block">
+              <div class="cov-val-label">Current</div>
+              <div class="cov-val-num is-current ${ev.status === 'amber' ? 'amber' : ev.status === 'red' ? 'red' : ''}">${fmtNum(c.current)}</div>
+            </div>
+            <div class="cov-val-block" style="text-align:right;">
+              <div class="cov-val-label">Headroom</div>
+              <div class="cov-val-num" style="font-size:15px; color:${ev.status === 'green' ? '#0F8A4D' : ev.status === 'amber' ? '#D97706' : '#DC2626'};">${ev.label}</div>
+            </div>
+          </div>
+          <div class="cov-headroom-bar">
+            <div class="cov-headroom-fill ${ev.status}" style="width:${fillPct}%;"></div>
+          </div>
+          <div class="cov-footer">
+            <span>${c.frequency ? (c.frequency.charAt(0).toUpperCase() + c.frequency.slice(1)) + ' testing' : ''}</span>
+            <span>Next test · <span class="cov-test-date">${c.nextTestDate || '—'}</span></span>
+          </div>
+          ${c.note ? `<div style="font-size:10.5px; color:#6A7591; margin-top:7px; font-style:italic;">${c.note}${c.source ? ' · <span style="font-weight:600; color:#4B5563;">' + c.source + '</span>' : ''}</div>` : ''}
+        </div>`;
+      });
+      covHTML += '</div>';
+    } else {
+      covHTML += '<div class="text-[12px] text-gray-500 italic" style="margin-top:8px;">No covenants defined for this deal. Add ratchet KPIs in Stage 0 to surface them automatically.</div>';
+    }
 
     // ── Stage progress ──────────────────────────────────────────────
     let stageHTML = '<div class="dash-section-header"><span class="material-icons-outlined text-[18px]">view_kanban</span>Pipeline Progress</div><div class="dash-grid">';
@@ -9179,8 +9495,30 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // ── Charts: balance, quarterly cashflow, maturity ladder, days-gauge ──
     const chartsHTML = renderDashboardCharts(inst, sched, summary, ccy);
 
-    out.innerHTML = kpiHTML + chartsHTML + timelineHTML + stageHTML + jeHTML;
+    // Order: KPIs → charts → Covenants → Timeline (past+expected) → Stage progress → JE summary.
+    out.innerHTML = kpiHTML + chartsHTML + covHTML + timelineHTML + stageHTML + jeHTML;
   }
+
+  // Dashboard ↔ Stage 2 covenant-breach sync. Flipping the toggle on the
+  // Dashboard updates inst.ifrs.covenantBreach AND the Stage 2 select, then
+  // re-renders the dashboard so the banner and downstream chips refresh.
+  window.toggleCovenantBreachFromDashboard = function(checked){
+    const inst = (typeof currentInstrument === 'function') ? currentInstrument() : null;
+    if(!inst) return;
+    inst.ifrs = inst.ifrs || {};
+    inst.ifrs.covenantBreach = !!checked;
+    const sel = document.getElementById('opt-covenant-breach');
+    if(sel){
+      sel.value = checked ? 'true' : 'false';
+      // Fire change so Stage 2's onTreatmentChange picks it up (re-runs accounting
+      // with updated SICR trigger if accounting was already run).
+      try { sel.dispatchEvent(new Event('change', { bubbles:true })); } catch(_){ }
+    }
+    if(typeof toast === 'function') {
+      toast(checked ? 'Covenant breach flagged — Stage 2 SICR will trigger on next accounting run' : 'Covenant breach flag cleared', 4000);
+    }
+    if(typeof renderDashboard === 'function') renderDashboard();
+  };
 
   /* ─── SVG chart helpers ─────────────────────────────────────────────── */
 
